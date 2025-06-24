@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Drum Frequency Calculator</title>
+  <style>
+    body {
+      background-color: #111;
+      color: #fff;
+      font-family: monospace;
+      text-align: center;
+      padding: 40px;
+    }
+    input, select, button {
+      margin: 10px;
+      padding: 10px;
+      border-radius: 6px;
+    }
+    button {
+      background-color: crimson;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: darkred;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🥁 Drum Frequency Calculator</h1>
+
+  <form method="post">
+    <label>Radius (cm):</label><br>
+    <input type="number" name="radius" step="0.01" required><br>
+
+    <label>Tension:</label><br>
+    <select name="tension">
+      <option>Low</option>
+      <option>Medium</option>
+      <option>High</option>
+    </select><br>
+
+    <label>Thickness:</label><br>
+    <select name="thickness">
+      <option>Thin</option>
+      <option>Medium</option>
+      <option>Thick</option>
+    </select><br>
+
+    <button type="submit">Calculate</button>
+  </form>
+
+  {% if freq %}
+    <h2>Estimated Frequency: {{ freq }} Hz</h2>
+  {% endif %}
+
+</body>
+</html>
