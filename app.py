@@ -17,7 +17,7 @@ def index():
             tension = tension_values[request.form['tension'].lower()]
             density = density_values[request.form['thickness'].lower()]
 
-            f = 0.3827676381 / r * math.sqrt(tension / density)
+            f = 0.382767638 / r * math.sqrt(tension / density)
             freq = round(f, 2)
         except Exception as e:
             freq = "Error: Invalid input."
@@ -25,4 +25,4 @@ def index():
     return render_template('index.html', freq=freq)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', PORT=int(os.environ.get('PORT', 10000)))
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
