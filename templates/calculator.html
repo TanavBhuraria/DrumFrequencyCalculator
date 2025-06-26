@@ -54,7 +54,7 @@
     }
 
   ..modal-content {
-      background-color: #1e1e2f;
+      background-color: #970e0e;
       margin: 5% auto; /* less top margin, pops up more */
      padding: 30px;   /* more breathing room inside */
       border-radius: 8px;
@@ -64,6 +64,8 @@
      color: white;    /* make sure text stays visible */
      font-size: 1.2rem; /* bigger text */
      line-height: 1.6;  /* more space between lines */
+     position: relative; /* for close button positioning */
+   
 }
 
    .modal-content ol li {
@@ -73,10 +75,13 @@
     }
 
     .close {
-      float: right;
+      position: absolute;
+       top: 10px;
+      right: 15px;
       font-size: 24px;
-      font-weight: bold;
+       font-weight: bold;
       cursor: pointer;
+}
     }
 
     @keyframes fadeIn {
