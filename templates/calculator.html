@@ -53,14 +53,23 @@
       background-color: rgba(0,0,0,0.6);
     }
 
-    .modal-content {
-      background-color: white;
-      margin: 10% auto;
-      padding: 20px;
+  ..modal-content {
+      background-color: #1e1e2f;
+      margin: 5% auto; /* less top margin, pops up more */
+     padding: 30px;   /* more breathing room inside */
       border-radius: 8px;
-      width: 80%;
-      max-width: 500px;
-      animation: fadeIn 0.4s ease;
+     width: 90%;      /* bigger width */
+     max-width: 700px; /* bigger max width */
+     animation: fadeIn 0.4s ease;
+     color: white;    /* make sure text stays visible */
+     font-size: 1.2rem; /* bigger text */
+     line-height: 1.6;  /* more space between lines */
+}
+
+   .modal-content ol li {
+     margin-bottom: 1rem; /* space between list items */
+}
+
     }
 
     .close {
