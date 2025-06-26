@@ -4,8 +4,12 @@ import os
 
 app = Flask(__name__)
 
-@app.route('/', methods=['GET', 'POST'])
-def index():
+@app.route('/')
+def landing():
+    return render_template('index.html')
+
+@app.route('/calculator', methods=['GET', 'POST'])
+def calculator():
     freq = None
 
     if request.method == 'POST':
@@ -22,7 +26,15 @@ def index():
         except Exception as e:
             freq = "Error: Invalid input."
 
-    return render_template('index.html', freq=freq)
+    return render_template('calculator.html', freq=freq)
+
+@app.route('/instructions')
+def instructions():
+    return render_template('instructions.html')
+
+@app.route('/how-it-works')
+def how_it_works():
+    return render_template('how-it-works.html')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
