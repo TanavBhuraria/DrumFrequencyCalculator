@@ -33,7 +33,7 @@ def instructions():
     return render_template('instructions.html')
 
 @app.route('/how-it-works')
-def how_it_works():
+def howitworks():
     return render_template('how-it-works.html')
 
 if __name__ == '__main__':
