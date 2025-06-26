@@ -3,19 +3,18 @@
 <head>
   <title>Drum Frequency Calculator</title>
 
-      <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
-    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}">
-    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
-    <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
-    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+  <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}">
+  <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
+  <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
 
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 
-      <style>
+  <style>
     body {
       background-color: #1e1e2f;
       color: #fff;
@@ -38,9 +37,6 @@
       background-color: rgb(0, 0, 0);
     }
 
-  
-
-
     .modal {
       display: block;
       position: fixed;
@@ -53,35 +49,33 @@
       background-color: rgba(0,0,0,0.6);
     }
 
-  ..modal-content {
+    .modal-content {
       background-color: #970e0e;
-      margin: 5% auto; /* less top margin, pops up more */
-     padding: 30px;   /* more breathing room inside */
+      margin: 5% auto; /* pops up more */
+      padding: 30px;   /* breathing room */
       border-radius: 8px;
-     width: 90%;      /* bigger width */
-     max-width: 700px; /* bigger max width */
-     animation: fadeIn 0.4s ease;
-     color: white;    /* make sure text stays visible */
-     font-size: 1.2rem; /* bigger text */
-     line-height: 1.6;  /* more space between lines */
-     position: relative; /* for close button positioning */
-   
-}
+      width: 90%;      /* bigger width */
+      max-width: 700px; /* max width */
+      animation: fadeIn 0.4s ease;
+      color: white;
+      font-size: 1.2rem; /* bigger text */
+      line-height: 1.6;  /* spacing */
+      position: relative; /* for close button */
+      text-align: left; /* better for reading lists */
+    }
 
-   .modal-content ol li {
-     margin-bottom: 1rem; /* space between list items */
-}
-
+    .modal-content ol li {
+      margin-bottom: 1rem; /* space between items */
     }
 
     .close {
       position: absolute;
-       top: 10px;
+      top: 10px;
       right: 15px;
       font-size: 24px;
-       font-weight: bold;
+      font-weight: bold;
       cursor: pointer;
-}
+      color: white;
     }
 
     @keyframes fadeIn {
@@ -92,20 +86,20 @@
 </head>
 <body>
 
-  <h1> Drum Frequency Calculator</h1>
+  <h1>Drum Frequency Calculator</h1>
 
- <div id="instructionsModal" class="modal">
-   <div class="modal-content">
-    <span class="close" onclick="closeModal()">&times;</span>
-    <h2>📖 Instructions</h2>
-    <ol>
-      <li>Enter the drum’s radius in cm.</li>
-      <li>Select the tension level (Low, Medium, High).</li>
-       <li>Select the thickness (Thin, Medium, Thick).</li>
-      <li>Click “Calculate” to see the frequency in Hz.</li>
-     </ol>
+  <div id="instructionsModal" class="modal">
+    <div class="modal-content">
+      <span class="close" onclick="closeModal()">&times;</span>
+      <h2>📖 Instructions</h2>
+      <ol>
+        <li>Enter the drum’s radius in cm.</li>
+        <li>Select the tension level (Low, Medium, High).</li>
+        <li>Select the thickness (Thin, Medium, Thick).</li>
+        <li>Click “Calculate” to see the frequency in Hz.</li>
+      </ol>
+    </div>
   </div>
- </div>
 
   <form method="post">
     <label>Radius (cm):</label><br>
@@ -133,9 +127,9 @@
   {% endif %}
 
   <script>
-  function closeModal() {
-    document.getElementById("instructionsModal").style.display = "none";
-  }
+    function closeModal() {
+      document.getElementById("instructionsModal").style.display = "none";
+    }
   </script>
 </body>
 </html>
