@@ -158,16 +158,23 @@
   {% endif %}
 
   <script>
-    function closeModal() {
-     document.getElementById("instructionsModal").style.display = "none";
-     localStorage.setItem("modalShown", "true");
+    window.onload = function () {
+      const wasSubmitted = sessionStorage.getItem("formSubmitted");
+
+      if (!wasSubmitted) {
+       document.getElementById("instructionsModal").style.display = "block";
+       }
+
+      const form = document.querySelector("form");
+      if (form) {
+       form.addEventListener("submit", function () {
+        sessionStorage.setItem("formSubmitted", "true");
+      });
+    }
   }
 
-  window.onload = function () {
-    if (!localStorage.getItem("modalShown")) {
-      document.getElementById("instructionsModal").style.display = "block";
-    }
-   };
+  function closeModal() {
+    document.getElementById("instructionsModal").style.display = "none";
   </script>
 </body>
 </html>
