@@ -158,15 +158,15 @@
   {% endif %}
 
   <script>
-     function closeModal() {
-      document.getElementById("instructionsModal").style.display = "none";
-      localStorage.setItem("modalClosed", "true");
- }
+    function closeModal() {
+     document.getElementById("instructionsModal").style.display = "none";
+     localStorage.setItem("modalShown", "true");
+  }
 
-     window.onload = function () {
-      if (localStorage.getItem("modalClosed") === "true") {
-        document.getElementById("instructionsModal").style.display = "none";
-     }
+  window.onload = function () {
+    if (!localStorage.getItem("modalShown")) {
+      document.getElementById("instructionsModal").style.display = "block";
+    }
    };
   </script>
 </body>
