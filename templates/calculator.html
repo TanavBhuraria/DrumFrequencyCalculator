@@ -88,24 +88,45 @@
       from {opacity: 0}
       to {opacity: 1}
     }
+
+    ol {
+     list-style-type: none;
+     padding-left: 0;
+     margin: 0;
+     font-size: 1.2rem;}
+
   </style>
 </head>
 <body>
 
-  <h1>Drum Frequency Calculator</h1>
-  <p>Estimate the frequency of a drum based on its size, tension, and thickness.</p>
-  <div id="instructionsModal" class="modal">
-    <div class="modal-content">
-      <span class="close" onclick="closeModal()">&times;</span>
-      <h2>📖 Instructions</h2>
-      <ol>
-        <li>Enter the drum’s radius in cm.</li>
-        <li>Select the tension level (Low, Medium, High).</li>
-        <li>Select the thickness (Thin, Medium, Thick).</li>
-        <li>Click “Calculate” to see the frequency in Hz.</li>
-      </ol>
-    </div>
+ <h1>Drum Frequency Calculator</h1>
+<p>Estimate the frequency of a drum based on its size, tension, and thickness.</p>
+<div id="instructionsModal" class="modal">
+  <div class="modal-content">
+    <span class="close" onclick="closeModal()">&times;</span>
+    <h2>📖 Instructions</h2>
+    <ol>
+      <li>Enter the drum’s radius in cm.</li>
+      <li>
+        Select the tension level (Low, Medium, High):
+        <ul>
+          <li>Low = 400 N/m</li>
+          <li>Medium = 800 N/m</li>
+          <li>High = 1200 N/m</li>
+        </ul>
+      </li>
+      <li>
+        Select the thickness (Thin, Medium, Thick):
+        <ul>
+          <li>Thin = 0.1 kg/m²</li>
+          <li>Medium = 0.2 kg/m²</li>
+          <li>Thick = 0.3 kg/m²</li>
+        </ul>
+      </li>
+      <li>Click “Calculate” to see the frequency in Hz.</li>
+    </ol>
   </div>
+</div>
 
   <form method="post">
     <label>Radius (cm):</label><br>
