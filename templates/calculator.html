@@ -154,9 +154,16 @@
   {% endif %}
 
   <script>
-    function closeModal() {
+     function closeModal() {
       document.getElementById("instructionsModal").style.display = "none";
-    }
+      localStorage.setItem("modalClosed", "true");
+ }
+
+     window.onload = function () {
+      if (localStorage.getItem("modalClosed") === "true") {
+        document.getElementById("instructionsModal").style.display = "none";
+     }
+   };
   </script>
 </body>
 </html>

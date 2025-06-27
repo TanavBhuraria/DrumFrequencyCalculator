@@ -28,13 +28,14 @@ def calculator():
 
     return render_template('calculator.html', freq=freq)
 
-@app.route('/instructions')
-def instructions():
-    return render_template('instructions.html')
 
 @app.route('/how-it-works')
 def howitworks():
     return render_template('how-it-works.html')
+
+@app.route("/index")
+def index():
+    return render_template("index.html")
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
