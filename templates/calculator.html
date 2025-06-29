@@ -111,9 +111,6 @@
     <h2>📖 Instructions</h2>
     <ol>
       <li>Enter the drum’s radius in cm.</li>
-        <ul>
-          <li>For most accurate results, add radius between 5 and 50cm</li>
-        </ul>
       <li>
         Select the tension level (Low, Medium, High):
         <ul>
@@ -138,6 +135,9 @@
   <form method="post">
     <label>Radius (cm):</label><br>
     <input type="number" name="radius" step="0.01" required><br>
+     <small style="color: #ffcc00; font-size: 0.9rem;">
+      ⚠️ For best results, use radius between 5 and 50 cm
+     </small><br>
 
     <label>Tension:</label><br>
     <select name="tension">
