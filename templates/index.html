@@ -60,21 +60,20 @@
     <a href="/howitworks" class="btn">How It Works</a>
   </div>
 
-  <div style="margin-top: 2rem;">
-   <img 
-     src="{{ url_for('static', filename='Drums.png') }}" 
-      alt="Drum Image" 
-      style="
-       display: block;
-       margin: 0 auto;
-       width: 60vw;
-       max-width: 600px;
-       max-height: 240px;
-        height: auto;
-        object-fit: contain;
-      "
-   >
-  </div>
+<div style="margin-top: 2rem;">
+  <img 
+    src="{{ url_for('static', filename='Drums.png') }}" 
+    alt="Drum Image" 
+    style="
+      display: block;
+      margin: 0 auto;
+      width: 90vw;
+      max-width: 900px;
+      height: calc(100vh - 300px); /* fill bottom space */
+      object-fit: contain;
+    "
+  >
+</div>
 
 
 </body>
