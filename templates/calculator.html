@@ -132,12 +132,12 @@
   </div>
 </div>
 
-  <form method="post">
-    <label>Radius (cm):</label><br>
-    <input type="number" name="radius" step="0.01" required><br>
-     <small style="color:  white; font-size: 0.6rem; margin-top: 4px;">
-      ⚠️ For best results, use radius between 5 and 50 cm
-     </small><br>
+ <form method="post">
+  <label>Radius (cm):</label><br>
+  <input type="number" name="radius" step="0.01" required><br>
+  <small style="color: white; font-size: 0.6rem; display: block; margin-top: 4px;">
+    ⚠️ For best results, use radius between 5 and 50 cm
+  </small>
 
     <label>Tension:</label><br>
     <select name="tension">
@@ -153,24 +153,40 @@
       <option>Thick</option>
     </select><br>
 
-    <button type="submit">Calculate</button>
-  </form>
+<button 
+  type="submit"
+  style="
+    padding: 12px 24px;
+    font-size: 1rem;
+    width: 100%;
+    max-width: 300px;
+    border-radius: 6px;
+    background-color: black;
+    color: white;
+    border: none;
+    cursor: pointer;
+    margin-top: 1rem;
+  "
+>
+  Calculate
+</button>
+</form>
 
-  {% if freq %}
-    <h2>Estimated Frequency: {{ freq }} Hz</h2>
-  {% endif %}
+{% if freq %}
+  <h2>Estimated Frequency: {{ freq }} Hz</h2>
+{% endif %}
 
-  <script>
-    window.onload = function () {
-      const wasSubmitted = sessionStorage.getItem("formSubmitted");
+<script>
+  window.onload = function () {
+    const wasSubmitted = sessionStorage.getItem("formSubmitted");
 
-      if (!wasSubmitted) {
-       document.getElementById("instructionsModal").style.display = "block";
-       }
+    if (!wasSubmitted) {
+      document.getElementById("instructionsModal").style.display = "block";
+    }
 
-      const form = document.querySelector("form");
-      if (form) {
-       form.addEventListener("submit", function () {
+    const form = document.querySelector("form");
+    if (form) {
+      form.addEventListener("submit", function () {
         sessionStorage.setItem("formSubmitted", "true");
       });
     }
@@ -179,6 +195,6 @@
   function closeModal() {
     document.getElementById("instructionsModal").style.display = "none";
   }
-  </script>
+</script>
 </body>
 </html>
