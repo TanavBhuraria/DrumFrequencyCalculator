@@ -29,9 +29,9 @@ def calculator():
     return render_template('calculator.html', freq=freq)
 
 
-@app.route('/how-it-works')
+@app.route('/howitworks')
 def howitworks():
-    return render_template('how-it-works.html')
+    return render_template('howitworks.html')
 
 @app.route("/index")
 def index():
