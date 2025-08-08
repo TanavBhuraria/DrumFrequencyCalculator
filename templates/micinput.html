@@ -72,7 +72,7 @@
 
     function detectHit(amplitude) {
       // Simple amplitude spike detection
-      const threshold = 0.3;
+      const threshold = 0.05; // Adjust this threshold based on testing
       if (amplitude > threshold && lastAmplitude <= threshold) {
         hitCount++;
         hitsDisplay.textContent = `Hits Detected: ${hitCount}`;
