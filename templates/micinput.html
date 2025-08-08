@@ -1,56 +1,128 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <title>Live Mic Input - Drum Frequency Explorer</title>
+  <title>Live Drum Analysis</title>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     body { background: black; color: white; font-family: 'Inter', sans-serif; text-align: center; padding: 2rem; }
     button { font-size: 1.2rem; padding: 1rem 2rem; margin: 1rem; border-radius: 8px; cursor: pointer; }
-    #frequency { font-size: 2rem; margin-top: 2rem; }
+    #frequency, #hits { font-size: 2rem; margin-top: 2rem; }
   </style>
 </head>
 <body>
-  <h1>Live Mic Input</h1>
+  <h1>Live Drum Analysis</h1>
   <button id="start-btn">Start Microphone</button>
+  <button id="stop-btn" disabled>Stop Microphone</button>
   <div id="frequency">Frequency: -- Hz</div>
+  <div id="hits">Hits Detected: 0</div>
 
   <script>
     const startBtn = document.getElementById('start-btn');
-    const frequencyDisplay = document.getElementById('frequency');
-    let audioCtx, analyser, source, dataArray;
+    const stopBtn = document.getElementById('stop-btn');
+    const freqDisplay = document.getElementById('frequency');
+    const hitsDisplay = document.getElementById('hits');
 
-    startBtn.onclick = async () => {
-      if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          source = audioCtx.createMediaStreamSource(stream);
-          analyser = audioCtx.createAnalyser();
-          analyser.fftSize = 2048;
-          source.connect(analyser);
-          dataArray = new Uint8Array(analyser.frequencyBinCount);
+    let audioCtx, analyser, source, dataArray, bufferLength;
+    let hitCount = 0;
+    let lastAmplitude = 0;
+    let running = false;
+    let mediaStream;
 
-          // Update frequency display loop
-          const updateFreq = () => {
-            analyser.getByteFrequencyData(dataArray);
-            // Find peak frequency bin
-            let maxIndex = 0;
-            for (let i = 1; i < dataArray.length; i++) {
-              if (dataArray[i] > dataArray[maxIndex]) maxIndex = i;
-            }
-            // Convert bin index to frequency
-            const nyquist = audioCtx.sampleRate / 2;
-            const freq = (maxIndex * nyquist) / dataArray.length;
-            frequencyDisplay.textContent = `Frequency: ${freq.toFixed(2)} Hz`;
-            requestAnimationFrame(updateFreq);
-          };
-          updateFreq();
-          startBtn.disabled = true;
-        } catch (err) {
-          alert('Microphone access denied or error: ' + err.message);
+    function autoCorrelate(buffer, sampleRate) {
+      // Basic autocorrelation pitch detection
+      let SIZE = buffer.length;
+      let rms = 0;
+
+      for (let i = 0; i < SIZE; i++) {
+        let val = buffer[i];
+        rms += val * val;
+      }
+      rms = Math.sqrt(rms / SIZE);
+      if (rms < 0.01) return -1; // too quiet
+
+      let r1 = 0, r2 = SIZE - 1, threshold = 0.2;
+      for (let i = 0; i < SIZE / 2; i++) {
+        if (Math.abs(buffer[i]) < threshold) {
+          r1 = i;
+          break;
         }
       }
+      for (let i = 1; i < SIZE / 2; i++) {
+        if (Math.abs(buffer[SIZE - i]) < threshold) {
+          r2 = SIZE - i;
+          break;
+        }
+      }
+
+      let maxCorr = 0, maxPos = -1;
+      for (let lag = r1; lag <= r2; lag++) {
+        let corr = 0;
+        for (let i = 0; i < SIZE - lag; i++) {
+          corr += buffer[i] * buffer[i + lag];
+        }
+        if (corr > maxCorr) {
+          maxCorr = corr;
+          maxPos = lag;
+        }
+      }
+      if (maxPos === -1) return -1;
+      return sampleRate / maxPos;
+    }
+
+    function detectHit(amplitude) {
+      // Simple amplitude spike detection
+      const threshold = 0.3;
+      if (amplitude > threshold && lastAmplitude <= threshold) {
+        hitCount++;
+        hitsDisplay.textContent = `Hits Detected: ${hitCount}`;
+      }
+      lastAmplitude = amplitude;
+    }
+
+    async function startMic() {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      source = audioCtx.createMediaStreamSource(mediaStream);
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 2048;
+      bufferLength = analyser.fftSize;
+      dataArray = new Float32Array(bufferLength);
+      source.connect(analyser);
+      running = true;
+
+      function update() {
+        if (!running) return;
+        analyser.getFloatTimeDomainData(dataArray);
+        // Amplitude = root mean square (RMS)
+        let rms = Math.sqrt(dataArray.reduce((sum, val) => sum + val * val, 0) / bufferLength);
+        detectHit(rms);
+        let pitch = autoCorrelate(dataArray, audioCtx.sampleRate);
+        freqDisplay.textContent = pitch > 0 ? `Frequency: ${pitch.toFixed(2)} Hz` : 'Frequency: -- Hz';
+        requestAnimationFrame(update);
+      }
+      update();
+    }
+
+    function stopMic() {
+      running = false;
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+      }
+      if (audioCtx) {
+        audioCtx.close();
+      }
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+    }
+
+    startBtn.onclick = () => {
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      startMic();
+    };
+    stopBtn.onclick = () => {
+      stopMic();
     };
   </script>
 </body>
