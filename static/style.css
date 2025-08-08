@@ -2,6 +2,12 @@ your-project/
 ├── app.py
 ├── static/
 │   └── favicon.ico
+│   └── Drum.png
+│   └── style.css
+├── requirements.txt
 ├── templates/
 │   └── index.html
 │   └── Calculator.html
+│   └── HowItWorks.html
+│   └── MicInput.html
+└── README.md
