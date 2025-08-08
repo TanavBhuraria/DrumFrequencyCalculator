@@ -26,11 +26,11 @@
     let audioCtx, analyser, source, dataArray, bufferLength;
     let hitCount = 0;
     let lastAmplitude = 0;
+    let hitReady = true;  // To debounce hit detection
     let running = false;
     let mediaStream;
 
     function autoCorrelate(buffer, sampleRate) {
-      // Basic autocorrelation pitch detection
       let SIZE = buffer.length;
       let rms = 0;
 
@@ -66,16 +66,19 @@
           maxPos = lag;
         }
       }
-      if (maxPos === -1) return -1;
+      if (maxPos <= 0) return -1; // prevent division by zero or invalid lag
+
       return sampleRate / maxPos;
     }
 
     function detectHit(amplitude) {
-      // Simple amplitude spike detection
-      const threshold = 0.001; // Adjust this threshold based on testing
-      if (amplitude > threshold && lastAmplitude <= threshold) {
+      const threshold = 0.01; // Low threshold for testing
+      if (amplitude > threshold && hitReady) {
         hitCount++;
         hitsDisplay.textContent = `Hits Detected: ${hitCount}`;
+        hitReady = false;  // Wait for amplitude to drop below threshold
+      } else if (amplitude <= threshold) {
+        hitReady = true;
       }
       lastAmplitude = amplitude;
     }
@@ -94,11 +97,19 @@
       function update() {
         if (!running) return;
         analyser.getFloatTimeDomainData(dataArray);
-        // Amplitude = root mean square (RMS)
+
+        // Calculate RMS amplitude
         let rms = Math.sqrt(dataArray.reduce((sum, val) => sum + val * val, 0) / bufferLength);
         detectHit(rms);
+
+        // Detect pitch with autocorrelation
         let pitch = autoCorrelate(dataArray, audioCtx.sampleRate);
-        freqDisplay.textContent = pitch > 0 ? `Frequency: ${pitch.toFixed(2)} Hz` : 'Frequency: -- Hz';
+
+        // Display pitch only if valid and finite
+        freqDisplay.textContent = (pitch > 0 && isFinite(pitch))
+          ? `Frequency: ${pitch.toFixed(2)} Hz`
+          : 'Frequency: -- Hz';
+
         requestAnimationFrame(update);
       }
       update();
