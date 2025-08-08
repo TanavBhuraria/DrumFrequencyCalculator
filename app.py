@@ -37,5 +37,13 @@ def howitworks():
 def index():
     return render_template("index.html")
 
+@app.route('/micinput', methods=['GET', 'POST'])
+def micinput():
+    if request.method == 'POST':
+        # Here you would handle the mic input processing
+        # For now, we will just return a placeholder response
+        return "Mic input processing is not implemented yet."
+
+    return render_template('micinput.html')
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
