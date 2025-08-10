@@ -23,20 +23,23 @@
     const freqDisplay = document.getElementById('frequency');
     const hitsDisplay = document.getElementById('hits');
 
-    let audioCtx, analyser, source, dataArray, bufferLength;
+    let audioCtx = null;
+    let analyser = null;
+    let source = null;
+    let dataArray = null;
+    let bufferLength = 0;
+    let mediaStream = null;
+    let running = false;
     let hitCount = 0;
     let lastAmplitude = 0;
-    let hitReady = true;  // To debounce hit detection
-    let running = false;
-    let mediaStream;
+    let hitReady = true;
 
     function autoCorrelate(buffer, sampleRate) {
-      let SIZE = buffer.length;
+      const SIZE = buffer.length;
       let rms = 0;
 
       for (let i = 0; i < SIZE; i++) {
-        let val = buffer[i];
-        rms += val * val;
+        rms += buffer[i] * buffer[i];
       }
       rms = Math.sqrt(rms / SIZE);
       if (rms < 0.01) return -1; // too quiet
@@ -66,22 +69,20 @@
           maxPos = lag;
         }
       }
-      if (maxPos <= 0 || !isFinite(maxPos)) return -1;
+      if (maxPos <= 0) return -1;
 
       const frequency = sampleRate / maxPos;
-      if (!isFinite(frequency) || frequency > 5000 || frequency < 20) {
-        return -1;
-      }
+      if (!isFinite(frequency) || frequency > 5000 || frequency < 20) return -1;
 
       return frequency;
     }
 
     function detectHit(amplitude) {
-      const threshold = 0.01; // Low threshold for testing
+      const threshold = 0.03; // Adjust as needed to reduce false positives
       if (amplitude > threshold && hitReady) {
         hitCount++;
         hitsDisplay.textContent = `Hits Detected: ${hitCount}`;
-        hitReady = false;  // Wait for amplitude to drop below threshold
+        hitReady = false;
       } else if (amplitude <= threshold) {
         hitReady = true;
       }
@@ -89,8 +90,21 @@
     }
 
     async function startMic() {
+      if (audioCtx && audioCtx.state !== 'closed') {
+        await audioCtx.close();
+        audioCtx = null;
+      }
+
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (err) {
+        alert('Microphone access denied or error: ' + err.message);
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        return;
+      }
+
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       source = audioCtx.createMediaStreamSource(mediaStream);
       analyser = audioCtx.createAnalyser();
       analyser.fftSize = 2048;
@@ -98,19 +112,25 @@
       dataArray = new Float32Array(bufferLength);
       source.connect(analyser);
       running = true;
+      hitCount = 0;
+      hitsDisplay.textContent = 'Hits Detected: 0';
+
+      if (audioCtx.state === 'suspended') {
+        await audioCtx.resume();
+      }
+
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
 
       function update() {
         if (!running) return;
         analyser.getFloatTimeDomainData(dataArray);
 
-        // Calculate RMS amplitude
         let rms = Math.sqrt(dataArray.reduce((sum, val) => sum + val * val, 0) / bufferLength);
         detectHit(rms);
 
-        // Detect pitch with autocorrelation
         let pitch = autoCorrelate(dataArray, audioCtx.sampleRate);
 
-        // Display pitch only if valid and finite
         freqDisplay.textContent = (pitch > 0 && isFinite(pitch))
           ? `Frequency: ${pitch.toFixed(2)} Hz`
           : 'Frequency: -- Hz';
@@ -122,24 +142,23 @@
 
     function stopMic() {
       running = false;
+
       if (mediaStream) {
         mediaStream.getTracks().forEach(track => track.stop());
+        mediaStream = null;
       }
+
       if (audioCtx) {
         audioCtx.close();
+        audioCtx = null;
       }
+
       startBtn.disabled = false;
       stopBtn.disabled = true;
     }
 
-    startBtn.onclick = () => {
-      startBtn.disabled = true;
-      stopBtn.disabled = false;
-      startMic();
-    };
-    stopBtn.onclick = () => {
-      stopMic();
-    };
+    startBtn.onclick = () => startMic();
+    stopBtn.onclick = () => stopMic();
   </script>
 </body>
 </html>
