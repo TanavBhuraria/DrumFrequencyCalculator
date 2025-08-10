@@ -5,9 +5,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body { background: black; color: white; font-family: 'Inter', sans-serif; text-align: center; padding: 2rem; }
-    button { font-size: 1.2rem; padding: 1rem 2rem; margin: 1rem; border-radius: 8px; cursor: pointer; }
-    #frequency, #hits { font-size: 2rem; margin-top: 2rem; }
+    body {
+      background: black; color: white; font-family: 'Inter', sans-serif; text-align: center; padding: 2rem;
+    }
+    button {
+      font-size: 1.2rem; padding: 1rem 2rem; margin: 1rem; border-radius: 8px; cursor: pointer;
+    }
+    #frequency, #hits {
+      font-size: 2rem; margin-top: 2rem;
+    }
   </style>
 </head>
 <body>
@@ -29,22 +35,24 @@
     let dataArray = null;
     let bufferLength = 0;
     let mediaStream = null;
+
     let running = false;
     let hitCount = 0;
     let lastAmplitude = 0;
-    let hitReady = true;
+    let hitReady = true; // debounce hit detection
 
     function autoCorrelate(buffer, sampleRate) {
       const SIZE = buffer.length;
       let rms = 0;
-
       for (let i = 0; i < SIZE; i++) {
         rms += buffer[i] * buffer[i];
       }
       rms = Math.sqrt(rms / SIZE);
       if (rms < 0.01) return -1; // too quiet
 
-      let r1 = 0, r2 = SIZE - 1, threshold = 0.2;
+      let r1 = 0, r2 = SIZE - 1;
+      const threshold = 0.2;
+
       for (let i = 0; i < SIZE / 2; i++) {
         if (Math.abs(buffer[i]) < threshold) {
           r1 = i;
@@ -69,16 +77,17 @@
           maxPos = lag;
         }
       }
-      if (maxPos <= 0) return -1;
+      if (maxPos <= 0) return -1; // avoid div zero
 
       const frequency = sampleRate / maxPos;
-      if (!isFinite(frequency) || frequency > 5000 || frequency < 20) return -1;
-
+      if (!isFinite(frequency) || frequency > 5000 || frequency < 20) {
+        return -1;
+      }
       return frequency;
     }
 
     function detectHit(amplitude) {
-      const threshold = 0.03; // Adjust as needed to reduce false positives
+      const threshold = 0.02; // Raise threshold to avoid false positives from noise
       if (amplitude > threshold && hitReady) {
         hitCount++;
         hitsDisplay.textContent = `Hits Detected: ${hitCount}`;
@@ -90,37 +99,28 @@
     }
 
     async function startMic() {
-      if (audioCtx && audioCtx.state !== 'closed') {
-        await audioCtx.close();
-        audioCtx = null;
-      }
+      if (running) return; // Prevent double start
 
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       try {
         mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       } catch (err) {
-        alert('Microphone access denied or error: ' + err.message);
+        alert('Microphone access denied or not available.');
         startBtn.disabled = false;
         stopBtn.disabled = true;
         return;
       }
 
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       source = audioCtx.createMediaStreamSource(mediaStream);
       analyser = audioCtx.createAnalyser();
       analyser.fftSize = 2048;
       bufferLength = analyser.fftSize;
       dataArray = new Float32Array(bufferLength);
       source.connect(analyser);
-      running = true;
+
       hitCount = 0;
-      hitsDisplay.textContent = 'Hits Detected: 0';
-
-      if (audioCtx.state === 'suspended') {
-        await audioCtx.resume();
-      }
-
-      startBtn.disabled = true;
-      stopBtn.disabled = false;
+      hitsDisplay.textContent = `Hits Detected: 0`;
+      running = true;
 
       function update() {
         if (!running) return;
@@ -130,7 +130,6 @@
         detectHit(rms);
 
         let pitch = autoCorrelate(dataArray, audioCtx.sampleRate);
-
         freqDisplay.textContent = (pitch > 0 && isFinite(pitch))
           ? `Frequency: ${pitch.toFixed(2)} Hz`
           : 'Frequency: -- Hz';
@@ -141,24 +140,43 @@
     }
 
     function stopMic() {
+      if (!running) return;
+
       running = false;
 
       if (mediaStream) {
         mediaStream.getTracks().forEach(track => track.stop());
         mediaStream = null;
       }
-
+      if (source) {
+        source.disconnect();
+        source = null;
+      }
+      if (analyser) {
+        analyser.disconnect();
+        analyser = null;
+      }
       if (audioCtx) {
         audioCtx.close();
         audioCtx = null;
       }
 
+      freqDisplay.textContent = 'Frequency: -- Hz';
+      hitsDisplay.textContent = `Hits Detected: ${hitCount}`;
+
       startBtn.disabled = false;
       stopBtn.disabled = true;
     }
 
-    startBtn.onclick = () => startMic();
-    stopBtn.onclick = () => stopMic();
+    startBtn.onclick = () => {
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      startMic();
+    };
+
+    stopBtn.onclick = () => {
+      stopMic();
+    };
   </script>
 </body>
 </html>
