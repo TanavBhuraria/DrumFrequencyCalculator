@@ -1,275 +1,700 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Live Drum Analysis — Stable + Pitch</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Professional Drum Analysis</title>
   <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
     body {
-      background: #000; color: #fff; font-family: Inter, system-ui, sans-serif;
-      margin: 0; padding: 2rem; text-align: center;
+      background: linear-gradient(135deg, #1a1a2e, #16213e);
+      color: #fff;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      min-height: 100vh;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      overflow-x: hidden;
     }
-    h1 { margin: 0 0 1rem 0; font-size: 1.6rem; }
+    
+    .container {
+      max-width: 800px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    header {
+      text-align: center;
+      margin-bottom: 30px;
+      padding: 20px;
+      width: 100%;
+    }
+    
+    h1 {
+      font-size: 2.8rem;
+      margin-bottom: 10px;
+      background: linear-gradient(90deg, #ff7e5f, #feb47b);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+    
+    .subtitle {
+      font-size: 1.2rem;
+      color: #a0a0d0;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    
+    .visualization {
+      width: 100%;
+      height: 200px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 12px;
+      margin-bottom: 30px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+    
+    .drum-display {
+      position: absolute;
+      bottom: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: flex-end;
+      gap: 10px;
+      padding: 20px;
+    }
+    
+    .drum-pad {
+      width: 70px;
+      height: 70px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 50%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: rgba(255, 255, 255, 0.7);
+      transition: all 0.1s ease;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    }
+    
+    .drum-pad.active {
+      transform: scale(1.2);
+      background: rgba(255, 126, 95, 0.8);
+      box-shadow: 0 0 20px rgba(255, 126, 95, 0.7);
+    }
+    
+    .controls {
+      display: flex;
+      gap: 15px;
+      margin-bottom: 30px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    
     button {
-      font-size: 1rem; padding: 0.8rem 1.2rem; margin: 0.5rem;
-      border-radius: 8px; border: none; background:#333; color:#fff; cursor:pointer;
+      background: linear-gradient(135deg, #ff7e5f, #feb47b);
+      color: white;
+      border: none;
+      padding: 14px 28px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      border-radius: 50px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(255, 126, 95, 0.4);
+      min-width: 180px;
     }
-    button:disabled { background:#222; color:#666; cursor:not-allowed; }
-    #controls { margin-top: 1rem; }
-    #info { margin-top: 1.2rem; font-size: 1.1rem; }
-    #freq { font-size: 1.4rem; margin-top: .6rem; }
-    #hits { font-size: 1.4rem; margin-top: .2rem; }
-    .flash { background: #fff; color:#000; padding: .15rem .3rem; border-radius:6px; }
-    .row { display:flex; gap:0.5rem; justify-content:center; align-items:center; margin-top:0.8rem; }
-    input[type=range] { width:200px; }
-    small { color:#bbb; display:block; margin-top:.25rem; }
+    
+    button:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 6px 20px rgba(255, 126, 95, 0.6);
+    }
+    
+    button:disabled {
+      background: #555;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+    
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+      width: 100%;
+      margin-bottom: 30px;
+    }
+    
+    .stat-card {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 25px;
+      text-align: center;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .stat-card h2 {
+      font-size: 1.3rem;
+      margin-bottom: 15px;
+      color: #a0a0d0;
+    }
+    
+    .stat-value {
+      font-size: 3.5rem;
+      font-weight: 700;
+      background: linear-gradient(90deg, #ff7e5f, #feb47b);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    .settings {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 25px;
+      width: 100%;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .slider-container {
+      margin-bottom: 20px;
+    }
+    
+    .slider-container label {
+      display: block;
+      margin-bottom: 10px;
+      font-size: 1.1rem;
+      color: #a0a0d0;
+      display: flex;
+      justify-content: space-between;
+    }
+    
+    .slider-container span {
+      font-weight: bold;
+      color: #ff7e5f;
+    }
+    
+    input[type="range"] {
+      width: 100%;
+      height: 8px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      outline: none;
+      -webkit-appearance: none;
+    }
+    
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #ff7e5f;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(255, 126, 95, 0.7);
+    }
+    
+    .canvas-container {
+      width: 100%;
+      height: 150px;
+      margin-top: 20px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    
+    canvas {
+      width: 100%;
+      height: 100%;
+    }
+    
+    .hit-indicator {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 100;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    
+    .hit-indicator.active {
+      opacity: 1;
+    }
+    
+    .waveform {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 60px;
+    }
+    
+    footer {
+      margin-top: 40px;
+      text-align: center;
+      color: #777;
+      font-size: 0.9rem;
+      padding: 20px;
+    }
+    
+    @media (max-width: 600px) {
+      h1 {
+        font-size: 2.2rem;
+      }
+      
+      .stat-value {
+        font-size: 2.8rem;
+      }
+      
+      .drum-pad {
+        width: 50px;
+        height: 50px;
+        font-size: 1rem;
+      }
+    }
   </style>
 </head>
 <body>
-  <h1>Live Drum Analysis — Stable + Pitch</h1>
-
-  <div id="controls">
-    <button id="start-btn">Start Microphone</button>
-    <button id="stop-btn" disabled>Stop Microphone</button>
-  </div>
-
-  <div id="info">
-    <div id="freq">Frequency: -- Hz</div>
-    <div id="hits">Hits Detected: 0</div>
-
-    <div class="row" style="margin-top:12px;">
-      <label style="display:flex;flex-direction:column;align-items:center;">
-        Threshold
-        <input id="threshold-slider" type="range" min="0.005" max="0.08" step="0.005" value="0.03">
-        <small id="threshold-val">0.030</small>
-      </label>
-      <label style="display:flex;flex-direction:column;align-items:center;margin-left:12px;">
-        Pitch smoothing (frames)
-        <input id="pitch-smooth" type="range" min="1" max="10" step="1" value="3">
-        <small id="pitch-smooth-val">3</small>
-      </label>
+  <div class="container">
+    <header>
+      <h1>Professional Drum Analyzer</h1>
+      <p class="subtitle">Real-time drum detection with enhanced low-frequency analysis</p>
+    </header>
+    
+    <div class="visualization">
+      <div class="drum-display">
+        <div class="drum-pad" data-type="kick">KICK</div>
+        <div class="drum-pad" data-type="snare">SNARE</div>
+        <div class="drum-pad" data-type="hihat">HI-HAT</div>
+        <div class="drum-pad" data-type="tom">TOM</div>
+        <div class="drum-pad" data-type="cymbal">CYMBAL</div>
+      </div>
+    </div>
+    
+    <div class="controls">
+      <button id="start-btn">Start Microphone</button>
+      <button id="stop-btn" disabled>Stop Microphone</button>
+      <button id="reset-btn">Reset Counter</button>
+    </div>
+    
+    <div class="stats">
+      <div class="stat-card">
+        <h2>Hits Detected</h2>
+        <div id="hits" class="stat-value">0</div>
+      </div>
+      
+      <div class="stat-card">
+        <h2>Current Frequency</h2>
+        <div id="frequency" class="stat-value">-- Hz</div>
+      </div>
+      
+      <div class="stat-card">
+        <h2>Volume Level</h2>
+        <div id="volume" class="stat-value">-- dB</div>
+      </div>
+    </div>
+    
+    <div class="settings">
+      <div class="slider-container">
+        <label>
+          Sensitivity
+          <span id="sensitivity-val">0.03</span>
+        </label>
+        <input type="range" id="sensitivity-slider" min="0.005" max="0.08" step="0.005" value="0.03">
+      </div>
+      
+      <div class="slider-container">
+        <label>
+          Low-Pass Filter
+          <span id="lowpass-val">180 Hz</span>
+        </label>
+        <input type="range" id="lowpass-slider" min="40" max="300" step="10" value="180">
+      </div>
+      
+      <div class="slider-container">
+        <label>
+          Drum Type Sensitivity
+          <span id="drum-sensitivity-val">Medium</span>
+        </label>
+        <input type="range" id="drum-sensitivity-slider" min="1" max="3" step="1" value="2">
+      </div>
+      
+      <div class="canvas-container">
+        <canvas id="waveform"></canvas>
+      </div>
     </div>
   </div>
+  
+  <div class="hit-indicator" id="hit-indicator"></div>
+  
+  <footer>
+    <p>Professional Drum Analysis Tool | Enhanced Low-Frequency Detection</p>
+  </footer>
 
   <script>
-  // Stable mic + hits + pitch combined
-
-  const startBtn = document.getElementById('start-btn');
-  const stopBtn = document.getElementById('stop-btn');
-  const freqEl = document.getElementById('freq');
-  const hitsEl = document.getElementById('hits');
-  const thresholdSlider = document.getElementById('threshold-slider');
-  const thresholdVal = document.getElementById('threshold-val');
-  const pitchSmoothSlider = document.getElementById('pitch-smooth');
-  const pitchSmoothVal = document.getElementById('pitch-smooth-val');
-
-  let audioCtx = null;
-  let analyser = null;
-  let source = null;
-  let mediaStream = null;
-  let dataArray = null;
-  let bufferLength = 0;
-  let running = false;
-  let animationId = null;
-
-  let hitCount = 0;
-  let hitReady = true;
-  let lastHitTime = 0;
-
-  // pitch smoothing ring buffer
-  const pitchHistory = [];
-  let pitchHistorySize = Number(pitchSmoothSlider.value);
-
-  // pitch detection bounds (Hz)
-  const minFreq = 30;   // won't accept <30Hz
-  const maxFreq = 5000; // won't accept >5000Hz
-
-  thresholdVal.textContent = Number(thresholdSlider.value).toFixed(3);
-  pitchSmoothVal.textContent = pitchSmoothSlider.value;
-
-  thresholdSlider.addEventListener('input', () => {
-    thresholdVal.textContent = Number(thresholdSlider.value).toFixed(3);
-  });
-  pitchSmoothSlider.addEventListener('input', () => {
-    pitchSmoothVal.textContent = pitchSmoothSlider.value;
-    pitchHistorySize = Number(pitchSmoothSlider.value);
-    // trim history
-    while (pitchHistory.length > pitchHistorySize) pitchHistory.shift();
-  });
-
-  // Robust autocorrelation limited by expected freq range and buffer size
-  function autoCorrelate(buf, sampleRate) {
-    const SIZE = buf.length;
-    if (SIZE < 16) return -1;
-
-    // RMS energy check
-    let rms = 0;
-    for (let i=0;i<SIZE;i++) rms += buf[i]*buf[i];
-    rms = Math.sqrt(rms / SIZE);
-    if (rms < 0.005) return -1; // too quiet
-
-    // compute min/max lag from freq bounds
-    const maxLag = Math.min(SIZE - 2, Math.floor(sampleRate / Math.max(minFreq,1)));
-    const minLag = Math.max(2, Math.floor(sampleRate / Math.min(maxFreq, sampleRate)));
-
-    if (minLag >= maxLag) return -1;
-
-    let bestCorr = -Infinity;
-    let bestLag = -1;
-
-    // quick mean subtraction to reduce DC
-    let mean = 0;
-    for (let i=0;i<SIZE;i++) mean += buf[i];
-    mean /= SIZE;
-    // compute normalized autocorrelation over lag range
-    for (let lag = minLag; lag <= maxLag; lag++) {
-      let corr = 0;
-      for (let i=0;i<SIZE - lag; i++) {
-        corr += (buf[i] - mean) * (buf[i + lag] - mean);
+    // DOM Elements
+    const startBtn = document.getElementById('start-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    const hitsEl = document.getElementById('hits');
+    const freqEl = document.getElementById('frequency');
+    const volumeEl = document.getElementById('volume');
+    const sensitivitySlider = document.getElementById('sensitivity-slider');
+    const sensitivityVal = document.getElementById('sensitivity-val');
+    const lowpassSlider = document.getElementById('lowpass-slider');
+    const lowpassVal = document.getElementById('lowpass-val');
+    const drumSensitivitySlider = document.getElementById('drum-sensitivity-slider');
+    const drumSensitivityVal = document.getElementById('drum-sensitivity-val');
+    const hitIndicator = document.getElementById('hit-indicator');
+    const waveformCanvas = document.getElementById('waveform');
+    const ctx = waveformCanvas.getContext('2d');
+    const drumPads = document.querySelectorAll('.drum-pad');
+    
+    // Audio variables
+    let audioCtx = null;
+    let analyser = null;
+    let source = null;
+    let mediaStream = null;
+    let lowpassFilter = null;
+    let dataArray = null;
+    let animationId = null;
+    
+    // State variables
+    let running = false;
+    let hitCount = 0;
+    let hitReady = true;
+    let lastHitTime = 0;
+    let lastVolume = 0;
+    let volumeHistory = [];
+    
+    // Drum detection variables
+    const drumTypes = ['kick', 'snare', 'hihat', 'tom', 'cymbal'];
+    const drumFrequencyRanges = {
+      kick: [40, 80],
+      snare: [150, 250],
+      hihat: [5000, 10000],
+      tom: [100, 200],
+      cymbal: [4000, 8000]
+    };
+    
+    // Initialize UI
+    sensitivityVal.textContent = sensitivitySlider.value;
+    lowpassVal.textContent = lowpassSlider.value + ' Hz';
+    
+    const drumSensitivityLabels = {
+      1: 'Low',
+      2: 'Medium',
+      3: 'High'
+    };
+    drumSensitivityVal.textContent = drumSensitivityLabels[drumSensitivitySlider.value];
+    
+    // Event listeners
+    startBtn.addEventListener('click', startMic);
+    stopBtn.addEventListener('click', stopMic);
+    resetBtn.addEventListener('click', () => {
+      hitCount = 0;
+      hitsEl.textContent = hitCount;
+    });
+    
+    sensitivitySlider.addEventListener('input', () => {
+      sensitivityVal.textContent = sensitivitySlider.value;
+    });
+    
+    lowpassSlider.addEventListener('input', () => {
+      lowpassVal.textContent = lowpassSlider.value + ' Hz';
+      if (lowpassFilter) {
+        lowpassFilter.frequency.value = parseFloat(lowpassSlider.value);
       }
-      if (corr > bestCorr) {
-        bestCorr = corr;
-        bestLag = lag;
+    });
+    
+    drumSensitivitySlider.addEventListener('input', () => {
+      drumSensitivityVal.textContent = drumSensitivityLabels[drumSensitivitySlider.value];
+    });
+    
+    // Enhanced low-frequency drum detection
+    function detectDrumType(frequency, amplitude) {
+      if (amplitude < parseFloat(sensitivitySlider.value)) {
+        return null;
       }
-    }
-
-    if (bestLag <= 0) return -1;
-
-    const frequency = sampleRate / bestLag;
-    if (!isFinite(frequency) || frequency < minFreq || frequency > maxFreq) return -1;
-    return frequency;
-  }
-
-  function detectHit(rms) {
-    const threshold = Number(thresholdSlider.value);
-    const now = Date.now();
-    // require short cooldown to avoid double counting
-    const cooldown = 120; // ms
-    if (rms > threshold && hitReady && (now - lastHitTime > cooldown)) {
-      hitCount++;
-      hitsEl.textContent = `Hits Detected: ${hitCount}`;
-      // quick body flash (visual)
-      document.body.classList.add('flash');
-      setTimeout(()=>document.body.classList.remove('flash'), 80);
-      hitReady = false;
-      lastHitTime = now;
-      setTimeout(()=> { hitReady = true; }, cooldown);
-    }
-  }
-
-  async function startMic() {
-    if (running) return;
-    // clean previous objects if any
-    stopMic(); // ensure clean state (will return quickly if nothing active)
-
-    try {
-      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch (e) {
-      alert('Microphone access denied or unavailable.');
-      return;
-    }
-
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    // ensure resumed (some browsers start suspended)
-    if (audioCtx.state === 'suspended') {
-      try { await audioCtx.resume(); } catch(e){ /* ignore */ }
-    }
-
-    source = audioCtx.createMediaStreamSource(mediaStream);
-    analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 1024; // reasonable compromise
-    bufferLength = analyser.fftSize;
-    dataArray = new Float32Array(bufferLength);
-    source.connect(analyser);
-
-    running = true;
-    hitCount = 0;
-    hitsEl.textContent = `Hits Detected: ${hitCount}`;
-    freqEl.textContent = 'Frequency: -- Hz';
-    pitchHistory.length = 0;
-
-    startBtn.disabled = true;
-    stopBtn.disabled = false;
-
-    // limit expensive pitch checks to every N frames
-    let frameCount = 0;
-    const pitchEveryNFrames = 3; // run pitch every 3 animation frames (tweakable)
-
-    function loop() {
-      if (!running) return;
-      analyser.getFloatTimeDomainData(dataArray);
-
-      // RMS amplitude
-      let sum = 0;
-      for (let i=0;i<bufferLength;i++) sum += dataArray[i]*dataArray[i];
-      const rms = Math.sqrt(sum / bufferLength);
-
-      // hit detection
-      detectHit(rms);
-
-      // pitch detection less frequent for perf
-      if ((frameCount++ % pitchEveryNFrames) === 0) {
-        const pitch = autoCorrelate(dataArray, audioCtx.sampleRate);
-        if (pitch > 0 && isFinite(pitch)) {
-          // smoothing history
-          pitchHistory.push(pitch);
-          if (pitchHistory.length > pitchHistorySize) pitchHistory.shift();
-          // compute mean
-          const avg = pitchHistory.reduce((s,v)=>s+v,0)/pitchHistory.length;
-          freqEl.textContent = `Frequency: ${avg.toFixed(2)} Hz`;
-        } else {
-          // if no valid pitch, show placeholder
-          freqEl.textContent = 'Frequency: -- Hz';
+      
+      const sensitivity = parseInt(drumSensitivitySlider.value);
+      let detectedDrum = null;
+      let minDistance = Infinity;
+      
+      for (const [drum, range] of Object.entries(drumFrequencyRanges)) {
+        const rangeCenter = (range[0] + range[1]) / 2;
+        const distance = Math.abs(frequency - rangeCenter);
+        
+        // Adjust sensitivity based on slider
+        const adjustedDistance = distance / (sensitivity * 0.5);
+        
+        if (adjustedDistance < minDistance && frequency >= range[0] && frequency <= range[1]) {
+          minDistance = adjustedDistance;
+          detectedDrum = drum;
         }
       }
-
-      animationId = requestAnimationFrame(loop);
+      
+      return detectedDrum;
     }
-    loop();
-    running = true;
-  }
-
-  function stopMic() {
-    // cancel animation
-    if (typeof animationId !== 'undefined' && animationId !== null) {
-      cancelAnimationFrame(animationId);
-      animationId = null;
+    
+    // Visual feedback for drum hit
+    function showDrumHit(drumType) {
+      // Flash effect
+      hitIndicator.style.background = 'radial-gradient(circle, rgba(255,126,95,0.5) 0%, rgba(255,126,95,0) 70%)';
+      hitIndicator.classList.add('active');
+      
+      setTimeout(() => {
+        hitIndicator.classList.remove('active');
+      }, 300);
+      
+      // Highlight drum pad
+      drumPads.forEach(pad => {
+        if (pad.dataset.type === drumType) {
+          pad.classList.add('active');
+          setTimeout(() => pad.classList.remove('active'), 200);
+        }
+      });
     }
-    running = false;
-
-    // stop all tracks
-    if (mediaStream) {
+    
+    // Draw waveform visualization
+    function drawWaveform() {
+      if (!analyser || !running) return;
+      
+      ctx.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
+      
+      analyser.getFloatTimeDomainData(dataArray);
+      
+      ctx.beginPath();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#ff7e5f';
+      ctx.lineJoin = 'round';
+      
+      const sliceWidth = waveformCanvas.width / bufferLength;
+      let x = 0;
+      
+      for (let i = 0; i < bufferLength; i++) {
+        const v = dataArray[i] * 100;
+        const y = waveformCanvas.height / 2 + v;
+        
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+        
+        x += sliceWidth;
+      }
+      
+      ctx.stroke();
+    }
+    
+    // Start microphone processing
+    async function startMic() {
+      if (running) return;
+      
       try {
-        mediaStream.getTracks().forEach(t => t.stop());
-      } catch(e){}
-      mediaStream = null;
+        // Create audio context
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // Resume if suspended (required for iOS)
+        if (audioCtx.state === 'suspended') {
+          await audioCtx.resume();
+        }
+        
+        // Get microphone access
+        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        // Create source
+        source = audioCtx.createMediaStreamSource(mediaStream);
+        
+        // Create analyser
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 2048;
+        bufferLength = analyser.frequencyBinCount;
+        dataArray = new Float32Array(bufferLength);
+        
+        // Create low-pass filter for drum detection
+        lowpassFilter = audioCtx.createBiquadFilter();
+        lowpassFilter.type = 'lowpass';
+        lowpassFilter.frequency.value = parseFloat(lowpassSlider.value);
+        lowpassFilter.Q.value = 1.0;
+        
+        // Connect nodes: source → filter → analyser
+        source.connect(lowpassFilter);
+        lowpassFilter.connect(analyser);
+        
+        // Initialize state
+        running = true;
+        hitCount = 0;
+        hitsEl.textContent = hitCount;
+        freqEl.textContent = '-- Hz';
+        volumeEl.textContent = '-- dB';
+        
+        // Update UI
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        
+        // Start processing loop
+        processAudio();
+      } catch (err) {
+        console.error('Microphone error:', err);
+        alert('Could not access microphone. Please check permissions and try again.');
+        stopMic();
+      }
     }
-    // disconnect nodes
-    if (source) {
-      try { source.disconnect(); } catch(e){}
-      source = null;
+    
+    // Audio processing loop
+    function processAudio() {
+      if (!running) return;
+      
+      analyser.getFloatTimeDomainData(dataArray);
+      
+      // Calculate RMS (volume)
+      let sum = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        sum += dataArray[i] * dataArray[i];
+      }
+      const rms = Math.sqrt(sum / bufferLength);
+      const db = 20 * Math.log10(rms);
+      
+      // Update volume display
+      if (!isNaN(db) && isFinite(db)) {
+        volumeEl.textContent = db.toFixed(1) + ' dB';
+        lastVolume = db;
+      } else {
+        volumeEl.textContent = '-- dB';
+      }
+      
+      // Store volume for smoothing
+      volumeHistory.push(rms);
+      if (volumeHistory.length > 10) volumeHistory.shift();
+      const avgVolume = volumeHistory.reduce((a, b) => a + b, 0) / volumeHistory.length;
+      
+      // Detect drum hits
+      const threshold = parseFloat(sensitivitySlider.value);
+      const now = Date.now();
+      
+      if (rms > threshold && hitReady && now - lastHitTime > 120) {
+        // Calculate dominant frequency
+        analyser.getByteFrequencyData(new Uint8Array(bufferLength));
+        let maxIndex = 0;
+        let maxValue = 0;
+        
+        for (let i = 0; i < bufferLength; i++) {
+          if (dataArray[i] > maxValue) {
+            maxValue = dataArray[i];
+            maxIndex = i;
+          }
+        }
+        
+        const freq = (maxIndex * audioCtx.sampleRate) / analyser.fftSize;
+        
+        // Update frequency display
+        if (freq > 20 && freq < 5000) {
+          freqEl.textContent = freq.toFixed(0) + ' Hz';
+          
+          // Detect drum type
+          const drumType = detectDrumType(freq, rms);
+          if (drumType) {
+            showDrumHit(drumType);
+          }
+        }
+        
+        // Update hit count
+        hitCount++;
+        hitsEl.textContent = hitCount;
+        
+        // Debounce hit detection
+        hitReady = false;
+        lastHitTime = now;
+        setTimeout(() => { hitReady = true; }, 100);
+      }
+      
+      // Draw visualization
+      drawWaveform();
+      
+      // Continue processing
+      animationId = requestAnimationFrame(processAudio);
     }
-    if (analyser) {
-      try { analyser.disconnect(); } catch(e){}
-      analyser = null;
+    
+    // Stop microphone processing
+    function stopMic() {
+      running = false;
+      
+      if (animationId) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+      }
+      
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+        mediaStream = null;
+      }
+      
+      if (source) {
+        source.disconnect();
+        source = null;
+      }
+      
+      if (analyser) {
+        analyser.disconnect();
+        analyser = null;
+      }
+      
+      if (lowpassFilter) {
+        lowpassFilter.disconnect();
+        lowpassFilter = null;
+      }
+      
+      if (audioCtx && audioCtx.state !== 'closed') {
+        audioCtx.close().catch(console.error);
+        audioCtx = null;
+      }
+      
+      // Update UI
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      freqEl.textContent = '-- Hz';
+      volumeEl.textContent = '-- dB';
+      ctx.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
     }
-    // close audio context
-    if (audioCtx) {
-      try { audioCtx.close(); } catch(e){}
-      audioCtx = null;
+    
+    // Initialize canvas size
+    function initCanvas() {
+      waveformCanvas.width = waveformCanvas.offsetWidth;
+      waveformCanvas.height = waveformCanvas.offsetHeight;
     }
-
-    startBtn.disabled = false;
-    stopBtn.disabled = true;
-    freqEl.textContent = 'Frequency: -- Hz';
-    hitsEl.textContent = `Hits Detected: ${hitCount}`;
-  }
-
-  startBtn.addEventListener('click', startMic);
-  stopBtn.addEventListener('click', stopMic);
-
-  // ensure clean when user navigates away
-  window.addEventListener('beforeunload', stopMic);
+    
+    // Handle window resize
+    window.addEventListener('resize', initCanvas);
+    
+    // Initialize on load
+    window.addEventListener('load', () => {
+      initCanvas();
+      
+      // Clean up on page unload
+      window.addEventListener('beforeunload', stopMic);
+    });
   </script>
 </body>
 </html>
