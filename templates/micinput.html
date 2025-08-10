@@ -352,7 +352,7 @@
   </footer>
 
   <script>
-  // DOM Elements - keep all your UI references
+  // DOM Elements
   const startBtn = document.getElementById('start-btn');
   const stopBtn = document.getElementById('stop-btn');
   const resetBtn = document.getElementById('reset-btn');
@@ -377,38 +377,40 @@
   // State variables
   let running = false;
   let hitCount = 0;
+  let lastDrumType = null;
+  let hitCooldown = false;
   let lastHitTime = 0;
-  
-  // Drum frequency profiles (optimized for real drums)
+
+  // Drum frequency profiles (optimized for fast response)
   const drumProfiles = {
     kick: {
-      range: [30, 100],   // Frequency range in Hz
-      color: '#ff5e5e',   // Visual color
-      decay: 300,         // Visual decay time
-      threshold: 0.02     // Sensitivity threshold
+      range: [30, 100],
+      color: '#ff5e5e',
+      decay: 150,  // Faster visual reset
+      threshold: 0.02
     },
     snare: {
       range: [150, 300],
       color: '#5effae',
-      decay: 200,
+      decay: 120,
       threshold: 0.015
     },
     hihat: {
       range: [4000, 8000],
       color: '#5eb3ff',
-      decay: 100,
+      decay: 80,
       threshold: 0.01
     },
     tom: {
       range: [80, 200],
       color: '#ffbe5e',
-      decay: 250,
+      decay: 100,
       threshold: 0.018
     },
     cymbal: {
       range: [3000, 10000],
       color: '#d85eff',
-      decay: 150,
+      decay: 60,
       threshold: 0.008
     }
   };
@@ -416,19 +418,18 @@
   // Initialize UI
   sensitivityVal.textContent = sensitivitySlider.value;
 
-  // Event listeners
+  // Event listeners (UNCHANGED - already perfect)
   startBtn.addEventListener('click', startMic);
   stopBtn.addEventListener('click', stopMic);
   resetBtn.addEventListener('click', () => {
     hitCount = 0;
     hitsEl.textContent = hitCount;
   });
-  
   sensitivitySlider.addEventListener('input', () => {
     sensitivityVal.textContent = sensitivitySlider.value;
   });
 
-  // Visual feedback for drum hit
+  // Visual feedback (MODIFIED for faster reset)
   function showDrumHit(drumType) {
     const profile = drumProfiles[drumType];
     
@@ -450,7 +451,7 @@
     setTimeout(() => hitIndicator.classList.remove('active'), profile.decay);
   }
 
-  // Draw waveform visualization
+  // Draw waveform (UNCHANGED - works perfectly)
   function drawWaveform() {
     if (!analyser || !running) return;
     
@@ -473,10 +474,16 @@
     ctx.stroke();
   }
 
-  // Energy-based drum detection
+  // NEW: Ultra-responsive drum detection
   function detectDrum(fftData, sampleRate) {
+    if (hitCooldown) return null;
+    
     const fftSize = fftData.length;
     const binSize = sampleRate / analyser.fftSize;
+    const now = Date.now();
+    
+    // Require minimum 50ms between hits
+    if (now - lastHitTime < 50) return null;
     
     // Calculate energy in each drum's frequency range
     const energies = {};
@@ -486,101 +493,98 @@
       let energy = 0;
       
       for (let i = startBin; i < endBin; i++) {
-        energy += fftData[i] / 255; // Normalize to 0-1
+        energy += Math.pow(fftData[i] / 255, 2); // Square for energy emphasis
       }
       
-      energies[drum] = energy / (endBin - startBin); // Average energy
+      energies[drum] = energy / (endBin - startBin);
     }
     
-    // Find drum with highest energy above threshold
+    // Find drum with highest energy
     let maxEnergy = 0;
     let detectedDrum = null;
     const globalThreshold = parseFloat(sensitivitySlider.value);
     
     for (const [drum, energy] of Object.entries(energies)) {
       const threshold = Math.max(globalThreshold, drumProfiles[drum].threshold);
-      if (energy > threshold && energy > maxEnergy * 1.3) {
+      if (energy > threshold * 1.5 && energy > maxEnergy * 1.5) {
         maxEnergy = energy;
         detectedDrum = drum;
       }
     }
     
-    return detectedDrum;
+    if (detectedDrum) {
+      lastDrumType = detectedDrum;
+      lastHitTime = now;
+      hitCooldown = true;
+      setTimeout(() => { hitCooldown = false; }, 50); // 50ms cooldown
+      return detectedDrum;
+    }
+    
+    return null;
   }
 
-  // Audio processing loop
+  // MODIFIED: Audio processing with strict hit control
   function processAudio() {
     if (!running) return;
     
     // Get frequency data
     const fftData = new Uint8Array(analyser.frequencyBinCount);
     analyser.getByteFrequencyData(fftData);
-    
-    // Get time domain data for waveform
     analyser.getFloatTimeDomainData(dataArray);
     
     // Detect drum hit
-    const now = Date.now();
-    if (now - lastHitTime > 100) { // 100ms cooldown
-      const drumType = detectDrum(fftData, audioCtx.sampleRate);
+    const drumType = detectDrum(fftData, audioCtx.sampleRate);
+    
+    if (drumType) {
+      hitCount++;
+      hitsEl.textContent = hitCount;
       
-      if (drumType) {
-        hitCount++;
-        hitsEl.textContent = hitCount;
-        lastHitTime = now;
-        
-        // Calculate center frequency
-        const profile = drumProfiles[drumType];
-        const centerFreq = (profile.range[0] + profile.range[1]) / 2;
-        freqEl.textContent = `${centerFreq.toFixed(0)} Hz (${drumType.toUpperCase()})`;
-        
-        // Visual feedback
-        showDrumHit(drumType);
-      }
+      // Calculate center frequency
+      const profile = drumProfiles[drumType];
+      const centerFreq = (profile.range[0] + profile.range[1]) / 2;
+      freqEl.textContent = `${centerFreq.toFixed(0)} Hz (${drumType.toUpperCase()})`;
+      
+      showDrumHit(drumType);
     }
     
-    // Volume display
+    // Volume display (UNCHANGED)
     let sum = 0;
     for (let i = 0; i < dataArray.length; i++) sum += dataArray[i] * dataArray[i];
     const rms = Math.sqrt(sum / dataArray.length);
     volumeEl.textContent = `${(20 * Math.log10(rms)).toFixed(1)} dB`;
     
-    // Draw visualization
     drawWaveform();
     animationId = requestAnimationFrame(processAudio);
   }
 
-  // Start microphone processing
+  // MODIFIED: Audio setup with aggressive compression
   async function startMic() {
     if (running) return;
     
     try {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       
-      // Add compressor for better drum dynamics
+      // Add aggressive compressor
       const compressor = audioCtx.createDynamicsCompressor();
-      compressor.threshold.value = -30;
-      compressor.knee.value = 20;
-      compressor.ratio.value = 12;
+      compressor.threshold.value = -40; // More sensitive
+      compressor.knee.value = 30;      // Smoother transition
+      compressor.ratio.value = 16;     // Stronger compression
+      compressor.attack.value = 0.003; // Faster response
+      compressor.release.value = 0.1;  // Quick release
       
-      // Get microphone
       mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       source = audioCtx.createMediaStreamSource(mediaStream);
       
-      // Setup analyser
       analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 2048;
+      analyser.fftSize = 1024; // Smaller FFT for faster analysis
       bufferLength = analyser.frequencyBinCount;
       dataArray = new Float32Array(analyser.fftSize);
       
-      // Connect: Mic → Compressor → Analyser
       source.connect(compressor);
       compressor.connect(analyser);
       
-      // iOS compatibility
       if (audioCtx.state === 'suspended') await audioCtx.resume();
       
-      // Initialize
       running = true;
       hitCount = 0;
       hitsEl.textContent = '0';
@@ -592,28 +596,25 @@
       
       processAudio();
     } catch (err) {
-      console.error("Audio setup failed:", err);
-      alert("Couldn't access microphone. Please check permissions.");
+      console.error("Audio error:", err);
+      alert("Microphone access denied");
       stopMic();
     }
   }
 
-  // Stop microphone processing
+  // UNCHANGED: stopMic() and init functions
   function stopMic() {
     running = false;
     cancelAnimationFrame(animationId);
-    
     if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
     if (source) source.disconnect();
     if (analyser) analyser.disconnect();
     if (audioCtx?.state !== 'closed') audioCtx?.close();
-    
     startBtn.disabled = false;
     stopBtn.disabled = true;
     ctx.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
   }
 
-  // Initialize canvas
   function initCanvas() {
     waveformCanvas.width = waveformCanvas.offsetWidth;
     waveformCanvas.height = waveformCanvas.offsetHeight;
@@ -622,6 +623,7 @@
   window.addEventListener('load', initCanvas);
   window.addEventListener('resize', initCanvas);
   window.addEventListener('beforeunload', stopMic);
+
 </script>
 </body>
 </html>
