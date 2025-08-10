@@ -1,182 +1,275 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <title>Live Drum Analysis</title>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Live Drum Analysis — Stable + Pitch</title>
   <style>
     body {
-      background: black; color: white; font-family: 'Inter', sans-serif; text-align: center; padding: 2rem;
+      background: #000; color: #fff; font-family: Inter, system-ui, sans-serif;
+      margin: 0; padding: 2rem; text-align: center;
     }
+    h1 { margin: 0 0 1rem 0; font-size: 1.6rem; }
     button {
-      font-size: 1.2rem; padding: 1rem 2rem; margin: 1rem; border-radius: 8px; cursor: pointer;
+      font-size: 1rem; padding: 0.8rem 1.2rem; margin: 0.5rem;
+      border-radius: 8px; border: none; background:#333; color:#fff; cursor:pointer;
     }
-    #frequency, #hits {
-      font-size: 2rem; margin-top: 2rem;
-    }
+    button:disabled { background:#222; color:#666; cursor:not-allowed; }
+    #controls { margin-top: 1rem; }
+    #info { margin-top: 1.2rem; font-size: 1.1rem; }
+    #freq { font-size: 1.4rem; margin-top: .6rem; }
+    #hits { font-size: 1.4rem; margin-top: .2rem; }
+    .flash { background: #fff; color:#000; padding: .15rem .3rem; border-radius:6px; }
+    .row { display:flex; gap:0.5rem; justify-content:center; align-items:center; margin-top:0.8rem; }
+    input[type=range] { width:200px; }
+    small { color:#bbb; display:block; margin-top:.25rem; }
   </style>
 </head>
 <body>
-  <h1>Live Drum Analysis</h1>
-  <button id="start-btn">Start Microphone</button>
-  <button id="stop-btn" disabled>Stop Microphone</button>
-  <div id="frequency">Frequency: -- Hz</div>
-  <div id="hits">Hits Detected: 0</div>
+  <h1>Live Drum Analysis — Stable + Pitch</h1>
+
+  <div id="controls">
+    <button id="start-btn">Start Microphone</button>
+    <button id="stop-btn" disabled>Stop Microphone</button>
+  </div>
+
+  <div id="info">
+    <div id="freq">Frequency: -- Hz</div>
+    <div id="hits">Hits Detected: 0</div>
+
+    <div class="row" style="margin-top:12px;">
+      <label style="display:flex;flex-direction:column;align-items:center;">
+        Threshold
+        <input id="threshold-slider" type="range" min="0.005" max="0.08" step="0.005" value="0.03">
+        <small id="threshold-val">0.030</small>
+      </label>
+      <label style="display:flex;flex-direction:column;align-items:center;margin-left:12px;">
+        Pitch smoothing (frames)
+        <input id="pitch-smooth" type="range" min="1" max="10" step="1" value="3">
+        <small id="pitch-smooth-val">3</small>
+      </label>
+    </div>
+  </div>
 
   <script>
-    const startBtn = document.getElementById('start-btn');
-    const stopBtn = document.getElementById('stop-btn');
-    const freqDisplay = document.getElementById('frequency');
-    const hitsDisplay = document.getElementById('hits');
+  // Stable mic + hits + pitch combined
 
-    let audioCtx = null;
-    let analyser = null;
-    let source = null;
-    let dataArray = null;
-    let bufferLength = 0;
-    let mediaStream = null;
+  const startBtn = document.getElementById('start-btn');
+  const stopBtn = document.getElementById('stop-btn');
+  const freqEl = document.getElementById('freq');
+  const hitsEl = document.getElementById('hits');
+  const thresholdSlider = document.getElementById('threshold-slider');
+  const thresholdVal = document.getElementById('threshold-val');
+  const pitchSmoothSlider = document.getElementById('pitch-smooth');
+  const pitchSmoothVal = document.getElementById('pitch-smooth-val');
 
-    let running = false;
-    let hitCount = 0;
-    let lastAmplitude = 0;
-    let hitReady = true; // debounce hit detection
+  let audioCtx = null;
+  let analyser = null;
+  let source = null;
+  let mediaStream = null;
+  let dataArray = null;
+  let bufferLength = 0;
+  let running = false;
+  let animationId = null;
 
-    function autoCorrelate(buffer, sampleRate) {
-      const SIZE = buffer.length;
-      let rms = 0;
-      for (let i = 0; i < SIZE; i++) {
-        rms += buffer[i] * buffer[i];
+  let hitCount = 0;
+  let hitReady = true;
+  let lastHitTime = 0;
+
+  // pitch smoothing ring buffer
+  const pitchHistory = [];
+  let pitchHistorySize = Number(pitchSmoothSlider.value);
+
+  // pitch detection bounds (Hz)
+  const minFreq = 30;   // won't accept <30Hz
+  const maxFreq = 5000; // won't accept >5000Hz
+
+  thresholdVal.textContent = Number(thresholdSlider.value).toFixed(3);
+  pitchSmoothVal.textContent = pitchSmoothSlider.value;
+
+  thresholdSlider.addEventListener('input', () => {
+    thresholdVal.textContent = Number(thresholdSlider.value).toFixed(3);
+  });
+  pitchSmoothSlider.addEventListener('input', () => {
+    pitchSmoothVal.textContent = pitchSmoothSlider.value;
+    pitchHistorySize = Number(pitchSmoothSlider.value);
+    // trim history
+    while (pitchHistory.length > pitchHistorySize) pitchHistory.shift();
+  });
+
+  // Robust autocorrelation limited by expected freq range and buffer size
+  function autoCorrelate(buf, sampleRate) {
+    const SIZE = buf.length;
+    if (SIZE < 16) return -1;
+
+    // RMS energy check
+    let rms = 0;
+    for (let i=0;i<SIZE;i++) rms += buf[i]*buf[i];
+    rms = Math.sqrt(rms / SIZE);
+    if (rms < 0.005) return -1; // too quiet
+
+    // compute min/max lag from freq bounds
+    const maxLag = Math.min(SIZE - 2, Math.floor(sampleRate / Math.max(minFreq,1)));
+    const minLag = Math.max(2, Math.floor(sampleRate / Math.min(maxFreq, sampleRate)));
+
+    if (minLag >= maxLag) return -1;
+
+    let bestCorr = -Infinity;
+    let bestLag = -1;
+
+    // quick mean subtraction to reduce DC
+    let mean = 0;
+    for (let i=0;i<SIZE;i++) mean += buf[i];
+    mean /= SIZE;
+    // compute normalized autocorrelation over lag range
+    for (let lag = minLag; lag <= maxLag; lag++) {
+      let corr = 0;
+      for (let i=0;i<SIZE - lag; i++) {
+        corr += (buf[i] - mean) * (buf[i + lag] - mean);
       }
-      rms = Math.sqrt(rms / SIZE);
-      if (rms < 0.01) return -1; // too quiet
-
-      let r1 = 0, r2 = SIZE - 1;
-      const threshold = 0.2;
-
-      for (let i = 0; i < SIZE / 2; i++) {
-        if (Math.abs(buffer[i]) < threshold) {
-          r1 = i;
-          break;
-        }
+      if (corr > bestCorr) {
+        bestCorr = corr;
+        bestLag = lag;
       }
-      for (let i = 1; i < SIZE / 2; i++) {
-        if (Math.abs(buffer[SIZE - i]) < threshold) {
-          r2 = SIZE - i;
-          break;
-        }
-      }
-
-      let maxCorr = 0, maxPos = -1;
-      for (let lag = r1; lag <= r2; lag++) {
-        let corr = 0;
-        for (let i = 0; i < SIZE - lag; i++) {
-          corr += buffer[i] * buffer[i + lag];
-        }
-        if (corr > maxCorr) {
-          maxCorr = corr;
-          maxPos = lag;
-        }
-      }
-      if (maxPos <= 0) return -1; // avoid div zero
-
-      const frequency = sampleRate / maxPos;
-      if (!isFinite(frequency) || frequency > 5000 || frequency < 20) {
-        return -1;
-      }
-      return frequency;
     }
 
-    function detectHit(amplitude) {
-      const threshold = 0.02; // Raise threshold to avoid false positives from noise
-      if (amplitude > threshold && hitReady) {
-        hitCount++;
-        hitsDisplay.textContent = `Hits Detected: ${hitCount}`;
-        hitReady = false;
-      } else if (amplitude <= threshold) {
-        hitReady = true;
-      }
-      lastAmplitude = amplitude;
+    if (bestLag <= 0) return -1;
+
+    const frequency = sampleRate / bestLag;
+    if (!isFinite(frequency) || frequency < minFreq || frequency > maxFreq) return -1;
+    return frequency;
+  }
+
+  function detectHit(rms) {
+    const threshold = Number(thresholdSlider.value);
+    const now = Date.now();
+    // require short cooldown to avoid double counting
+    const cooldown = 120; // ms
+    if (rms > threshold && hitReady && (now - lastHitTime > cooldown)) {
+      hitCount++;
+      hitsEl.textContent = `Hits Detected: ${hitCount}`;
+      // quick body flash (visual)
+      document.body.classList.add('flash');
+      setTimeout(()=>document.body.classList.remove('flash'), 80);
+      hitReady = false;
+      lastHitTime = now;
+      setTimeout(()=> { hitReady = true; }, cooldown);
+    }
+  }
+
+  async function startMic() {
+    if (running) return;
+    // clean previous objects if any
+    stopMic(); // ensure clean state (will return quickly if nothing active)
+
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) {
+      alert('Microphone access denied or unavailable.');
+      return;
     }
 
-    async function startMic() {
-      if (running) return; // Prevent double start
-
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      try {
-        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      } catch (err) {
-        alert('Microphone access denied or not available.');
-        startBtn.disabled = false;
-        stopBtn.disabled = true;
-        return;
-      }
-
-      source = audioCtx.createMediaStreamSource(mediaStream);
-      analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 2048;
-      bufferLength = analyser.fftSize;
-      dataArray = new Float32Array(bufferLength);
-      source.connect(analyser);
-
-      hitCount = 0;
-      hitsDisplay.textContent = `Hits Detected: 0`;
-      running = true;
-
-      function update() {
-        if (!running) return;
-        analyser.getFloatTimeDomainData(dataArray);
-
-        let rms = Math.sqrt(dataArray.reduce((sum, val) => sum + val * val, 0) / bufferLength);
-        detectHit(rms);
-
-        let pitch = autoCorrelate(dataArray, audioCtx.sampleRate);
-        freqDisplay.textContent = (pitch > 0 && isFinite(pitch))
-          ? `Frequency: ${pitch.toFixed(2)} Hz`
-          : 'Frequency: -- Hz';
-
-        requestAnimationFrame(update);
-      }
-      update();
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // ensure resumed (some browsers start suspended)
+    if (audioCtx.state === 'suspended') {
+      try { await audioCtx.resume(); } catch(e){ /* ignore */ }
     }
 
-    function stopMic() {
+    source = audioCtx.createMediaStreamSource(mediaStream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 1024; // reasonable compromise
+    bufferLength = analyser.fftSize;
+    dataArray = new Float32Array(bufferLength);
+    source.connect(analyser);
+
+    running = true;
+    hitCount = 0;
+    hitsEl.textContent = `Hits Detected: ${hitCount}`;
+    freqEl.textContent = 'Frequency: -- Hz';
+    pitchHistory.length = 0;
+
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+
+    // limit expensive pitch checks to every N frames
+    let frameCount = 0;
+    const pitchEveryNFrames = 3; // run pitch every 3 animation frames (tweakable)
+
+    function loop() {
       if (!running) return;
+      analyser.getFloatTimeDomainData(dataArray);
 
-      running = false;
+      // RMS amplitude
+      let sum = 0;
+      for (let i=0;i<bufferLength;i++) sum += dataArray[i]*dataArray[i];
+      const rms = Math.sqrt(sum / bufferLength);
 
-      if (mediaStream) {
-        mediaStream.getTracks().forEach(track => track.stop());
-        mediaStream = null;
-      }
-      if (source) {
-        source.disconnect();
-        source = null;
-      }
-      if (analyser) {
-        analyser.disconnect();
-        analyser = null;
-      }
-      if (audioCtx) {
-        audioCtx.close();
-        audioCtx = null;
+      // hit detection
+      detectHit(rms);
+
+      // pitch detection less frequent for perf
+      if ((frameCount++ % pitchEveryNFrames) === 0) {
+        const pitch = autoCorrelate(dataArray, audioCtx.sampleRate);
+        if (pitch > 0 && isFinite(pitch)) {
+          // smoothing history
+          pitchHistory.push(pitch);
+          if (pitchHistory.length > pitchHistorySize) pitchHistory.shift();
+          // compute mean
+          const avg = pitchHistory.reduce((s,v)=>s+v,0)/pitchHistory.length;
+          freqEl.textContent = `Frequency: ${avg.toFixed(2)} Hz`;
+        } else {
+          // if no valid pitch, show placeholder
+          freqEl.textContent = 'Frequency: -- Hz';
+        }
       }
 
-      freqDisplay.textContent = 'Frequency: -- Hz';
-      hitsDisplay.textContent = `Hits Detected: ${hitCount}`;
+      animationId = requestAnimationFrame(loop);
+    }
+    loop();
+    running = true;
+  }
 
-      startBtn.disabled = false;
-      stopBtn.disabled = true;
+  function stopMic() {
+    // cancel animation
+    if (typeof animationId !== 'undefined' && animationId !== null) {
+      cancelAnimationFrame(animationId);
+      animationId = null;
+    }
+    running = false;
+
+    // stop all tracks
+    if (mediaStream) {
+      try {
+        mediaStream.getTracks().forEach(t => t.stop());
+      } catch(e){}
+      mediaStream = null;
+    }
+    // disconnect nodes
+    if (source) {
+      try { source.disconnect(); } catch(e){}
+      source = null;
+    }
+    if (analyser) {
+      try { analyser.disconnect(); } catch(e){}
+      analyser = null;
+    }
+    // close audio context
+    if (audioCtx) {
+      try { audioCtx.close(); } catch(e){}
+      audioCtx = null;
     }
 
-    startBtn.onclick = () => {
-      startBtn.disabled = true;
-      stopBtn.disabled = false;
-      startMic();
-    };
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+    freqEl.textContent = 'Frequency: -- Hz';
+    hitsEl.textContent = `Hits Detected: ${hitCount}`;
+  }
 
-    stopBtn.onclick = () => {
-      stopMic();
-    };
+  startBtn.addEventListener('click', startMic);
+  stopBtn.addEventListener('click', stopMic);
+
+  // ensure clean when user navigates away
+  window.addEventListener('beforeunload', stopMic);
   </script>
 </body>
 </html>
