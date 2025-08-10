@@ -66,9 +66,14 @@
           maxPos = lag;
         }
       }
-      if (maxPos <= 0) return -1; // prevent division by zero or invalid lag
+      if (maxPos <= 0 || !isFinite(maxPos)) return -1;
 
-      return sampleRate / maxPos;
+      const frequency = sampleRate / maxPos;
+      if (!isFinite(frequency) || frequency > 5000 || frequency < 20) {
+        return -1;
+      }
+
+      return frequency;
     }
 
     function detectHit(amplitude) {
