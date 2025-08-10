@@ -352,349 +352,276 @@
   </footer>
 
   <script>
-    // DOM Elements
-    const startBtn = document.getElementById('start-btn');
-    const stopBtn = document.getElementById('stop-btn');
-    const resetBtn = document.getElementById('reset-btn');
-    const hitsEl = document.getElementById('hits');
-    const freqEl = document.getElementById('frequency');
-    const volumeEl = document.getElementById('volume');
-    const sensitivitySlider = document.getElementById('sensitivity-slider');
-    const sensitivityVal = document.getElementById('sensitivity-val');
-    const lowpassSlider = document.getElementById('lowpass-slider');
-    const lowpassVal = document.getElementById('lowpass-val');
-    const drumSensitivitySlider = document.getElementById('drum-sensitivity-slider');
-    const drumSensitivityVal = document.getElementById('drum-sensitivity-val');
-    const hitIndicator = document.getElementById('hit-indicator');
-    const waveformCanvas = document.getElementById('waveform');
-    const ctx = waveformCanvas.getContext('2d');
-    const drumPads = document.querySelectorAll('.drum-pad');
-    
-    // Audio variables
-    let audioCtx = null;
-    let analyser = null;
-    let source = null;
-    let mediaStream = null;
-    let lowpassFilter = null;
-    let dataArray = null;
-    let animationId = null;
-    
-    // State variables
-    let running = false;
-    let hitCount = 0;
-    let hitReady = true;
-    let lastHitTime = 0;
-    let lastVolume = 0;
-    let volumeHistory = [];
-    
-    // Drum detection variables
-    const drumTypes = ['kick', 'snare', 'hihat', 'tom', 'cymbal'];
-    const drumFrequencyRanges = {
-      kick: [40, 80],
-      snare: [150, 250],
-      hihat: [5000, 10000],
-      tom: [100, 200],
-      cymbal: [4000, 8000]
-    };
-    
-    // Initialize UI
+  // DOM Elements - keep all your UI references
+  const startBtn = document.getElementById('start-btn');
+  const stopBtn = document.getElementById('stop-btn');
+  const resetBtn = document.getElementById('reset-btn');
+  const hitsEl = document.getElementById('hits');
+  const freqEl = document.getElementById('frequency');
+  const volumeEl = document.getElementById('volume');
+  const sensitivitySlider = document.getElementById('sensitivity-slider');
+  const sensitivityVal = document.getElementById('sensitivity-val');
+  const hitIndicator = document.getElementById('hit-indicator');
+  const waveformCanvas = document.getElementById('waveform');
+  const ctx = waveformCanvas.getContext('2d');
+  const drumPads = document.querySelectorAll('.drum-pad');
+
+  // Audio variables
+  let audioCtx = null;
+  let analyser = null;
+  let source = null;
+  let mediaStream = null;
+  let dataArray = null;
+  let animationId = null;
+  
+  // State variables
+  let running = false;
+  let hitCount = 0;
+  let lastHitTime = 0;
+  
+  // Drum frequency profiles (optimized for real drums)
+  const drumProfiles = {
+    kick: {
+      range: [30, 100],   // Frequency range in Hz
+      color: '#ff5e5e',   // Visual color
+      decay: 300,         // Visual decay time
+      threshold: 0.02     // Sensitivity threshold
+    },
+    snare: {
+      range: [150, 300],
+      color: '#5effae',
+      decay: 200,
+      threshold: 0.015
+    },
+    hihat: {
+      range: [4000, 8000],
+      color: '#5eb3ff',
+      decay: 100,
+      threshold: 0.01
+    },
+    tom: {
+      range: [80, 200],
+      color: '#ffbe5e',
+      decay: 250,
+      threshold: 0.018
+    },
+    cymbal: {
+      range: [3000, 10000],
+      color: '#d85eff',
+      decay: 150,
+      threshold: 0.008
+    }
+  };
+
+  // Initialize UI
+  sensitivityVal.textContent = sensitivitySlider.value;
+
+  // Event listeners
+  startBtn.addEventListener('click', startMic);
+  stopBtn.addEventListener('click', stopMic);
+  resetBtn.addEventListener('click', () => {
+    hitCount = 0;
+    hitsEl.textContent = hitCount;
+  });
+  
+  sensitivitySlider.addEventListener('input', () => {
     sensitivityVal.textContent = sensitivitySlider.value;
-    lowpassVal.textContent = lowpassSlider.value + ' Hz';
+  });
+
+  // Visual feedback for drum hit
+  function showDrumHit(drumType) {
+    const profile = drumProfiles[drumType];
     
-    const drumSensitivityLabels = {
-      1: 'Low',
-      2: 'Medium',
-      3: 'High'
-    };
-    drumSensitivityVal.textContent = drumSensitivityLabels[drumSensitivitySlider.value];
-    
-    // Event listeners
-    startBtn.addEventListener('click', startMic);
-    stopBtn.addEventListener('click', stopMic);
-    resetBtn.addEventListener('click', () => {
-      hitCount = 0;
-      hitsEl.textContent = hitCount;
-    });
-    
-    sensitivitySlider.addEventListener('input', () => {
-      sensitivityVal.textContent = sensitivitySlider.value;
-    });
-    
-    lowpassSlider.addEventListener('input', () => {
-      lowpassVal.textContent = lowpassSlider.value + ' Hz';
-      if (lowpassFilter) {
-        lowpassFilter.frequency.value = parseFloat(lowpassSlider.value);
+    // Pad animation
+    drumPads.forEach(pad => {
+      if (pad.dataset.type === drumType) {
+        pad.style.backgroundColor = profile.color;
+        pad.style.boxShadow = `0 0 20px ${profile.color}`;
+        setTimeout(() => {
+          pad.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+          pad.style.boxShadow = '0 4px 10px rgba(0, 0, 0, 0.3)';
+        }, profile.decay);
       }
     });
     
-    drumSensitivitySlider.addEventListener('input', () => {
-      drumSensitivityVal.textContent = drumSensitivityLabels[drumSensitivitySlider.value];
-    });
+    // Screen flash
+    hitIndicator.style.background = `radial-gradient(circle, ${profile.color}77 0%, transparent 70%)`;
+    hitIndicator.classList.add('active');
+    setTimeout(() => hitIndicator.classList.remove('active'), profile.decay);
+  }
+
+  // Draw waveform visualization
+  function drawWaveform() {
+    if (!analyser || !running) return;
     
-    // Enhanced low-frequency drum detection
-    function detectDrumType(frequency, amplitude) {
-      if (amplitude < parseFloat(sensitivitySlider.value)) {
-        return null;
-      }
-      
-      const sensitivity = parseInt(drumSensitivitySlider.value);
-      let detectedDrum = null;
-      let minDistance = Infinity;
-      
-      for (const [drum, range] of Object.entries(drumFrequencyRanges)) {
-        const rangeCenter = (range[0] + range[1]) / 2;
-        const distance = Math.abs(frequency - rangeCenter);
-        
-        // Adjust sensitivity based on slider
-        const adjustedDistance = distance / (sensitivity * 0.5);
-        
-        if (adjustedDistance < minDistance && frequency >= range[0] && frequency <= range[1]) {
-          minDistance = adjustedDistance;
-          detectedDrum = drum;
-        }
-      }
-      
-      return detectedDrum;
+    analyser.getFloatTimeDomainData(dataArray);
+    
+    ctx.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
+    ctx.beginPath();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#ff7e5f';
+    
+    const sliceWidth = waveformCanvas.width / bufferLength;
+    let x = 0;
+    
+    for (let i = 0; i < bufferLength; i++) {
+      const y = waveformCanvas.height/2 + (dataArray[i] * waveformCanvas.height/2);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      x += sliceWidth;
     }
     
-    // Visual feedback for drum hit
-    function showDrumHit(drumType) {
-      // Flash effect
-      hitIndicator.style.background = 'radial-gradient(circle, rgba(255,126,95,0.5) 0%, rgba(255,126,95,0) 70%)';
-      hitIndicator.classList.add('active');
-      
-      setTimeout(() => {
-        hitIndicator.classList.remove('active');
-      }, 300);
-      
-      // Highlight drum pad
-      drumPads.forEach(pad => {
-        if (pad.dataset.type === drumType) {
-          pad.classList.add('active');
-          setTimeout(() => pad.classList.remove('active'), 200);
-        }
-      });
-    }
+    ctx.stroke();
+  }
+
+  // Energy-based drum detection
+  function detectDrum(fftData, sampleRate) {
+    const fftSize = fftData.length;
+    const binSize = sampleRate / analyser.fftSize;
     
-    // Draw waveform visualization
-    function drawWaveform() {
-      if (!analyser || !running) return;
+    // Calculate energy in each drum's frequency range
+    const energies = {};
+    for (const [drum, profile] of Object.entries(drumProfiles)) {
+      const startBin = Math.floor(profile.range[0] / binSize);
+      const endBin = Math.min(fftSize, Math.ceil(profile.range[1] / binSize));
+      let energy = 0;
       
-      ctx.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
-      
-      analyser.getFloatTimeDomainData(dataArray);
-      
-      ctx.beginPath();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#ff7e5f';
-      ctx.lineJoin = 'round';
-      
-      const sliceWidth = waveformCanvas.width / bufferLength;
-      let x = 0;
-      
-      for (let i = 0; i < bufferLength; i++) {
-        const v = dataArray[i] * 100;
-        const y = waveformCanvas.height / 2 + v;
-        
-        if (i === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
-        
-        x += sliceWidth;
+      for (let i = startBin; i < endBin; i++) {
+        energy += fftData[i] / 255; // Normalize to 0-1
       }
       
-      ctx.stroke();
+      energies[drum] = energy / (endBin - startBin); // Average energy
     }
     
-    // Start microphone processing
-    async function startMic() {
-      if (running) return;
-      
-      try {
-        // Create audio context
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        
-        // Resume if suspended (required for iOS)
-        if (audioCtx.state === 'suspended') {
-          await audioCtx.resume();
-        }
-        
-        // Get microphone access
-        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        
-        // Create source
-        source = audioCtx.createMediaStreamSource(mediaStream);
-        
-        // Create analyser
-        analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 2048;
-        bufferLength = analyser.frequencyBinCount;
-        dataArray = new Float32Array(bufferLength);
-        
-        // Create low-pass filter for drum detection
-        lowpassFilter = audioCtx.createBiquadFilter();
-        lowpassFilter.type = 'lowpass';
-        lowpassFilter.frequency.value = parseFloat(lowpassSlider.value);
-        lowpassFilter.Q.value = 1.0;
-        
-        // Connect nodes: source → filter → analyser
-        source.connect(lowpassFilter);
-        lowpassFilter.connect(analyser);
-        
-        // Initialize state
-        running = true;
-        hitCount = 0;
-        hitsEl.textContent = hitCount;
-        freqEl.textContent = '-- Hz';
-        volumeEl.textContent = '-- dB';
-        
-        // Update UI
-        startBtn.disabled = true;
-        stopBtn.disabled = false;
-        
-        // Start processing loop
-        processAudio();
-      } catch (err) {
-        console.error('Microphone error:', err);
-        alert('Could not access microphone. Please check permissions and try again.');
-        stopMic();
+    // Find drum with highest energy above threshold
+    let maxEnergy = 0;
+    let detectedDrum = null;
+    const globalThreshold = parseFloat(sensitivitySlider.value);
+    
+    for (const [drum, energy] of Object.entries(energies)) {
+      const threshold = Math.max(globalThreshold, drumProfiles[drum].threshold);
+      if (energy > threshold && energy > maxEnergy * 1.3) {
+        maxEnergy = energy;
+        detectedDrum = drum;
       }
     }
     
-    // Audio processing loop
-    function processAudio() {
-      if (!running) return;
+    return detectedDrum;
+  }
+
+  // Audio processing loop
+  function processAudio() {
+    if (!running) return;
+    
+    // Get frequency data
+    const fftData = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(fftData);
+    
+    // Get time domain data for waveform
+    analyser.getFloatTimeDomainData(dataArray);
+    
+    // Detect drum hit
+    const now = Date.now();
+    if (now - lastHitTime > 100) { // 100ms cooldown
+      const drumType = detectDrum(fftData, audioCtx.sampleRate);
       
-      analyser.getFloatTimeDomainData(dataArray);
-      
-      // Calculate RMS (volume)
-      let sum = 0;
-      for (let i = 0; i < bufferLength; i++) {
-        sum += dataArray[i] * dataArray[i];
-      }
-      const rms = Math.sqrt(sum / bufferLength);
-      const db = 20 * Math.log10(rms);
-      
-      // Update volume display
-      if (!isNaN(db) && isFinite(db)) {
-        volumeEl.textContent = db.toFixed(1) + ' dB';
-        lastVolume = db;
-      } else {
-        volumeEl.textContent = '-- dB';
-      }
-      
-      // Store volume for smoothing
-      volumeHistory.push(rms);
-      if (volumeHistory.length > 10) volumeHistory.shift();
-      const avgVolume = volumeHistory.reduce((a, b) => a + b, 0) / volumeHistory.length;
-      
-      // Detect drum hits
-      const threshold = parseFloat(sensitivitySlider.value);
-      const now = Date.now();
-      
-      if (rms > threshold && hitReady && now - lastHitTime > 120) {
-        // Calculate dominant frequency
-        analyser.getByteFrequencyData(new Uint8Array(bufferLength));
-        let maxIndex = 0;
-        let maxValue = 0;
-        
-        for (let i = 0; i < bufferLength; i++) {
-          if (dataArray[i] > maxValue) {
-            maxValue = dataArray[i];
-            maxIndex = i;
-          }
-        }
-        
-        const freq = (maxIndex * audioCtx.sampleRate) / analyser.fftSize;
-        
-        // Update frequency display
-        if (freq > 20 && freq < 5000) {
-          freqEl.textContent = freq.toFixed(0) + ' Hz';
-          
-          // Detect drum type
-          const drumType = detectDrumType(freq, rms);
-          if (drumType) {
-            showDrumHit(drumType);
-          }
-        }
-        
-        // Update hit count
+      if (drumType) {
         hitCount++;
         hitsEl.textContent = hitCount;
-        
-        // Debounce hit detection
-        hitReady = false;
         lastHitTime = now;
-        setTimeout(() => { hitReady = true; }, 100);
+        
+        // Calculate center frequency
+        const profile = drumProfiles[drumType];
+        const centerFreq = (profile.range[0] + profile.range[1]) / 2;
+        freqEl.textContent = `${centerFreq.toFixed(0)} Hz (${drumType.toUpperCase()})`;
+        
+        // Visual feedback
+        showDrumHit(drumType);
       }
-      
-      // Draw visualization
-      drawWaveform();
-      
-      // Continue processing
-      animationId = requestAnimationFrame(processAudio);
     }
     
-    // Stop microphone processing
-    function stopMic() {
-      running = false;
+    // Volume display
+    let sum = 0;
+    for (let i = 0; i < dataArray.length; i++) sum += dataArray[i] * dataArray[i];
+    const rms = Math.sqrt(sum / dataArray.length);
+    volumeEl.textContent = `${(20 * Math.log10(rms)).toFixed(1)} dB`;
+    
+    // Draw visualization
+    drawWaveform();
+    animationId = requestAnimationFrame(processAudio);
+  }
+
+  // Start microphone processing
+  async function startMic() {
+    if (running) return;
+    
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       
-      if (animationId) {
-        cancelAnimationFrame(animationId);
-        animationId = null;
-      }
+      // Add compressor for better drum dynamics
+      const compressor = audioCtx.createDynamicsCompressor();
+      compressor.threshold.value = -30;
+      compressor.knee.value = 20;
+      compressor.ratio.value = 12;
       
-      if (mediaStream) {
-        mediaStream.getTracks().forEach(track => track.stop());
-        mediaStream = null;
-      }
+      // Get microphone
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      source = audioCtx.createMediaStreamSource(mediaStream);
       
-      if (source) {
-        source.disconnect();
-        source = null;
-      }
+      // Setup analyser
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 2048;
+      bufferLength = analyser.frequencyBinCount;
+      dataArray = new Float32Array(analyser.fftSize);
       
-      if (analyser) {
-        analyser.disconnect();
-        analyser = null;
-      }
+      // Connect: Mic → Compressor → Analyser
+      source.connect(compressor);
+      compressor.connect(analyser);
       
-      if (lowpassFilter) {
-        lowpassFilter.disconnect();
-        lowpassFilter = null;
-      }
+      // iOS compatibility
+      if (audioCtx.state === 'suspended') await audioCtx.resume();
       
-      if (audioCtx && audioCtx.state !== 'closed') {
-        audioCtx.close().catch(console.error);
-        audioCtx = null;
-      }
-      
-      // Update UI
-      startBtn.disabled = false;
-      stopBtn.disabled = true;
+      // Initialize
+      running = true;
+      hitCount = 0;
+      hitsEl.textContent = '0';
       freqEl.textContent = '-- Hz';
       volumeEl.textContent = '-- dB';
-      ctx.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
-    }
-    
-    // Initialize canvas size
-    function initCanvas() {
-      waveformCanvas.width = waveformCanvas.offsetWidth;
-      waveformCanvas.height = waveformCanvas.offsetHeight;
-    }
-    
-    // Handle window resize
-    window.addEventListener('resize', initCanvas);
-    
-    // Initialize on load
-    window.addEventListener('load', () => {
-      initCanvas();
       
-      // Clean up on page unload
-      window.addEventListener('beforeunload', stopMic);
-    });
-  </script>
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      
+      processAudio();
+    } catch (err) {
+      console.error("Audio setup failed:", err);
+      alert("Couldn't access microphone. Please check permissions.");
+      stopMic();
+    }
+  }
+
+  // Stop microphone processing
+  function stopMic() {
+    running = false;
+    cancelAnimationFrame(animationId);
+    
+    if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+    if (source) source.disconnect();
+    if (analyser) analyser.disconnect();
+    if (audioCtx?.state !== 'closed') audioCtx?.close();
+    
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+    ctx.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
+  }
+
+  // Initialize canvas
+  function initCanvas() {
+    waveformCanvas.width = waveformCanvas.offsetWidth;
+    waveformCanvas.height = waveformCanvas.offsetHeight;
+  }
+  
+  window.addEventListener('load', initCanvas);
+  window.addEventListener('resize', initCanvas);
+  window.addEventListener('beforeunload', stopMic);
+</script>
 </body>
 </html>
