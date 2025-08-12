@@ -116,9 +116,10 @@
       font-size: 1.2rem;
       font-weight: bold;
       color: rgba(255, 255, 255, 0.7);
-      transition: all 0.1s ease;
+      transition: all 50ms ease-out;
       box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
       cursor: pointer;
+      will-change: transform, background-color;
     }
     
     .drum-pad.active {
@@ -433,9 +434,9 @@
       <div class="slider-container">
         <label>
           Detection Sensitivity
-          <span id="sensitivity-val">0.03</span>
+          <span id="sensitivity-val">0.05</span>
         </label>
-        <input type="range" id="sensitivity-slider" min="0.005" max="0.08" step="0.005" value="0.03">
+        <input type="range" id="sensitivity-slider" min="0.01" max="0.15" step="0.01" value="0.05">
       </div>
       
       <div class="canvas-container">
@@ -524,9 +525,9 @@
     let running = false;
     let hitCount = 0;
     let lastDrumType = null;
-    let hitCooldown = false;
     let lastHitTime = 0;
     let lastFrequency = 0;
+    const HIT_COOLDOWN = 200; // ms
     
     // Drum frequency profiles
     const drumProfiles = {
@@ -537,13 +538,13 @@
         threshold: 0.02
       },
       snare: {
-        range: [150, 300],
+        range: [100, 300],
         color: '#5effae',
         decay: 120,
         threshold: 0.015
       },
       hihat: {
-        range: [4000, 8000],
+        range: [3000, 8000],
         color: '#5eb3ff',
         decay: 80,
         threshold: 0.01
@@ -613,8 +614,9 @@
       
       ctx.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
       ctx.beginPath();
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 1.5;
       ctx.strokeStyle = '#ff7e5f';
+      ctx.filter = 'blur(0.5px)';
       
       const sliceWidth = waveformCanvas.width / bufferLength;
       let x = 0;
@@ -633,67 +635,51 @@
       }
       
       ctx.stroke();
+      ctx.filter = 'none';
     }
     
-    // Detect drum type and frequency
+    // Detect drum type and frequency with improved accuracy
     function detectDrum(fftData, sampleRate) {
-      if (hitCooldown) return null;
+      const now = Date.now();
+      if (now - lastHitTime < HIT_COOLDOWN) return null;
       
       const fftSize = fftData.length;
       const binSize = sampleRate / analyser.fftSize;
-      const now = Date.now();
       
-      // Require minimum 50ms between hits
-      if (now - lastHitTime < 50) return null;
-      
-      // Find the bin with the highest amplitude
-      let maxIndex = 0;
+      // Find the bin with the highest amplitude (skip first 10 bins to avoid DC offset)
+      let maxIndex = 10;
       let maxValue = 0;
-      for (let i = 0; i < fftSize; i++) {
+      for (let i = 10; i < fftSize / 2; i++) { // Only check first half of spectrum
         if (fftData[i] > maxValue) {
           maxValue = fftData[i];
           maxIndex = i;
         }
       }
       
-      // Calculate the frequency of the highest bin
-      const frequency = maxIndex * binSize;
+      // Calculate frequency with quadratic interpolation for better accuracy
+      const alpha = fftData[maxIndex - 1];
+      const beta = fftData[maxIndex];
+      const gamma = fftData[maxIndex + 1];
+      const delta = 0.5 * (alpha - gamma) / (alpha - 2 * beta + gamma);
+      const frequency = (maxIndex + delta) * binSize;
       
-      // Calculate energy in each drum's frequency range
-      const energies = {};
-      for (const [drum, profile] of Object.entries(drumProfiles)) {
-        const startBin = Math.floor(profile.range[0] / binSize);
-        const endBin = Math.min(fftSize, Math.ceil(profile.range[1] / binSize));
-        let energy = 0;
-        
-        for (let i = startBin; i < endBin; i++) {
-          energy += Math.pow(fftData[i] / 255, 2);
-        }
-        
-        energies[drum] = energy / (endBin - startBin);
-      }
+      // Apply threshold (convert slider value to 0-255 range)
+      const threshold = parseFloat(sensitivitySlider.value) * 255;
+      if (maxValue < threshold) return null;
       
-      // Find drum with highest energy
-      let maxEnergy = 0;
-      let detectedDrum = null;
-      const globalThreshold = parseFloat(sensitivitySlider.value);
+      // Classify drum type based on frequency ranges
+      let drumType = 'kick';
+      if (frequency > 100 && frequency <= 300) drumType = 'snare';
+      else if (frequency > 300 && frequency <= 800) drumType = 'tom';
+      else if (frequency > 800 && frequency <= 3000) drumType = 'hihat';
+      else if (frequency > 3000) drumType = 'cymbal';
       
-      for (const [drum, energy] of Object.entries(energies)) {
-        const threshold = Math.max(globalThreshold, drumProfiles[drum].threshold);
-        if (energy > threshold && energy > maxEnergy * 1.3) {
-          maxEnergy = energy;
-          detectedDrum = drum;
-        }
-      }
-      
-      if (detectedDrum) {
-        lastDrumType = detectedDrum;
+      // Only register new hit if drum type changed or after extended cooldown
+      if (drumType !== lastDrumType || now - lastHitTime > HIT_COOLDOWN * 2) {
+        lastDrumType = drumType;
         lastHitTime = now;
-        hitCooldown = true;
-        setTimeout(() => { hitCooldown = false; }, 50); // 50ms cooldown
-        
-        // Return both drum type and frequency
-        return { drumType: detectedDrum, frequency };
+        lastFrequency = frequency;
+        return { drumType, frequency };
       }
       
       return null;
@@ -737,7 +723,6 @@
         
         // Update frequency display
         freqEl.textContent = `${detectionResult.frequency.toFixed(0)} Hz (${detectionResult.drumType.toUpperCase()})`;
-        lastFrequency = detectionResult.frequency;
         
         // Update harmonic display
         updateHarmonicDisplay(detectionResult.frequency);
@@ -766,19 +751,25 @@
         compressor.attack.value = 0.003;
         compressor.release.value = 0.25;
         
+        // Add low-pass filter specifically for kick detection
+        const lowpass = audioCtx.createBiquadFilter();
+        lowpass.type = "lowpass";
+        lowpass.frequency.value = 150;
+        
         // Get microphone
         mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         source = audioCtx.createMediaStreamSource(mediaStream);
         
-        // Setup analyser
+        // Setup analyser with higher resolution
         analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 2048;
+        analyser.fftSize = 4096; // Higher resolution for low frequencies
         bufferLength = analyser.frequencyBinCount;
-        dataArray = new Float32Array(analyser.fftSize);
+        dataArray = new Float32Array(bufferLength);
         
-        // Connect: Mic → Compressor → Analyser
+        // Connect: Mic → Compressor → Lowpass → Analyser
         source.connect(compressor);
-        compressor.connect(analyser);
+        compressor.connect(lowpass);
+        lowpass.connect(analyser);
         
         // iOS compatibility
         if (audioCtx.state === 'suspended') await audioCtx.resume();
