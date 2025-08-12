@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Professional Drum Analysis</title>
+  <title>Professional Drum Analyzer</title>
   <style>
     * {
       box-sizing: border-box;
@@ -36,15 +36,43 @@
       margin-bottom: 30px;
       padding: 20px;
       width: 100%;
+      position: relative;
     }
     
     h1 {
-      font-size: 2.8rem;
+      font-size: 2.5rem;
       margin-bottom: 10px;
       background: linear-gradient(90deg, #ff7e5f, #feb47b);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+    
+    .back-btn {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: rgba(255, 255, 255, 0.1);
+      color: #ff7e5f;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 50px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: all 0.3s;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    
+    .back-btn:hover {
+      background: rgba(255, 126, 95, 0.2);
+    }
+    
+    .back-btn svg {
+      width: 16px;
+      height: 16px;
+      fill: #ff7e5f;
     }
     
     .subtitle {
@@ -90,6 +118,7 @@
       color: rgba(255, 255, 255, 0.7);
       transition: all 0.1s ease;
       box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+      cursor: pointer;
     }
     
     .drum-pad.active {
@@ -241,12 +270,87 @@
       opacity: 1;
     }
     
-    .waveform {
-      position: absolute;
-      bottom: 0;
-      left: 0;
+    .harmonic-display {
+      margin-top: 20px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 10px;
+      padding: 15px;
       width: 100%;
-      height: 60px;
+    }
+    
+    .harmonic-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+      cursor: pointer;
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.05);
+    }
+    
+    .harmonic-header:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+    
+    .harmonic-content {
+      display: none;
+      padding: 10px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 8px;
+    }
+    
+    .harmonic-content.show {
+      display: block;
+    }
+    
+    .harmonic-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 10px;
+    }
+    
+    .harmonic-item {
+      background: rgba(255, 255, 255, 0.05);
+      padding: 10px;
+      border-radius: 8px;
+      text-align: center;
+    }
+    
+    .harmonic-label {
+      font-size: 0.9rem;
+      color: #a0a0d0;
+      margin-bottom: 5px;
+    }
+    
+    .harmonic-value {
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: #ff7e5f;
+    }
+    
+    .drum-info {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 10px;
+      padding: 15px;
+      margin-top: 20px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    .drum-info-title {
+      font-size: 1.2rem;
+      margin-bottom: 10px;
+      color: #ff7e5f;
+    }
+    
+    .drum-info-text {
+      text-align: center;
+      color: #a0a0d0;
+      line-height: 1.6;
+      max-width: 600px;
     }
     
     footer {
@@ -271,14 +375,30 @@
         height: 50px;
         font-size: 1rem;
       }
+      
+      button {
+        min-width: 140px;
+        padding: 12px 20px;
+        font-size: 1rem;
+      }
+      
+      .controls {
+        gap: 10px;
+      }
     }
   </style>
 </head>
 <body>
   <div class="container">
     <header>
+      <button class="back-btn">
+        <svg viewBox="0 0 24 24">
+          <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"></path>
+        </svg>
+        Back to Index
+      </button>
       <h1>Professional Drum Analyzer</h1>
-      <p class="subtitle">Real-time drum detection with enhanced low-frequency analysis</p>
+      <p class="subtitle">Real-time drum detection with harmonic analysis</p>
     </header>
     
     <div class="visualization">
@@ -304,43 +424,62 @@
       </div>
       
       <div class="stat-card">
-        <h2>Current Frequency</h2>
+        <h2>Detected Frequency</h2>
         <div id="frequency" class="stat-value">-- Hz</div>
-      </div>
-      
-      <div class="stat-card">
-        <h2>Volume Level</h2>
-        <div id="volume" class="stat-value">-- dB</div>
       </div>
     </div>
     
     <div class="settings">
       <div class="slider-container">
         <label>
-          Sensitivity
+          Detection Sensitivity
           <span id="sensitivity-val">0.03</span>
         </label>
         <input type="range" id="sensitivity-slider" min="0.005" max="0.08" step="0.005" value="0.03">
       </div>
       
-      <div class="slider-container">
-        <label>
-          Low-Pass Filter
-          <span id="lowpass-val">180 Hz</span>
-        </label>
-        <input type="range" id="lowpass-slider" min="40" max="300" step="10" value="180">
-      </div>
-      
-      <div class="slider-container">
-        <label>
-          Drum Type Sensitivity
-          <span id="drum-sensitivity-val">Medium</span>
-        </label>
-        <input type="range" id="drum-sensitivity-slider" min="1" max="3" step="1" value="2">
-      </div>
-      
       <div class="canvas-container">
         <canvas id="waveform"></canvas>
+      </div>
+    </div>
+    
+    <div class="harmonic-display">
+      <div class="harmonic-header" id="harmonic-toggle">
+        <h3>Harmonic Analysis</h3>
+        <span>▼</span>
+      </div>
+      <div class="harmonic-content" id="harmonic-content">
+        <div class="harmonic-list">
+          <div class="harmonic-item">
+            <div class="harmonic-label">Fundamental</div>
+            <div class="harmonic-value" id="harmonic-fundamental">-- Hz</div>
+          </div>
+          <div class="harmonic-item">
+            <div class="harmonic-label">2nd Harmonic</div>
+            <div class="harmonic-value" id="harmonic-second">-- Hz</div>
+          </div>
+          <div class="harmonic-item">
+            <div class="harmonic-label">3rd Harmonic</div>
+            <div class="harmonic-value" id="harmonic-third">-- Hz</div>
+          </div>
+          <div class="harmonic-item">
+            <div class="harmonic-label">4th Harmonic</div>
+            <div class="harmonic-value" id="harmonic-fourth">-- Hz</div>
+          </div>
+          <div class="harmonic-item">
+            <div class="harmonic-label">5th Harmonic</div>
+            <div class="harmonic-value" id="harmonic-fifth">-- Hz</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="drum-info">
+      <div class="drum-info-title">Drum Analysis Tips</div>
+      <div class="drum-info-text">
+        For best results, place your microphone near the drum and tap consistently. 
+        Higher sensitivity settings work better for soft taps, while lower settings 
+        are better for loud environments.
       </div>
     </div>
   </div>
@@ -348,282 +487,348 @@
   <div class="hit-indicator" id="hit-indicator"></div>
   
   <footer>
-    <p>Professional Drum Analysis Tool | Enhanced Low-Frequency Detection</p>
+    <p>Professional Drum Analysis Tool | Enhanced Harmonic Detection</p>
   </footer>
 
   <script>
-  // DOM Elements
-  const startBtn = document.getElementById('start-btn');
-  const stopBtn = document.getElementById('stop-btn');
-  const resetBtn = document.getElementById('reset-btn');
-  const hitsEl = document.getElementById('hits');
-  const freqEl = document.getElementById('frequency');
-  const volumeEl = document.getElementById('volume');
-  const sensitivitySlider = document.getElementById('sensitivity-slider');
-  const sensitivityVal = document.getElementById('sensitivity-val');
-  const hitIndicator = document.getElementById('hit-indicator');
-  const waveformCanvas = document.getElementById('waveform');
-  const ctx = waveformCanvas.getContext('2d');
-  const drumPads = document.querySelectorAll('.drum-pad');
-
-  // Audio variables
-  let audioCtx = null;
-  let analyser = null;
-  let source = null;
-  let mediaStream = null;
-  let dataArray = null;
-  let animationId = null;
-  
-  // State variables
-  let running = false;
-  let hitCount = 0;
-  let lastDrumType = null;
-  let hitCooldown = false;
-  let lastHitTime = 0;
-
-  // Drum frequency profiles (optimized for fast response)
-  const drumProfiles = {
-    kick: {
-      range: [30, 100],
-      color: '#ff5e5e',
-      decay: 150,  // Faster visual reset
-      threshold: 0.02
-    },
-    snare: {
-      range: [150, 300],
-      color: '#5effae',
-      decay: 120,
-      threshold: 0.015
-    },
-    hihat: {
-      range: [4000, 8000],
-      color: '#5eb3ff',
-      decay: 80,
-      threshold: 0.01
-    },
-    tom: {
-      range: [80, 200],
-      color: '#ffbe5e',
-      decay: 100,
-      threshold: 0.018
-    },
-    cymbal: {
-      range: [3000, 10000],
-      color: '#d85eff',
-      decay: 60,
-      threshold: 0.008
-    }
-  };
-
-  // Initialize UI
-  sensitivityVal.textContent = sensitivitySlider.value;
-
-  // Event listeners (UNCHANGED - already perfect)
-  startBtn.addEventListener('click', startMic);
-  stopBtn.addEventListener('click', stopMic);
-  resetBtn.addEventListener('click', () => {
-    hitCount = 0;
-    hitsEl.textContent = hitCount;
-  });
-  sensitivitySlider.addEventListener('input', () => {
-    sensitivityVal.textContent = sensitivitySlider.value;
-  });
-
-  // Visual feedback (MODIFIED for faster reset)
-  function showDrumHit(drumType) {
-    const profile = drumProfiles[drumType];
+    // DOM Elements
+    const startBtn = document.getElementById('start-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    const backBtn = document.querySelector('.back-btn');
+    const hitsEl = document.getElementById('hits');
+    const freqEl = document.getElementById('frequency');
+    const sensitivitySlider = document.getElementById('sensitivity-slider');
+    const sensitivityVal = document.getElementById('sensitivity-val');
+    const hitIndicator = document.getElementById('hit-indicator');
+    const waveformCanvas = document.getElementById('waveform');
+    const ctx = waveformCanvas.getContext('2d');
+    const drumPads = document.querySelectorAll('.drum-pad');
+    const harmonicToggle = document.getElementById('harmonic-toggle');
+    const harmonicContent = document.getElementById('harmonic-content');
+    const harmonicFundamental = document.getElementById('harmonic-fundamental');
+    const harmonicSecond = document.getElementById('harmonic-second');
+    const harmonicThird = document.getElementById('harmonic-third');
+    const harmonicFourth = document.getElementById('harmonic-fourth');
+    const harmonicFifth = document.getElementById('harmonic-fifth');
     
-    // Pad animation
-    drumPads.forEach(pad => {
-      if (pad.dataset.type === drumType) {
-        pad.style.backgroundColor = profile.color;
-        pad.style.boxShadow = `0 0 20px ${profile.color}`;
-        setTimeout(() => {
-          pad.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
-          pad.style.boxShadow = '0 4px 10px rgba(0, 0, 0, 0.3)';
-        }, profile.decay);
+    // Audio variables
+    let audioCtx = null;
+    let analyser = null;
+    let source = null;
+    let mediaStream = null;
+    let dataArray = null;
+    let animationId = null;
+    
+    // State variables
+    let running = false;
+    let hitCount = 0;
+    let lastDrumType = null;
+    let hitCooldown = false;
+    let lastHitTime = 0;
+    let lastFrequency = 0;
+    
+    // Drum frequency profiles
+    const drumProfiles = {
+      kick: {
+        range: [30, 100],
+        color: '#ff5e5e',
+        decay: 150,
+        threshold: 0.02
+      },
+      snare: {
+        range: [150, 300],
+        color: '#5effae',
+        decay: 120,
+        threshold: 0.015
+      },
+      hihat: {
+        range: [4000, 8000],
+        color: '#5eb3ff',
+        decay: 80,
+        threshold: 0.01
+      },
+      tom: {
+        range: [80, 200],
+        color: '#ffbe5e',
+        decay: 100,
+        threshold: 0.018
+      },
+      cymbal: {
+        range: [3000, 10000],
+        color: '#d85eff',
+        decay: 60,
+        threshold: 0.008
       }
+    };
+    
+    // Initialize UI
+    sensitivityVal.textContent = sensitivitySlider.value;
+    
+    // Event listeners
+    startBtn.addEventListener('click', startMic);
+    stopBtn.addEventListener('click', stopMic);
+    resetBtn.addEventListener('click', () => {
+      hitCount = 0;
+      hitsEl.textContent = hitCount;
     });
     
-    // Screen flash
-    hitIndicator.style.background = `radial-gradient(circle, ${profile.color}77 0%, transparent 70%)`;
-    hitIndicator.classList.add('active');
-    setTimeout(() => hitIndicator.classList.remove('active'), profile.decay);
-  }
-
-  // Draw waveform (UNCHANGED - works perfectly)
-  function drawWaveform() {
-    if (!analyser || !running) return;
+    backBtn.addEventListener('click', () => {
+      window.location.href = '/index';
+    });
     
-    analyser.getFloatTimeDomainData(dataArray);
+    sensitivitySlider.addEventListener('input', () => {
+      sensitivityVal.textContent = sensitivitySlider.value;
+    });
     
-    ctx.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
-    ctx.beginPath();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = '#ff7e5f';
+    harmonicToggle.addEventListener('click', () => {
+      harmonicContent.classList.toggle('show');
+      harmonicToggle.querySelector('span').textContent = 
+        harmonicContent.classList.contains('show') ? '▲' : '▼';
+    });
     
-    const sliceWidth = waveformCanvas.width / bufferLength;
-    let x = 0;
-    
-    for (let i = 0; i < bufferLength; i++) {
-      const y = waveformCanvas.height/2 + (dataArray[i] * waveformCanvas.height/2);
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      x += sliceWidth;
-    }
-    
-    ctx.stroke();
-  }
-
-  // NEW: Ultra-responsive drum detection
-  function detectDrum(fftData, sampleRate) {
-    if (hitCooldown) return null;
-    
-    const fftSize = fftData.length;
-    const binSize = sampleRate / analyser.fftSize;
-    const now = Date.now();
-    
-    // Require minimum 50ms between hits
-    if (now - lastHitTime < 50) return null;
-    
-    // Calculate energy in each drum's frequency range
-    const energies = {};
-    for (const [drum, profile] of Object.entries(drumProfiles)) {
-      const startBin = Math.floor(profile.range[0] / binSize);
-      const endBin = Math.min(fftSize, Math.ceil(profile.range[1] / binSize));
-      let energy = 0;
-      
-      for (let i = startBin; i < endBin; i++) {
-        energy += Math.pow(fftData[i] / 255, 2); // Square for energy emphasis
-      }
-      
-      energies[drum] = energy / (endBin - startBin);
-    }
-    
-    // Find drum with highest energy
-    let maxEnergy = 0;
-    let detectedDrum = null;
-    const globalThreshold = parseFloat(sensitivitySlider.value);
-    
-    for (const [drum, energy] of Object.entries(energies)) {
-      const threshold = Math.max(globalThreshold, drumProfiles[drum].threshold);
-      if (energy > threshold * 1.5 && energy > maxEnergy * 1.5) {
-        maxEnergy = energy;
-        detectedDrum = drum;
-      }
-    }
-    
-    if (detectedDrum) {
-      lastDrumType = detectedDrum;
-      lastHitTime = now;
-      hitCooldown = true;
-      setTimeout(() => { hitCooldown = false; }, 50); // 50ms cooldown
-      return detectedDrum;
-    }
-    
-    return null;
-  }
-
-  // MODIFIED: Audio processing with strict hit control
-  function processAudio() {
-    if (!running) return;
-    
-    // Get frequency data
-    const fftData = new Uint8Array(analyser.frequencyBinCount);
-    analyser.getByteFrequencyData(fftData);
-    analyser.getFloatTimeDomainData(dataArray);
-    
-    // Detect drum hit
-    const drumType = detectDrum(fftData, audioCtx.sampleRate);
-    
-    if (drumType) {
-      hitCount++;
-      hitsEl.textContent = hitCount;
-      
-      // Calculate center frequency
+    // Visual feedback for drum hit
+    function showDrumHit(drumType) {
       const profile = drumProfiles[drumType];
-      const centerFreq = (profile.range[0] + profile.range[1]) / 2;
-      freqEl.textContent = `${centerFreq.toFixed(0)} Hz (${drumType.toUpperCase()})`;
       
-      showDrumHit(drumType);
+      // Pad animation
+      drumPads.forEach(pad => {
+        if (pad.dataset.type === drumType) {
+          pad.classList.add('active');
+          setTimeout(() => pad.classList.remove('active'), profile.decay);
+        }
+      });
+      
+      // Screen flash
+      hitIndicator.style.background = `radial-gradient(circle, ${profile.color}77 0%, transparent 70%)`;
+      hitIndicator.classList.add('active');
+      setTimeout(() => hitIndicator.classList.remove('active'), profile.decay);
     }
     
-    // Volume display (UNCHANGED)
-    let sum = 0;
-    for (let i = 0; i < dataArray.length; i++) sum += dataArray[i] * dataArray[i];
-    const rms = Math.sqrt(sum / dataArray.length);
-    volumeEl.textContent = `${(20 * Math.log10(rms)).toFixed(1)} dB`;
-    
-    drawWaveform();
-    animationId = requestAnimationFrame(processAudio);
-  }
-
-  // MODIFIED: Audio setup with aggressive compression
-  async function startMic() {
-    if (running) return;
-    
-    try {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // Draw waveform visualization
+    function drawWaveform() {
+      if (!analyser || !running) return;
       
-      // Add aggressive compressor
-      const compressor = audioCtx.createDynamicsCompressor();
-      compressor.threshold.value = -40; // More sensitive
-      compressor.knee.value = 30;      // Smoother transition
-      compressor.ratio.value = 16;     // Stronger compression
-      compressor.attack.value = 0.003; // Faster response
-      compressor.release.value = 0.1;  // Quick release
+      analyser.getFloatTimeDomainData(dataArray);
       
-      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      source = audioCtx.createMediaStreamSource(mediaStream);
+      ctx.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
+      ctx.beginPath();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#ff7e5f';
       
-      analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 1024; // Smaller FFT for faster analysis
-      bufferLength = analyser.frequencyBinCount;
-      dataArray = new Float32Array(analyser.fftSize);
+      const sliceWidth = waveformCanvas.width / bufferLength;
+      let x = 0;
       
-      source.connect(compressor);
-      compressor.connect(analyser);
+      for (let i = 0; i < bufferLength; i++) {
+        const v = dataArray[i];
+        const y = waveformCanvas.height/2 + (v * waveformCanvas.height/2);
+        
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+        
+        x += sliceWidth;
+      }
       
-      if (audioCtx.state === 'suspended') await audioCtx.resume();
-      
-      running = true;
-      hitCount = 0;
-      hitsEl.textContent = '0';
-      freqEl.textContent = '-- Hz';
-      volumeEl.textContent = '-- dB';
-      
-      startBtn.disabled = true;
-      stopBtn.disabled = false;
-      
-      processAudio();
-    } catch (err) {
-      console.error("Audio error:", err);
-      alert("Microphone access denied");
-      stopMic();
+      ctx.stroke();
     }
-  }
-
-  // UNCHANGED: stopMic() and init functions
-  function stopMic() {
-    running = false;
-    cancelAnimationFrame(animationId);
-    if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
-    if (source) source.disconnect();
-    if (analyser) analyser.disconnect();
-    if (audioCtx?.state !== 'closed') audioCtx?.close();
-    startBtn.disabled = false;
-    stopBtn.disabled = true;
-    ctx.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
-  }
-
-  function initCanvas() {
-    waveformCanvas.width = waveformCanvas.offsetWidth;
-    waveformCanvas.height = waveformCanvas.offsetHeight;
-  }
-  
-  window.addEventListener('load', initCanvas);
-  window.addEventListener('resize', initCanvas);
-  window.addEventListener('beforeunload', stopMic);
-
-</script>
+    
+    // Detect drum type and frequency
+    function detectDrum(fftData, sampleRate) {
+      if (hitCooldown) return null;
+      
+      const fftSize = fftData.length;
+      const binSize = sampleRate / analyser.fftSize;
+      const now = Date.now();
+      
+      // Require minimum 50ms between hits
+      if (now - lastHitTime < 50) return null;
+      
+      // Find the bin with the highest amplitude
+      let maxIndex = 0;
+      let maxValue = 0;
+      for (let i = 0; i < fftSize; i++) {
+        if (fftData[i] > maxValue) {
+          maxValue = fftData[i];
+          maxIndex = i;
+        }
+      }
+      
+      // Calculate the frequency of the highest bin
+      const frequency = maxIndex * binSize;
+      
+      // Calculate energy in each drum's frequency range
+      const energies = {};
+      for (const [drum, profile] of Object.entries(drumProfiles)) {
+        const startBin = Math.floor(profile.range[0] / binSize);
+        const endBin = Math.min(fftSize, Math.ceil(profile.range[1] / binSize));
+        let energy = 0;
+        
+        for (let i = startBin; i < endBin; i++) {
+          energy += Math.pow(fftData[i] / 255, 2);
+        }
+        
+        energies[drum] = energy / (endBin - startBin);
+      }
+      
+      // Find drum with highest energy
+      let maxEnergy = 0;
+      let detectedDrum = null;
+      const globalThreshold = parseFloat(sensitivitySlider.value);
+      
+      for (const [drum, energy] of Object.entries(energies)) {
+        const threshold = Math.max(globalThreshold, drumProfiles[drum].threshold);
+        if (energy > threshold && energy > maxEnergy * 1.3) {
+          maxEnergy = energy;
+          detectedDrum = drum;
+        }
+      }
+      
+      if (detectedDrum) {
+        lastDrumType = detectedDrum;
+        lastHitTime = now;
+        hitCooldown = true;
+        setTimeout(() => { hitCooldown = false; }, 50); // 50ms cooldown
+        
+        // Return both drum type and frequency
+        return { drumType: detectedDrum, frequency };
+      }
+      
+      return null;
+    }
+    
+    // Update harmonic display
+    function updateHarmonicDisplay(frequency) {
+      if (!frequency || frequency < 20) {
+        harmonicFundamental.textContent = '-- Hz';
+        harmonicSecond.textContent = '-- Hz';
+        harmonicThird.textContent = '-- Hz';
+        harmonicFourth.textContent = '-- Hz';
+        harmonicFifth.textContent = '-- Hz';
+        return;
+      }
+      
+      harmonicFundamental.textContent = `${frequency.toFixed(0)} Hz`;
+      harmonicSecond.textContent = `${(frequency * 2).toFixed(0)} Hz`;
+      harmonicThird.textContent = `${(frequency * 3).toFixed(0)} Hz`;
+      harmonicFourth.textContent = `${(frequency * 4).toFixed(0)} Hz`;
+      harmonicFifth.textContent = `${(frequency * 5).toFixed(0)} Hz`;
+    }
+    
+    // Audio processing loop
+    function processAudio() {
+      if (!running) return;
+      
+      // Get frequency data
+      const fftData = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(fftData);
+      
+      // Get time domain data for waveform
+      analyser.getFloatTimeDomainData(dataArray);
+      
+      // Detect drum hit
+      const detectionResult = detectDrum(fftData, audioCtx.sampleRate);
+      
+      if (detectionResult) {
+        hitCount++;
+        hitsEl.textContent = hitCount;
+        
+        // Update frequency display
+        freqEl.textContent = `${detectionResult.frequency.toFixed(0)} Hz (${detectionResult.drumType.toUpperCase()})`;
+        lastFrequency = detectionResult.frequency;
+        
+        // Update harmonic display
+        updateHarmonicDisplay(detectionResult.frequency);
+        
+        // Visual feedback
+        showDrumHit(detectionResult.drumType);
+      }
+      
+      // Draw visualization
+      drawWaveform();
+      animationId = requestAnimationFrame(processAudio);
+    }
+    
+    // Start microphone processing
+    async function startMic() {
+      if (running) return;
+      
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // Add compressor for better dynamics
+        const compressor = audioCtx.createDynamicsCompressor();
+        compressor.threshold.value = -30;
+        compressor.knee.value = 20;
+        compressor.ratio.value = 12;
+        compressor.attack.value = 0.003;
+        compressor.release.value = 0.25;
+        
+        // Get microphone
+        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        source = audioCtx.createMediaStreamSource(mediaStream);
+        
+        // Setup analyser
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 2048;
+        bufferLength = analyser.frequencyBinCount;
+        dataArray = new Float32Array(analyser.fftSize);
+        
+        // Connect: Mic → Compressor → Analyser
+        source.connect(compressor);
+        compressor.connect(analyser);
+        
+        // iOS compatibility
+        if (audioCtx.state === 'suspended') await audioCtx.resume();
+        
+        // Initialize
+        running = true;
+        hitCount = 0;
+        hitsEl.textContent = '0';
+        freqEl.textContent = '-- Hz';
+        updateHarmonicDisplay(0);
+        
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        
+        // Show harmonic content when starting
+        harmonicContent.classList.add('show');
+        harmonicToggle.querySelector('span').textContent = '▲';
+        
+        processAudio();
+      } catch (err) {
+        console.error("Audio setup failed:", err);
+        alert("Couldn't access microphone. Please check permissions and try again.");
+        stopMic();
+      }
+    }
+    
+    // Stop microphone processing
+    function stopMic() {
+      running = false;
+      cancelAnimationFrame(animationId);
+      
+      if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+      if (source) source.disconnect();
+      if (analyser) analyser.disconnect();
+      if (audioCtx?.state !== 'closed') audioCtx?.close();
+      
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      ctx.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
+    }
+    
+    // Initialize canvas
+    function initCanvas() {
+      waveformCanvas.width = waveformCanvas.offsetWidth;
+      waveformCanvas.height = waveformCanvas.offsetHeight;
+    }
+    
+    window.addEventListener('load', initCanvas);
+    window.addEventListener('resize', initCanvas);
+    window.addEventListener('beforeunload', stopMic);
+  </script>
 </body>
 </html>
