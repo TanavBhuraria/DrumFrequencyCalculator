@@ -387,6 +387,17 @@
         gap: 10px;
       }
     }
+
+    #debug {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.7);
+      color: white;
+      padding: 10px;
+      z-index: 1000;
+      font-family: monospace;
+    }
   </style>
 </head>
 <body>
@@ -486,6 +497,7 @@
   </div>
   
   <div class="hit-indicator" id="hit-indicator"></div>
+  <div id="debug"></div>
   
   <footer>
     <p>Professional Drum Analysis Tool | Enhanced Harmonic Detection</p>
@@ -512,6 +524,7 @@
     const harmonicThird = document.getElementById('harmonic-third');
     const harmonicFourth = document.getElementById('harmonic-fourth');
     const harmonicFifth = document.getElementById('harmonic-fifth');
+    const debugEl = document.getElementById('debug');
     
     // Audio variables
     let audioCtx = null;
@@ -520,6 +533,7 @@
     let mediaStream = null;
     let dataArray = null;
     let animationId = null;
+    let noiseFloor = 0;
     
     // State variables
     let running = false;
@@ -706,32 +720,39 @@
     // Audio processing loop
     function processAudio() {
       if (!running) return;
-      
-      // Get frequency data
+
+      // Get FFT data
       const fftData = new Uint8Array(analyser.frequencyBinCount);
       analyser.getByteFrequencyData(fftData);
       
-      // Get time domain data for waveform
-      analyser.getFloatTimeDomainData(dataArray);
-      
-      // Detect drum hit
+      // Calculate TOTAL energy (0-255 scale)
+      let totalEnergy = 0;
+      for (let i = 0; i < fftData.length; i++) {
+        totalEnergy += fftData[i];
+      }
+      const avgEnergy = totalEnergy / fftData.length;
+
+      // Update debug display
+      debugEl.textContent = `Energy: ${avgEnergy.toFixed(1)} (Noise: ${noiseFloor.toFixed(1)})`;
+
+      // Skip if below noise floor
+      if (avgEnergy < noiseFloor) {
+        drawWaveform();
+        animationId = requestAnimationFrame(processAudio);
+        return;
+      }
+
+      // Rest of detection logic
       const detectionResult = detectDrum(fftData, audioCtx.sampleRate);
       
       if (detectionResult) {
         hitCount++;
         hitsEl.textContent = hitCount;
-        
-        // Update frequency display
         freqEl.textContent = `${detectionResult.frequency.toFixed(0)} Hz (${detectionResult.drumType.toUpperCase()})`;
-        
-        // Update harmonic display
         updateHarmonicDisplay(detectionResult.frequency);
-        
-        // Visual feedback
         showDrumHit(detectionResult.drumType);
       }
       
-      // Draw visualization
       drawWaveform();
       animationId = requestAnimationFrame(processAudio);
     }
@@ -765,16 +786,23 @@
         analyser.fftSize = 4096; // Higher resolution for low frequencies
         bufferLength = analyser.frequencyBinCount;
         dataArray = new Float32Array(bufferLength);
-        
-        // Connect: Mic → Compressor → Lowpass → Analyser
+
+        // Calibrate noise floor (1 second)
+        noiseFloor = 0;
+        for (let i = 0; i < 10; i++) {
+          const fftData = new Uint8Array(analyser.frequencyBinCount);
+          analyser.getByteFrequencyData(fftData);
+          noiseFloor += fftData.reduce((a,b) => a + b, 0) / fftData.length;
+          await new Promise(r => setTimeout(r, 100));
+        }
+        noiseFloor = noiseFloor / 10 * 1.5; // 50% safety margin
+
         source.connect(compressor);
         compressor.connect(lowpass);
         lowpass.connect(analyser);
-        
-        // iOS compatibility
+
         if (audioCtx.state === 'suspended') await audioCtx.resume();
         
-        // Initialize
         running = true;
         hitCount = 0;
         hitsEl.textContent = '0';
@@ -784,7 +812,6 @@
         startBtn.disabled = true;
         stopBtn.disabled = false;
         
-        // Show harmonic content when starting
         harmonicContent.classList.add('show');
         harmonicToggle.querySelector('span').textContent = '▲';
         
