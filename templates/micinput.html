@@ -720,6 +720,67 @@
           // Initialize spectrum bars
           initSpectrumBars();
           
+
+          // NEW: Frequency analysis with harmonic validation
+function analyzeFundamentalFrequency(dataArray, sampleRate, fftSize) {
+  const bufferLength = dataArray.length;
+  const frequencyResolution = sampleRate / fftSize;
+  
+  // 1. Find the 5 strongest peaks in low frequency range (20-300Hz)
+  const lowFreqMaxBin = Math.floor(300 / frequencyResolution);
+  const peaks = [];
+  
+  for (let i = 2; i < lowFreqMaxBin; i++) {
+    if (dataArray[i] > dataArray[i-1] && dataArray[i] > dataArray[i+1]) {
+      peaks.push({
+        bin: i,
+        value: dataArray[i],
+        freq: i * frequencyResolution
+      });
+    }
+  }
+  
+  // Sort by amplitude and take top 5
+  peaks.sort((a, b) => b.value - a.value).splice(5);
+  
+  // 2. Validate peaks by checking for harmonics
+  const validatedPeaks = peaks.map(peak => {
+    let harmonicScore = 0;
+    
+    // Check for harmonics (2x, 3x, 4x frequency)
+    for (let h = 2; h <= 4; h++) {
+      const harmonicFreq = peak.freq * h;
+      const harmonicBin = Math.round(harmonicFreq / frequencyResolution);
+      
+      if (harmonicBin < bufferLength && dataArray[harmonicBin] > peak.value * 0.3) {
+        harmonicScore++;
+      }
+    }
+    
+    return {
+      ...peak,
+      harmonicScore,
+      confidence: peak.value * (1 + harmonicScore * 0.2) // Boost confidence for harmonic matches
+    };
+  });
+          
+          // 3. Select the peak with highest confidence that has at least one harmonic
+          validatedPeaks.sort((a, b) => b.confidence - a.confidence);
+          const bestPeak = validatedPeaks.find(p => p.harmonicScore > 0) || validatedPeaks[0];
+          
+          // 4. Apply parabolic interpolation for precise frequency
+          if (bestPeak.bin > 0 && bestPeak.bin < bufferLength - 1) {
+            const prev = dataArray[bestPeak.bin - 1];
+            const next = dataArray[bestPeak.bin + 1];
+            const delta = (next - prev) / (2 * (2 * bestPeak.value - prev - next));
+            bestPeak.freq = (bestPeak.bin + delta) * frequencyResolution;
+          }
+          
+          return {
+            frequency: bestPeak.freq,
+            confidence: Math.min(100, Math.round(bestPeak.confidence / 2.55))
+          };
+        }
           // Start visualization loop
           visualize();
         } catch (err) {
@@ -770,39 +831,16 @@
         let barHeight;
         let x = 0;
         
-        // Find peak frequency with parabolic interpolation
-        let maxValue = 0;
-        let maxIndex = 0;
-        
-        // Only search in the lower 1/4 of the bins (low frequencies)
-        const searchRange = Math.floor(bufferLength / 4);
-        for (let i = 1; i < searchRange; i++) {
-          if (dataArray[i] > maxValue) {
-            maxValue = dataArray[i];
-            maxIndex = i;
-          }
-        }
-        
-        // Apply parabolic interpolation for greater accuracy
-        let fundamentalFrequency;
-        if (maxIndex > 0 && maxIndex < bufferLength - 1) {
-          const prev = dataArray[maxIndex - 1];
-          const next = dataArray[maxIndex + 1];
-          const delta = (next - prev) / (2 * (2 * maxValue - prev - next));
-          fundamentalFrequency = (maxIndex + delta) * audioContext.sampleRate / analyser.fftSize;
-        } else {
-          fundamentalFrequency = maxIndex * audioContext.sampleRate / analyser.fftSize;
-        }
-        
-        // Update UI with fundamental frequency
+        // Advanced frequency analysis with harmonic validation
+        const analysis = analyzeFundamentalFrequency(dataArray, audioContext.sampleRate, analyser.fftSize);
+        const fundamentalFrequency = analysis.frequency;
+        const confidence = analysis.confidence;
+          
         fundamentalFreqEl.textContent = fundamentalFrequency.toFixed(1) + ' Hz';
-        peakAmplitudeEl.textContent = maxValue + ' dB';
-        
-        // Calculate confidence (simplified for demo)
-        const confidence = Math.min(100, Math.floor(maxValue / 2.55));
+        peakAmplitudeEl.textContent = Math.round(analysis.confidence * 2.55) + ' dB';
         confidenceValueEl.textContent = confidence + '%';
         confidenceLevelEl.style.width = confidence + '%';
-        
+          
         // Update harmonic displays
         for (let i = 1; i <= 4; i++) {
           harmonicEls[i].textContent = (fundamentalFrequency * (i + 1)).toFixed(1) + ' Hz';
@@ -810,6 +848,8 @@
         
         // Update spectrum bars
         const spectrumBars = spectrumDisplay.querySelectorAll('.spectrum-bar');
+        const fundamentalBin = Math.floor(fundamentalFrequency / (audioContext.sampleRate / analyser.fftSize));
+        
         for (let i = 0; i < spectrumBars.length; i++) {
           // Logarithmic scaling for better low-frequency representation
           const bin = Math.floor(Math.pow(i / spectrumBars.length, 2) * bufferLength);
@@ -818,7 +858,7 @@
           spectrumBars[i].style.height = height + 'px';
           
           // Highlight fundamental frequency
-          if (bin === maxIndex) {
+          if (bin === fundamentalBin) {
             spectrumBars[i].style.background = 'linear-gradient(to top, #4caf50, #8bc34a)';
           } else {
             spectrumBars[i].style.background = 'linear-gradient(to top, #ff7e5f, #feb47b)';
