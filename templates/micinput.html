@@ -694,8 +694,26 @@
         if (isRecording) return;
         
         try {
-          // Initialize audio context
-          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                // Initialize audio context
+                // Replace your startBtn code with this:
+      startBtn.addEventListener('click', async () => {
+        try {
+          // Stop any existing microphone
+          if (microphone) {
+            microphone.disconnect();
+            microphone.mediaStream.getTracks().forEach(track => track.stop());
+          }
+
+          // Request new microphone access
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          microphone = audioContext.createMediaStreamSource(stream);
+          microphone.connect(analyser);
+          
+          // Rest of your code...
+        } catch (err) {
+          console.error("Microphone error:", err);
+        }
+  });
           
           // Create analyser with larger FFT for better low frequency resolution
           analyser = audioContext.createAnalyser();
