@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Professional Drum Analyzer</title>
+  <title>Professional Drum Frequency Analyzer</title>
   <style>
     * {
       box-sizing: border-box;
@@ -50,12 +50,12 @@
     
     .back-btn {
       position: absolute;
-      top: 30px;
-      left: 30px;
+      top: 20px;
+      left: 20px;
       background: rgba(255, 255, 255, 0.1);
       color: #ff7e5f;
       border: none;
-      padding: 10px 18px;
+      padding: 10px 15px;
       border-radius: 50px;
       cursor: pointer;
       font-size: 0.9rem;
@@ -65,6 +65,8 @@
       gap: 5px;
       z-index: 10;
       box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+      width: auto;
+      min-width: 90px;
     }
     
     .back-btn:hover {
@@ -492,6 +494,14 @@
       transition: height 0.1s;
     }
     
+    .frequency-range {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 10px;
+      color: #a0a0d0;
+      font-size: 0.9rem;
+    }
+    
     @media (max-width: 600px) {
       h1 {
         font-size: 2.2rem;
@@ -520,8 +530,9 @@
       .back-btn {
         top: 15px;
         left: 15px;
-        padding: 8px 14px;
+        padding: 8px 12px;
         font-size: 0.8rem;
+        min-width: 80px;
       }
     }
   </style>
@@ -535,8 +546,8 @@
         </svg>
         Back
       </button>
-      <h1>Professional Drum Analyzer</h1>
-      <p class="subtitle">Advanced drum detection with YIN frequency analysis</p>
+      <h1>Drum Frequency Analyzer</h1>
+      <p class="subtitle">Accurate frequency detection for all drum types</p>
     </header>
     
     <div class="visualization">
@@ -581,11 +592,7 @@
         <span id="threshold" class="debug-value">0.05</span>
       </div>
       <div class="debug-row">
-        <span class="debug-label">Last Drum Type:</span>
-        <span id="last-drum" class="debug-value">--</span>
-      </div>
-      <div class="debug-row">
-        <span class="debug-label">Detection Confidence:</span>
+        <span class="debug-label">Analysis Confidence:</span>
         <span id="confidence" class="debug-value">--</span>
       </div>
       <div class="confidence-bar">
@@ -615,11 +622,9 @@
       </div>
       
       <div class="spectrum-display" id="spectrum-display"></div>
-      
-      <div class="tools-row">
-        <button class="tool-btn" id="toggle-wave">Waveform</button>
-        <button class="tool-btn" id="toggle-spectrum">Spectrum</button>
-        <button class="tool-btn" id="toggle-harmonics">Harmonics</button>
+      <div class="frequency-range">
+        <span>20 Hz</span>
+        <span>10 kHz</span>
       </div>
     </div>
     
@@ -655,11 +660,10 @@
     </div>
     
     <div class="drum-info">
-      <div class="drum-info-title">Advanced Drum Analysis</div>
+      <div class="drum-info-title">How to Use This Analyzer</div>
       <div class="drum-info-text">
-        This analyzer uses YIN frequency detection for accurate drum identification. 
-        The confidence indicator shows how certain the detection is. 
-        For best results, position the microphone close to the drum source.
+        Position your microphone near the drum source. The analyzer will detect the fundamental frequency 
+        and harmonics of each hit. Drum pads light up based on frequency range, but no drum type classification is performed.
       </div>
     </div>
   </div>
@@ -667,7 +671,7 @@
   <div class="hit-indicator" id="hit-indicator"></div>
   
   <footer>
-    <p>Professional Drum Analyzer | Enhanced Edition</p>
+    <p>Professional Drum Analyzer | Accurate Frequency Detection</p>
   </footer>
 
   <script>
@@ -686,7 +690,6 @@
     const micStatus = document.getElementById('mic-status');
     const currentVolume = document.getElementById('current-volume');
     const thresholdEl = document.getElementById('threshold');
-    const lastDrumEl = document.getElementById('last-drum');
     const confidenceEl = document.getElementById('confidence');
     const confidenceLevel = document.getElementById('confidence-level');
     const harmonicToggle = document.getElementById('harmonic-toggle');
@@ -697,9 +700,6 @@
     const harmonicFourth = document.getElementById('harmonic-fourth');
     const harmonicFifth = document.getElementById('harmonic-fifth');
     const spectrumDisplay = document.getElementById('spectrum-display');
-    const toggleWave = document.getElementById('toggle-wave');
-    const toggleSpectrum = document.getElementById('toggle-spectrum');
-    const toggleHarmonics = document.getElementById('toggle-harmonics');
     const backBtn = document.querySelector('.back-btn');
     
     // Audio variables
@@ -716,7 +716,6 @@
     // State variables
     let running = false;
     let hitCount = 0;
-    let lastDrumType = null;
     let lastHitTime = 0;
     let lastFrequency = 0;
     let confidence = 0;
@@ -731,14 +730,6 @@
     let noiseSamples = 0;
     const MAX_NOISE_SAMPLES = 100;
     
-    // Drum detection history for smoothing
-    const drumHistory = [];
-    const HISTORY_SIZE = 5;
-    
-    // Initialize UI
-    sensitivityVal.textContent = sensitivitySlider.value;
-    thresholdEl.textContent = sensitivitySlider.value;
-    
     // Create spectrum bars
     for (let i = 0; i < 64; i++) {
       const bar = document.createElement('div');
@@ -747,49 +738,50 @@
       spectrumDisplay.appendChild(bar);
     }
     
+    // Initialize UI
+    sensitivityVal.textContent = sensitivitySlider.value;
+    thresholdEl.textContent = sensitivitySlider.value;
+    
     // Event listeners
     startBtn.addEventListener('click', startMic);
     stopBtn.addEventListener('click', stopMic);
     resetBtn.addEventListener('click', resetCounter);
     sensitivitySlider.addEventListener('input', updateSensitivity);
     harmonicToggle.addEventListener('click', toggleHarmonicsPanel);
-    toggleWave.addEventListener('click', () => toggleTool(toggleWave));
-    toggleSpectrum.addEventListener('click', () => toggleTool(toggleSpectrum));
-    toggleHarmonics.addEventListener('click', () => toggleTool(toggleHarmonics));
     backBtn.addEventListener('click', () => {
       alert('Back to index functionality would go here');
     });
     
     // Visual feedback for drum hit
-    function showDrumHit(drumType) {
-      const profile = getDrumProfile(drumType);
+    function showDrumHit(frequency) {
+      // Determine which drum pad to activate based on frequency
+      let activePad = null;
       
-      // Pad animation
-      drumPads.forEach(pad => {
-        if (pad.dataset.type === drumType) {
-          pad.classList.add('active');
-          setTimeout(() => pad.classList.remove('active'), profile.decay);
-        }
-      });
+      if (frequency >= 20 && frequency < 80) {
+        activePad = document.querySelector('.drum-pad[data-type="kick"]');
+      } else if (frequency >= 80 && frequency < 200) {
+        activePad = document.querySelector('.drum-pad[data-type="snare"]');
+      } else if (frequency >= 200 && frequency < 400) {
+        activePad = document.querySelector('.drum-pad[data-type="tom"]');
+      } else if (frequency >= 400 && frequency < 3000) {
+        activePad = document.querySelector('.drum-pad[data-type="hihat"]');
+      } else if (frequency >= 3000) {
+        activePad = document.querySelector('.drum-pad[data-type="cymbal"]');
+      }
+      
+      // Reset all pads
+      drumPads.forEach(pad => pad.classList.remove('active'));
+      
+      // Activate the appropriate pad
+      if (activePad) {
+        activePad.classList.add('active');
+        setTimeout(() => activePad.classList.remove('active'), 200);
+      }
       
       // Screen flash
-      hitIndicator.style.background = `radial-gradient(circle, ${profile.color}77 0%, transparent 70%)`;
+      hitIndicator.style.background = 'radial-gradient(circle, rgba(255, 126, 95, 0.5) 0%, transparent 70%)';
       hitIndicator.classList.add('active');
-      setTimeout(() => hitIndicator.classList.remove('active'), profile.decay);
-      
-      // Update last drum display
-      lastDrumEl.textContent = drumType.toUpperCase();
-    }
-    
-    // Get drum profile
-    function getDrumProfile(drumType) {
-      return {
-        kick: { range: [30, 100], color: '#ff5e5e', decay: 150 },
-        snare: { range: [100, 300], color: '#5effae', decay: 120 },
-        hihat: { range: [3000, 8000], color: '#5eb3ff', decay: 80 },
-        tom: { range: [80, 200], color: '#ffbe5e', decay: 100 },
-        cymbal: { range: [3000, 10000], color: '#d85eff', decay: 60 }
-      }[drumType];
+      setTimeout(() => hitIndicator.classList.remove('active'), 100);
     }
     
     // Draw waveform visualization
@@ -872,92 +864,46 @@
         const height = Math.max(1, percent * 100);
         bars[i].style.height = `${height}%`;
         
-        // Color based on drum type
+        // Color based on frequency range
         if (i < 10) {
-          bars[i].style.background = 'linear-gradient(to top, #ff5e5e, #ff7e5f)'; // Kick
+          bars[i].style.background = 'linear-gradient(to top, #ff5e5e, #ff7e5f)'; // Low frequencies
         } else if (i < 20) {
-          bars[i].style.background = 'linear-gradient(to top, #5effae, #7effb3)'; // Snare
-        } else if (i < 30) {
-          bars[i].style.background = 'linear-gradient(to top, #ffbe5e, #ffd17e)'; // Tom
+          bars[i].style.background = 'linear-gradient(to top, #5effae, #7effb3)'; // Mid frequencies
+        } else if (i < 40) {
+          bars[i].style.background = 'linear-gradient(to top, #5eb3ff, #7ec7ff)'; // High frequencies
         } else {
-          bars[i].style.background = 'linear-gradient(to top, #5eb3ff, #7ec7ff)'; // Hi-hat/cymbal
+          bars[i].style.background = 'linear-gradient(to top, #d85eff, #e07eff)'; // Very high frequencies
         }
       }
     }
     
-    // Improved frequency detection using YIN algorithm
-    function detectFundamental(buffer, sampleRate) {
-      // Implementation of the YIN pitch detection algorithm
-      const yinBuffer = new Float32Array(buffer.length);
-      const threshold = 0.15;
+    // Accurate frequency detection
+    function detectFundamental() {
+      if (!analyser || !running) return 0;
       
-      yinBuffer[0] = 1;
+      // Get frequency data
+      const fftData = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(fftData);
       
-      // Compute difference function
-      for (let tau = 1; tau < buffer.length/2; tau++) {
-        yinBuffer[tau] = 0;
-        for (let j = 0; j < buffer.length/2; j++) {
-          const delta = buffer[j] - buffer[j + tau];
-          yinBuffer[tau] += delta * delta;
+      // Find the bin with the highest amplitude
+      let maxIndex = 5;
+      let maxValue = 0;
+      for (let i = 5; i < fftData.length / 2; i++) {
+        if (fftData[i] > maxValue) {
+          maxValue = fftData[i];
+          maxIndex = i;
         }
       }
       
-      // Compute cumulative mean normalized difference
-      yinBuffer[0] = 1;
-      let runningSum = 0;
-      for (let tau = 1; tau < buffer.length/2; tau++) {
-        runningSum += yinBuffer[tau];
-        yinBuffer[tau] = yinBuffer[tau] * tau / runningSum;
-      }
+      // Calculate frequency
+      const binSize = audioCtx.sampleRate / analyser.fftSize;
+      const frequency = maxIndex * binSize;
       
-      // Find the first valley below threshold
-      let tau;
-      for (tau = 2; tau < buffer.length/2; tau++) {
-        if (yinBuffer[tau] < threshold) {
-          while (tau + 1 < buffer.length/2 && yinBuffer[tau + 1] < yinBuffer[tau]) {
-            tau++;
-          }
-          break;
-        }
-      }
+      // Calculate confidence based on amplitude
+      const maxPossible = 255;
+      confidence = Math.min(1, maxValue / maxPossible);
       
-      // If no pitch found, return 0
-      if (tau === buffer.length/2 || yinBuffer[tau] >= threshold) {
-        return { frequency: 0, confidence: 0 };
-      }
-      
-      // Quadratic interpolation for better accuracy
-      const betterTau = parabolicInterpolation(yinBuffer, tau);
-      
-      // Calculate frequency and confidence
-      const frequency = sampleRate / betterTau;
-      const conf = Math.max(0, 1 - yinBuffer[tau]);
-      
-      return { frequency, confidence: conf };
-    }
-    
-    // Helper function for parabolic interpolation
-    function parabolicInterpolation(buffer, tau) {
-      if (tau <= 0 || tau >= buffer.length - 1) return tau;
-      
-      const s0 = buffer[tau - 1];
-      const s1 = buffer[tau];
-      const s2 = buffer[tau + 1];
-      
-      return tau + 0.5 * (s0 - s2) / (s0 - 2 * s1 + s2);
-    }
-    
-    // Detect drum type based on frequency and confidence
-    function detectDrum(frequency, confidence) {
-      if (confidence < 0.4) return 'unknown';
-      
-      if (frequency >= 30 && frequency <= 100) return 'kick';
-      if (frequency > 100 && frequency <= 300) return 'snare';
-      if (frequency > 300 && frequency <= 800) return 'tom';
-      if (frequency > 800 && frequency <= 3000) return 'hihat';
-      if (frequency > 3000) return 'cymbal';
-      
-      return 'unknown';
+      return frequency;
     }
     
     // Update harmonic display
@@ -978,7 +924,7 @@
       harmonicFifth.textContent = `${(frequency * 5).toFixed(0)} Hz`;
     }
     
-    // Audio processing loop with improved detection
+    // Audio processing loop
     function processAudio() {
       if (!running) return;
 
@@ -1011,52 +957,22 @@
       
       // Only detect a hit if above threshold and cooldown has passed
       if (rms > threshold && now - lastHitTime > HIT_COOLDOWN) {
-        // Create a copy of the buffer for frequency analysis
-        const analysisBuffer = new Float32Array(dataArray);
-        
         // Detect fundamental frequency
-        const { frequency, confidence: conf } = detectFundamental(analysisBuffer, audioCtx.sampleRate);
+        const frequency = detectFundamental();
         
-        // Update confidence display
-        confidence = conf;
-        confidenceEl.textContent = (confidence * 100).toFixed(1) + '%';
-        confidenceLevel.style.width = (confidence * 100) + '%';
-        
-        // Only proceed if we have a valid detection
-        if (frequency > 20 && confidence > 0.3) {
-          // Detect drum type
-          let drumType = detectDrum(frequency, confidence);
-          
-          // Temporal smoothing using history
-          drumHistory.push(drumType);
-          if (drumHistory.length > HISTORY_SIZE) {
-            drumHistory.shift();
-          }
-          
-          // Get most frequent drum type from history
-          const counts = {};
-          let maxCount = 0;
-          let smoothedType = drumType;
-          
-          for (const type of drumHistory) {
-            counts[type] = (counts[type] || 0) + 1;
-            if (counts[type] > maxCount) {
-              maxCount = counts[type];
-              smoothedType = type;
-            }
-          }
-          
-          drumType = smoothedType;
+        if (frequency > 20) {
+          // Update confidence display
+          confidenceEl.textContent = (confidence * 100).toFixed(1) + '%';
+          confidenceLevel.style.width = (confidence * 100) + '%';
           
           // Update display
           hitCount++;
           hitsEl.textContent = hitCount;
-          freqEl.textContent = `${frequency.toFixed(0)} Hz (${drumType.toUpperCase()})`;
+          freqEl.textContent = `${frequency.toFixed(0)} Hz`;
           updateHarmonicDisplay(frequency);
-          showDrumHit(drumType);
+          showDrumHit(frequency);
           lastHitTime = now;
           lastFrequency = frequency;
-          lastDrumType = drumType;
         }
       }
       
@@ -1092,7 +1008,7 @@
         
         // Setup analysers
         analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 2048;
+        analyser.fftSize = 8192; // Higher resolution for low frequencies
         bufferLength = analyser.frequencyBinCount;
         dataArray = new Float32Array(bufferLength);
         
@@ -1138,7 +1054,7 @@
     // Stop microphone processing
     function stopMic() {
       running = false;
-      cancelAnimationFrame(animationId);
+      if (animationId) cancelAnimationFrame(animationId);
       
       if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
       if (source) source.disconnect();
@@ -1168,8 +1084,6 @@
       hitCount = 0;
       hitsEl.textContent = hitCount;
       freqEl.textContent = '-- Hz';
-      lastDrumEl.textContent = '--';
-      drumHistory.length = 0;
       updateHarmonicDisplay(0);
     }
     
@@ -1186,11 +1100,6 @@
         harmonicContent.classList.contains('show') ? '▲' : '▼';
     }
     
-    // Toggle tool buttons
-    function toggleTool(btn) {
-      btn.classList.toggle('active');
-    }
-    
     // Initialize on load
     window.addEventListener('load', () => {
       waveformCanvas.width = waveformCanvas.offsetWidth;
@@ -1198,11 +1107,6 @@
       
       volumeCanvas.width = volumeCanvas.offsetWidth;
       volumeCanvas.height = volumeCanvas.offsetHeight;
-      
-      // Add tooltips to drum pads
-      drumPads.forEach(pad => {
-        pad.title = `Detects ${pad.dataset.type} drums (${getDrumProfile(pad.dataset.type).range[0]}-${getDrumProfile(pad.dataset.type).range[1]} Hz)`;
-      });
     });
     
     window.addEventListener('resize', () => {
