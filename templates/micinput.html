@@ -834,7 +834,7 @@
       ctx.beginPath();
       ctx.strokeStyle = 'rgba(255, 126, 95, 0.5)';
       ctx.lineWidth = 2;
-      const thresholdY = volumeCanvas.height - (parseFloat(sensitivitySlider.value) * volumeCanvas.height * 10;
+      const thresholdY = volumeCanvas.height - (parseFloat(sensitivitySlider.value) * volumeCanvas.height * 10);
       ctx.moveTo(0, thresholdY);
       ctx.lineTo(volumeCanvas.width, thresholdY);
       ctx.stroke();
