@@ -641,7 +641,7 @@
     </footer>
   </div>
 
-  <script>
+   <script>
     document.addEventListener('DOMContentLoaded', () => {
       // Audio analysis elements
       const startBtn = document.getElementById('startBtn');
@@ -689,32 +689,28 @@
           harmonicContent.classList.contains('show') ? '▲' : '▼';
       });
       
+      // Fixed: Removed the nested event listener
       // Start audio analysis
       startBtn.addEventListener('click', async () => {
         if (isRecording) return;
         
         try {
-                // Initialize audio context
-                // Replace your startBtn code with this:
-      startBtn.addEventListener('click', async () => {
-        try {
-          // Stop any existing microphone
+          // Initialize audio context
+          if (!audioContext) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          }
+          
+          // Resume audio context if needed (especially for iOS/Safari)
+          if (audioContext.state === 'suspended') {
+            await audioContext.resume();
+          }
+          
+          // Clean up any existing microphone
           if (microphone) {
             microphone.disconnect();
             microphone.mediaStream.getTracks().forEach(track => track.stop());
           }
 
-          // Request new microphone access
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          microphone = audioContext.createMediaStreamSource(stream);
-          microphone.connect(analyser);
-          
-          // Rest of your code...
-        } catch (err) {
-          console.error("Microphone error:", err);
-        }
-  });
-          
           // Create analyser with larger FFT for better low frequency resolution
           analyser = audioContext.createAnalyser();
           analyser.fftSize = 8192; // Increased for low frequency accuracy
@@ -738,67 +734,6 @@
           // Initialize spectrum bars
           initSpectrumBars();
           
-
-          // NEW: Frequency analysis with harmonic validation
-function analyzeFundamentalFrequency(dataArray, sampleRate, fftSize) {
-  const bufferLength = dataArray.length;
-  const frequencyResolution = sampleRate / fftSize;
-  
-  // 1. Find the 5 strongest peaks in low frequency range (20-300Hz)
-  const lowFreqMaxBin = Math.floor(300 / frequencyResolution);
-  const peaks = [];
-  
-  for (let i = 2; i < lowFreqMaxBin; i++) {
-    if (dataArray[i] > dataArray[i-1] && dataArray[i] > dataArray[i+1]) {
-      peaks.push({
-        bin: i,
-        value: dataArray[i],
-        freq: i * frequencyResolution
-      });
-    }
-  }
-  
-  // Sort by amplitude and take top 5
-  peaks.sort((a, b) => b.value - a.value).splice(5);
-  
-  // 2. Validate peaks by checking for harmonics
-  const validatedPeaks = peaks.map(peak => {
-    let harmonicScore = 0;
-    
-    // Check for harmonics (2x, 3x, 4x frequency)
-    for (let h = 2; h <= 4; h++) {
-      const harmonicFreq = peak.freq * h;
-      const harmonicBin = Math.round(harmonicFreq / frequencyResolution);
-      
-      if (harmonicBin < bufferLength && dataArray[harmonicBin] > peak.value * 0.3) {
-        harmonicScore++;
-      }
-    }
-    
-    return {
-      ...peak,
-      harmonicScore,
-      confidence: peak.value * (1 + harmonicScore * 0.2) // Boost confidence for harmonic matches
-    };
-  });
-          
-          // 3. Select the peak with highest confidence that has at least one harmonic
-          validatedPeaks.sort((a, b) => b.confidence - a.confidence);
-          const bestPeak = validatedPeaks.find(p => p.harmonicScore > 0) || validatedPeaks[0];
-          
-          // 4. Apply parabolic interpolation for precise frequency
-          if (bestPeak.bin > 0 && bestPeak.bin < bufferLength - 1) {
-            const prev = dataArray[bestPeak.bin - 1];
-            const next = dataArray[bestPeak.bin + 1];
-            const delta = (next - prev) / (2 * (2 * bestPeak.value - prev - next));
-            bestPeak.freq = (bestPeak.bin + delta) * frequencyResolution;
-          }
-          
-          return {
-            frequency: bestPeak.freq,
-            confidence: Math.min(100, Math.round(bestPeak.confidence / 2.55))
-          };
-        }
           // Start visualization loop
           visualize();
         } catch (err) {
@@ -814,8 +749,7 @@ function analyzeFundamentalFrequency(dataArray, sampleRate, fftSize) {
         isRecording = false;
         if (microphone) {
           microphone.disconnect();
-          const tracks = microphone.mediaStream.getTracks();
-          tracks.forEach(track => track.stop());
+          microphone.mediaStream.getTracks().forEach(track => track.stop());
           microphone = null;
         }
         if (audioContext) {
@@ -829,6 +763,67 @@ function analyzeFundamentalFrequency(dataArray, sampleRate, fftSize) {
         // Stop animation
         cancelAnimationFrame(animationId);
       });
+      
+      // Frequency analysis with harmonic validation
+      function analyzeFundamentalFrequency(dataArray, sampleRate, fftSize) {
+        const bufferLength = dataArray.length;
+        const frequencyResolution = sampleRate / fftSize;
+        
+        // 1. Find the 5 strongest peaks in low frequency range (20-300Hz)
+        const lowFreqMaxBin = Math.floor(300 / frequencyResolution);
+        const peaks = [];
+        
+        for (let i = 2; i < lowFreqMaxBin; i++) {
+          if (dataArray[i] > dataArray[i-1] && dataArray[i] > dataArray[i+1]) {
+            peaks.push({
+              bin: i,
+              value: dataArray[i],
+              freq: i * frequencyResolution
+            });
+          }
+        }
+        
+        // Sort by amplitude and take top 5
+        peaks.sort((a, b) => b.value - a.value).splice(5);
+        
+        // 2. Validate peaks by checking for harmonics
+        const validatedPeaks = peaks.map(peak => {
+          let harmonicScore = 0;
+          
+          // Check for harmonics (2x, 3x, 4x frequency)
+          for (let h = 2; h <= 4; h++) {
+            const harmonicFreq = peak.freq * h;
+            const harmonicBin = Math.round(harmonicFreq / frequencyResolution);
+            
+            if (harmonicBin < bufferLength && dataArray[harmonicBin] > peak.value * 0.3) {
+              harmonicScore++;
+            }
+          }
+          
+          return {
+            ...peak,
+            harmonicScore,
+            confidence: peak.value * (1 + harmonicScore * 0.2) // Boost confidence for harmonic matches
+          };
+        });
+                
+        // 3. Select the peak with highest confidence that has at least one harmonic
+        validatedPeaks.sort((a, b) => b.confidence - a.confidence);
+        const bestPeak = validatedPeaks.find(p => p.harmonicScore > 0) || validatedPeaks[0] || { freq: 0, confidence: 0 };
+        
+        // 4. Apply parabolic interpolation for precise frequency
+        if (bestPeak.bin > 0 && bestPeak.bin < bufferLength - 1) {
+          const prev = dataArray[bestPeak.bin - 1];
+          const next = dataArray[bestPeak.bin + 1];
+          const delta = (next - prev) / (2 * (2 * bestPeak.value - prev - next));
+          bestPeak.freq = (bestPeak.bin + delta) * frequencyResolution;
+        }
+        
+        return {
+          frequency: bestPeak.freq,
+          confidence: Math.min(100, Math.round(bestPeak.confidence / 2.55))
+        };
+      }
       
       // Visualize audio data
       function visualize() {
