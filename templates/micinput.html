@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Drum Frequency Analyzer — SNR & Envelope Fix</title>
+<title>Drum Frequency Analyzer — Silence Fix (230Hz ghost removed)</title>
 <style>
-/* keep UI similar to your verbose version (compacted) */
+/* UI kept similar to your last SNR version */
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:linear-gradient(135deg,#1a1a2e,#16213e);color:#fff;font-family:Segoe UI, Tahoma, Verdana;min-height:100vh;padding:20px;display:flex;flex-direction:column;align-items:center}
 .container{max-width:980px;width:100%}
@@ -40,8 +40,8 @@ input[type="range"]{width:100%}
 <body>
 <div class="container">
   <header>
-    <h1>Drum Frequency Analyzer — SNR & Envelope Fix</h1>
-    <p class="subtitle">Silence ≈ 0% confidence. Hit spikes ≥70% (tuned for drums).</p>
+    <h1>Drum Frequency Analyzer — Silence Fix</h1>
+    <p class="subtitle">Ghost 230 Hz removed — silence should read ~0%</p>
   </header>
 
   <div class="debug-panel">
@@ -103,39 +103,31 @@ input[type="range"]{width:100%}
 
   <div class="spectrum-display" id="bars"></div>
   <div class="frequency-range"><span>20 Hz</span><span>200 Hz</span><span>2 kHz</span><span>20 kHz</span></div>
-  <div class="info-box">Calibrate in quiet room. If you still see noise as hits, tell me your browser & mic (laptop/external) and I’ll tune thresholds.</div>
+  <div class="info-box">Calibrate in quiet room. If any ghost remains, tell me browser+OS+mic type and I’ll tune thresholds further.</div>
 </div>
 
 <script>
-/* New detection: SNR (dB) + band-energy envelope + proportion-of-bins gating.
-   Key thresholds:
-   - snrThresholdDb = 8 dB  (bin considered 'signal' if SNR >= this)
-   - minBinProportion = 0.02 (at least 2% of bins in band must exceed SNR)
-   - envelopeRatioThreshold = 2.8 (short-term / long-term energy ratio)
-   - smoothing applied to displayed confidence
-*/
-
 (function(){
   // DOM refs
   const startBtn = document.getElementById('startBtn');
-  const stopBtn = document.getElementById('stopBtn');
-  const calBtn = document.getElementById('calBtn');
-  const snapBtn = document.getElementById('snapBtn');
-  const canvas = document.getElementById('canvas');
-  const ctx = canvas.getContext('2d');
-  const barsContainer = document.getElementById('bars');
-  const fftSelect = document.getElementById('fftSelect');
-  const sensitivity = document.getElementById('sensitivity');
-  const sensValue = document.getElementById('sensValue');
-  const confBar = document.getElementById('confBar');
-  const confLabel = document.getElementById('confLabel');
-  const fundEl = document.getElementById('fund');
-  const peakEl = document.getElementById('peak');
-  const hEls = [null, document.getElementById('h1'), document.getElementById('h2'), document.getElementById('h3'), document.getElementById('h4')];
+  const stopBtn  = document.getElementById('stopBtn');
+  const calBtn   = document.getElementById('calBtn');
+  const snapBtn  = document.getElementById('snapBtn');
+  const canvas   = document.getElementById('canvas');
+  const ctx      = canvas.getContext('2d');
+  const barsCont = document.getElementById('bars');
+  const fftSelect= document.getElementById('fftSelect');
+  const sensEl   = document.getElementById('sensitivity');
+  const sensVal  = document.getElementById('sensValue');
+  const confBar  = document.getElementById('confBar');
+  const confLbl  = document.getElementById('confLabel');
+  const fundEl   = document.getElementById('fund');
+  const peakEl   = document.getElementById('peak');
+  const h1 = document.getElementById('h1'), h2=document.getElementById('h2'), h3=document.getElementById('h3'), h4=document.getElementById('h4');
 
-  // bars
+  // make bars
   const BAR_COUNT = 64;
-  function makeBars(){ barsContainer.innerHTML=''; for(let i=0;i<BAR_COUNT;i++){ const d=document.createElement('div'); d.className='spectrum-bar'; d.style.height='4px'; barsContainer.appendChild(d);} }
+  function makeBars(){ barsCont.innerHTML=''; for(let i=0;i<BAR_COUNT;i++){ const d=document.createElement('div'); d.className='spectrum-bar'; d.style.height='4px'; barsCont.appendChild(d);} }
   makeBars();
 
   // pads
@@ -149,36 +141,37 @@ input[type="range"]{width:100%}
   let snapshot=[];
 
   // envelope trackers
-  let bandEnergyShort=0, bandEnergyLong=0;
-  // parameters (tweakable)
-  const snrThresholdDb = 8; // dB
-  const minBinProportion = 0.02; // proportion of bins in band
-  const envelopeRatioThreshold = 2.8; // short/long energy ratio for transient
+  let bandEshort=0, bandElong=0;
+
+  // thresholds (tweak if necessary)
+  const SNR_DB_THRESHOLD = 8;       // require avg top SNR >= 8 dB
+  const MIN_BIN_PROPORTION = 0.02;  // at least 2% of bins in band above SNR
+  const ENVELOPE_RATIO_THR = 1.8;   // short/long band energy ratio for transient
+  const ABS_DB_SILENCE = -70;       // if frame max dB < this -> definitely silence
+  const ABS_ADJUSTED_MAG_MIN = 1e-7;// require adjusted mag > this
+
+  // noise EMA params
+  const alphaRise = 0.002; // very slow rise to avoid absorbing hits
+  const alphaFall = 0.05;  // faster fall to follow quieting
+  const noiseMargin = 1.15;
+
+  const shortAlpha = 0.12;
+  const longAlpha = 0.01;
   const eps = 1e-12;
-
-  // noise floor EMA params (rise VERY slow to avoid absorbing hits; fall moderate)
-  const alphaRise = 0.0015;   // when mag > floor -> floor slowly moves up
-  const alphaFall = 0.04;     // when mag < floor -> floor falls faster to follow quieter environments
-  const noiseMargin = 1.15;   // margin multiplier for safety
-
-  // envelope smoothing alphas (short ~50ms, long ~500ms approximate via alpha)
-  const shortAlpha = 0.12; // ~50-100ms depending on frame rate
-  const longAlpha = 0.01;  // slow (~500ms+)
 
   // UI helpers
   function resizeCanvas(){
-    const dpr = window.devicePixelRatio||1; const w=canvas.clientWidth; const h=canvas.clientHeight;
+    const dpr = window.devicePixelRatio||1;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
     canvas.width = Math.max(1, Math.floor(w*dpr)); canvas.height = Math.max(1, Math.floor(h*dpr));
     ctx.setTransform(dpr,0,0,dpr,0,0);
   }
   window.addEventListener('resize', resizeCanvas);
   resizeCanvas();
 
-  // sensitivity UI
-  sensValue.textContent = parseFloat(sensitivity.value).toFixed(3);
-  sensitivity.addEventListener('input', ()=>{ sensValue.textContent = parseFloat(sensitivity.value).toFixed(3); document.getElementById('sensLabel').textContent = parseFloat(sensitivity.value).toFixed(3); });
+  sensVal.textContent = parseFloat(sensEl.value).toFixed(3);
+  sensEl.addEventListener('input', ()=>{ sensVal.textContent = parseFloat(sensEl.value).toFixed(3); document.getElementById('sensLabel').textContent = parseFloat(sensEl.value).toFixed(3); });
 
-  // start/stop
   startBtn.onclick = start;
   stopBtn.onclick = stop;
   calBtn.onclick = ()=>{ if(analyser) calibrateNoise(1.2); else alert('Start first'); };
@@ -193,231 +186,218 @@ input[type="range"]{width:100%}
       analyser = audioCtx.createAnalyser();
       analyser.smoothingTimeConstant = 0.55;
       analyser.minDecibels = -120; analyser.maxDecibels = -10;
-      // set FFT
       const req = parseInt(fftSelect.value,10) || 8192;
       try{ analyser.fftSize = req; } catch(e){ analyser.fftSize = 8192; }
       document.getElementById('fftSize').textContent = analyser.fftSize;
       source.connect(analyser);
       floatFreq = new Float32Array(analyser.frequencyBinCount);
       noiseFloor = new Float32Array(analyser.frequencyBinCount); for(let i=0;i<noiseFloor.length;i++) noiseFloor[i]=1e-12;
-      // init envelopes
-      bandEnergyShort = 0; bandEnergyLong = 0;
-
+      bandEshort=0; bandElong=0;
       isRunning=true; startBtn.disabled=true; stopBtn.disabled=false; document.getElementById('status').textContent='Running';
-      // auto calibrate briefly
       await calibrateNoise(0.9);
-      visualize();
-      demoPads();
-    }catch(err){
-      console.error(err); alert('Mic access failed'); document.getElementById('status').textContent='Error';
-      stop();
-    }
+      visualize(); demoPads();
+    }catch(err){ console.error(err); alert('Mic access failed'); stop(); }
   }
 
   function stop(){
     if(!isRunning) return;
     isRunning=false; startBtn.disabled=false; stopBtn.disabled=true; document.getElementById('status').textContent='Stopped';
-    if(rafId) cancelAnimationFrame(rafId);
-    rafId=null;
+    if(rafId) cancelAnimationFrame(rafId); rafId=null;
     if(stream){ try{ stream.getTracks().forEach(t=>t.stop()); }catch(e){} stream=null; }
     if(source){ try{ source.disconnect(); }catch(e){} source=null; }
     if(analyser){ try{ analyser.disconnect(); }catch(e){} analyser=null; }
     if(audioCtx){ audioCtx.close().catch(()=>{}).then(()=>audioCtx=null); }
-    // reset display
-    fundEl.textContent='-- Hz'; peakEl.textContent='-- dB'; confBar.style.width='0%'; confLabel.textContent='0%'; for(let i=1;i<=4;i++) hEls[i].textContent='-- Hz';
+    fundEl.textContent='-- Hz'; peakEl.textContent='-- dB'; confBar.style.width='0%'; confLbl.textContent='0%';
+    [h1,h2,h3,h4].forEach(el=>el.textContent='-- Hz');
     snapshot=[];
   }
 
-  // calibrate: simple avg baseline for noiseFloor
   async function calibrateNoise(duration=1.2){
     if(!analyser) return;
     document.getElementById('status').textContent='Calibrating...';
     const acc = new Float32Array(analyser.frequencyBinCount);
-    let frames=0; const start = performance.now();
-    while(performance.now()-start < duration*1000){
+    let frames=0; const startT = performance.now();
+    while(performance.now()-startT < duration*1000){
       analyser.getFloatFrequencyData(floatFreq);
       for(let i=0;i<floatFreq.length;i++){ acc[i] += Math.pow(10, floatFreq[i]/20); }
-      frames++;
-      await new Promise(r=>setTimeout(r,40));
+      frames++; await new Promise(r=>setTimeout(r,40));
     }
     if(frames>0){ for(let i=0;i<acc.length;i++) noiseFloor[i] = acc[i]/frames + eps; }
     document.getElementById('status').textContent='Calibrated';
   }
 
-  // small demo pad visual (unchanged)
   let demoInterval=null;
   function demoPads(){ if(demoInterval) return; demoInterval=setInterval(()=>{ if(!isRunning) return; const pads=document.querySelectorAll('.drum-pad'); const idx=Math.floor(Math.random()*pads.length); pads[idx].classList.add('active'); setTimeout(()=>pads[idx].classList.remove('active'),140); },1500); }
   function stopDemoPads(){ if(demoInterval){ clearInterval(demoInterval); demoInterval=null; } }
 
-  // Main analyze & visualize loop
-  let displayedConf = 0; // smooth display
+  let displayed=0;
   function visualize(){
     if(!isRunning || !analyser) return;
     rafId = requestAnimationFrame(visualize);
-    const binCount = analyser.frequencyBinCount;
-    analyser.getFloatFrequencyData(floatFreq); // fill floatFreq with dB
+    const N = analyser.frequencyBinCount;
+    analyser.getFloatFrequencyData(floatFreq); // in dB
 
-    // convert to linear mags and update adaptive noiseFloor (EMA rise/fall)
-    const mags = new Float32Array(binCount);
-    let frameMax = 0;
-    for(let i=0;i<binCount;i++){
+    // find overall frame max dB to gate silence
+    let maxDb = -999;
+    for(let i=0;i<N;i++){ if(floatFreq[i] > maxDb) maxDb = floatFreq[i]; }
+
+    // convert to linear mags and update per-bin noise floor
+    const mags = new Float32Array(N);
+    for(let i=0;i<N;i++){
       const lin = Math.pow(10, floatFreq[i]/20);
-      mags[i]=lin;
-      if(lin>frameMax) frameMax = lin;
-      const nf = noiseFloor[i]||1e-12;
-      if(lin > nf){
-        noiseFloor[i] = nf*(1-alphaRise) + lin*alphaRise; // slow rise
-      } else {
-        noiseFloor[i] = nf*(1-alphaFall) + lin*alphaFall; // faster fall
-      }
+      mags[i] = lin;
+      const nf = noiseFloor[i] || 1e-12;
+      if(lin > nf) noiseFloor[i] = nf*(1-alphaRise)+lin*alphaRise; else noiseFloor[i]=nf*(1-alphaFall)+lin*alphaFall;
     }
 
-    // frequency resolution
-    const sampleRate = audioCtx ? audioCtx.sampleRate : 44100;
-    const freqRes = sampleRate / analyser.fftSize;
+    // immediate silence gate: if overall max dB is very low, treat as silence
+    if(maxDb < ABS_DB_SILENCE){
+      displayed = displayed * 0.75; const conf = Math.round(displayed); confBar.style.width = conf+'%'; confLbl.textContent = conf + '%';
+      fundEl.textContent='-- Hz'; peakEl.textContent='-- dB'; [h1,h2,h3,h4].forEach(el=>el.textContent='-- Hz');
+      drawBars(floatFreq, 0); drawCanvas(floatFreq);
+      return;
+    }
+
+    // analysis band (20-300Hz)
+    const sr = audioCtx ? audioCtx.sampleRate : 44100;
+    const freqRes = sr / analyser.fftSize;
     const minBin = Math.max(2, Math.floor(20 / freqRes));
-    const maxBin = Math.min(binCount-2, Math.floor(300 / freqRes));
+    const maxBin = Math.min(N-2, Math.floor(300 / freqRes));
     const bandBins = Math.max(1, maxBin - minBin + 1);
 
-    // compute per-bin SNR in dB and count bins above snrThresholdDb
+    // compute per-bin SNR (dB) and collect above-threshold bins
     let countAbove = 0;
-    let snrSumTop = []; // store SNRs for top calculation
+    const snrs = [];
     for(let i=minBin;i<=maxBin;i++){
       const nf = noiseFloor[i] || eps;
-      const snr = 20 * Math.log10( (mags[i] + eps) / (nf + eps) ); // positive when above floor
-      if(snr >= snrThresholdDb) { countAbove++; snrSumTop.push(snr); }
+      const snrDb = 20 * Math.log10( (mags[i] + eps) / (nf + eps) );
+      if(snrDb >= SNR_DB_THRESHOLD){ countAbove++; snrs.push(snrDb); }
     }
-
-    // compute proportion
     const proportion = countAbove / bandBins;
 
-    // compute envelope energies: short & long using mag^2
+    // band energy envelope (use mags squared)
     let frameEnergy = 0;
     for(let i=minBin;i<=maxBin;i++) frameEnergy += mags[i]*mags[i];
-    // EMA updates
-    bandEnergyShort = bandEnergyShort*(1-shortAlpha) + frameEnergy*shortAlpha;
-    bandEnergyLong = bandEnergyLong*(1-longAlpha) + frameEnergy*longAlpha;
-    const envelopeRatio = (bandEnergyLong < 1e-18) ? 999 : Math.max(1e-6, bandEnergyShort / (bandEnergyLong + eps));
+    bandEshort = bandEshort*(1-shortAlpha) + frameEnergy*shortAlpha;
+    bandElong  = bandElong*(1-longAlpha) + frameEnergy*longAlpha;
+    const envelopeRatio = bandElong>0 ? (bandEshort / (bandElong + eps)) : 999;
 
-    // avg top SNR (take mean of top up to 5 SNRs)
-    snrSumTop.sort((a,b)=>b-a);
-    const topN = Math.min(5, snrSumTop.length);
-    const avgTopSNR = topN>0 ? (snrSumTop.slice(0,topN).reduce((s,v)=>s+v,0)/topN) : 0;
+    // compute avg top SNR
+    snrs.sort((a,b)=>b-a);
+    const topN = Math.min(5, snrs.length);
+    const avgTopSNR = topN>0 ? (snrs.slice(0,topN).reduce((s,v)=>s+v,0)/topN) : 0;
 
-    // Compute confidence:
-    // - require envelopeRatio and proportion gating AND avgTopSNR somewhat above threshold
-    // Map avgTopSNR - snrThresholdDb to a score 0..100, scale by proportion (0..1) and envelope factor (clamped)
-    const snrExcess = Math.max(0, avgTopSNR - snrThresholdDb);
-    // map snrExcess (dB) to 0..1 via a soft scale: 0dB =>0, 20dB =>1
-    const snrFactor = Math.min(1, snrExcess / 20);
-    const envelopeFactor = Math.min(1, (envelopeRatio / envelopeRatioThreshold) ); // if ratio meets threshold =>1
-    // sensitivity slider: lower slider value => more sensitive => slightly boost final score
-    const sens = parseFloat(sensitivity.value) || 0.10;
-    const sensBoost = 1 + ((0.15 - sens) / 0.15) * 0.25; // up to +25% boost at extreme sensitivity
-    // final raw confidence
-    let rawConf = snrFactor * proportion * 100 * envelopeFactor * sensBoost;
-    // apply gating: only give any confidence if both proportion & envelope exceed minimal thresholds
-    const minimalProportion = Math.max(0.01, (0.02 * (1 - (sens - 0.05)/0.1))); // slightly depend on sensitivity
-    const minimalEnvelope = 1.15; // small energy bump required
-    if(!(proportion >= minimalProportion && envelopeRatio >= minimalEnvelope && avgTopSNR >= (snrThresholdDb - 1))) {
+    // compute adjusted mags (mags - margin*noiseFloor) and pick bestBin
+    const adjusted = new Float32Array(N);
+    let bestBin = minBin, bestVal = 0;
+    for(let i=minBin;i<=maxBin;i++){
+      adjusted[i] = Math.max(0, mags[i] - noiseFloor[i] * noiseMargin);
+      if(adjusted[i] > bestVal){ bestVal = adjusted[i]; bestBin = i; }
+    }
+
+    // gating: require multiple conditions (SNR, proportion, envelope, abs adjusted mag)
+    const condSNR = (avgTopSNR >= SNR_DB_THRESHOLD);
+    const condProp = (proportion >= MIN_BIN_PROPORTION);
+    const condEnv  = (envelopeRatio >= ENVELOPE_RATIO_THR);
+    const condMag  = (bestVal >= ABS_ADJUSTED_MAG_MIN);
+
+    let rawConf = 0;
+    if(condSNR && condProp && condEnv && condMag){
+      // map avgTopSNR-excess to 0..1 (0@threshold, 20dB =>1)
+      const excess = Math.max(0, avgTopSNR - SNR_DB_THRESHOLD);
+      const snrFactor = Math.min(1, excess / 20);
+      // scale by proportion and envelope normalized
+      const envFactor = Math.min(1, envelopeRatio / ENVELOPE_RATIO_THR);
+      const propFactor = Math.min(1, proportion / Math.max(MIN_BIN_PROPORTION, 0.0001));
+      // sensitivity (lower slider => more sensitive)
+      const sens = parseFloat(sensEl.value) || 0.10;
+      const sensBoost = 1 + ((0.15 - sens) / 0.15) * 0.25;
+      rawConf = snrFactor * 100 * propFactor * envFactor * sensBoost;
+    } else {
       rawConf = 0;
     }
 
     // smoothing
-    displayedConf = (displayedConf * 0.7) + (rawConf * 0.3);
-    const confPercent = Math.max(0, Math.min(100, Math.round(displayedConf)));
+    displayed = displayed * 0.72 + rawConf * 0.28;
+    const confPercent = Math.max(0, Math.min(100, Math.round(displayed)));
 
-    // refine fundamental using parabolic interpolation on adjusted mags (mags - floor*margin)
-    const adjusted = new Float32Array(binCount);
-    let adjustedMax = 0, bestBin = minBin, bestVal = 0;
-    for(let i=minBin;i<=maxBin;i++){
-      adjusted[i] = Math.max(0, mags[i] - noiseFloor[i]*noiseMargin);
-      if(adjusted[i] > adjustedMax){ adjustedMax = adjusted[i]; bestBin = i; bestVal = adjusted[i]; }
-    }
-
+    // parabolic interpolation for refined frequency
     let refinedFreq = 0;
-    if(bestVal > 0 && bestBin > 1 && bestBin < binCount-1){
+    if(bestVal > 0 && bestBin > 1 && bestBin < N-1){
       const left = adjusted[bestBin-1], center = adjusted[bestBin], right = adjusted[bestBin+1];
       const denom = (left - 2*center + right);
       let delta = 0;
       if(Math.abs(denom) > 1e-12) delta = 0.5 * (left - right) / denom;
       refinedFreq = (bestBin + delta) * freqRes;
-    } else {
-      refinedFreq = bestVal>0 ? bestBin * freqRes : 0;
-    }
+    } else refinedFreq = bestVal > 0 ? bestBin * freqRes : 0;
 
-    // peak db for UI (from floatFreq)
-    const peakDb = (bestVal>0 && floatFreq[bestBin]!==undefined)? floatFreq[bestBin] : -140;
+    // peak dB for UI
+    const peakDb = (floatFreq[bestBin] !== undefined) ? floatFreq[bestBin] : -140;
 
-    // Update UI
-    fundEl.textContent = refinedFreq>0? refinedFreq.toFixed(2)+' Hz' : '-- Hz';
-    peakEl.textContent = peakDb > -120 ? Math.round(peakDb)+' dB' : '-- dB';
+    // update UI
+    fundEl.textContent = refinedFreq>0 ? refinedFreq.toFixed(2) + ' Hz' : '-- Hz';
+    peakEl.textContent = peakDb > -120 ? Math.round(peakDb) + ' dB' : '-- dB';
     confBar.style.width = confPercent + '%';
-    confLabel.textContent = confPercent + '%';
-    for(let i=1;i<=4;i++){ hEls[i].textContent = refinedFreq>0 ? (refinedFreq * i).toFixed(1) + ' Hz' : '-- Hz'; }
+    confLbl.textContent = confPercent + '%';
+    [h1,h2,h3,h4].forEach((el,i)=>{ el.textContent = (refinedFreq>0 && i>0) ? (refinedFreq * i).toFixed(1) + ' Hz' : '-- Hz'; });
 
-    // store snapshot
+    // snapshot
     snapshot.push([Date.now(), refinedFreq.toFixed(2), peakDb.toFixed(1), confPercent]);
+    if(snapshot.length>2000) snapshot.shift();
 
-    // draw bars & canvas
+    // visuals
     drawBars(floatFreq, refinedFreq);
     drawCanvas(floatFreq);
   }
 
-  function drawBars(floatDbArray, refinedFreq){
+  function drawBars(floatDb, refinedFreq){
     const bars = document.querySelectorAll('.spectrum-bar');
-    const sampleRate = audioCtx? audioCtx.sampleRate : 44100;
+    const sampleRate = audioCtx?audioCtx.sampleRate:44100;
     const freqRes = analyser ? (sampleRate / analyser.fftSize) : 1;
-    const maxDraw = Math.min(floatDbArray.length, 1024);
+    const maxDraw = Math.min(floatDb.length, 1024);
     for(let i=0;i<bars.length;i++){
       const bin = Math.floor(Math.pow(i / bars.length, 2) * maxDraw);
-      const db = floatDbArray[bin] || -140;
+      const db = floatDb[bin] || -140;
       const lin = Math.pow(10, db/20);
-      const height = Math.max(3, Math.min(120, lin * 300));
-      bars[i].style.height = height + 'px';
+      const h = Math.max(3, Math.min(120, lin * 300));
+      bars[i].style.height = h + 'px';
       const fundBin = refinedFreq ? Math.floor(refinedFreq / freqRes) : -999;
       bars[i].style.background = (Math.abs(bin - fundBin) <= 1 && refinedFreq>0) ? 'linear-gradient(to top,#4caf50,#8bc34a)' : 'linear-gradient(to top,#ff7e5f,#feb47b)';
     }
   }
 
-  function drawCanvas(floatDbArray){
+  function drawCanvas(floatDb){
     ctx.clearRect(0,0,canvas.width,canvas.height);
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = window.devicePixelRatio||1;
     const w = canvas.width / dpr, h = canvas.height / dpr;
-    const bins = Math.min(floatDbArray.length, 1024);
+    const bins = Math.min(floatDb.length, 1024);
     const step = Math.max(1, Math.floor(bins / Math.min(512, bins)));
     const barW = w / (bins / step);
-    let x = 0;
+    let x=0;
     for(let i=0;i<bins;i+=step){
-      const db = floatDbArray[i] || -140;
+      const db = floatDb[i] || -140;
       const lin = Math.pow(10, db/20);
-      const height = Math.max(1, Math.min(h, lin * h * 1.2));
+      const hh = Math.max(1, Math.min(h, lin * h * 1.2));
       const isLow = i < bins/8;
       ctx.fillStyle = isLow ? `rgba(255,126,95,${Math.min(0.95, lin*4)})` : `rgba(254,180,123,${Math.min(0.95, lin*2)})`;
-      ctx.fillRect(x, h - height, barW - 1, height);
+      ctx.fillRect(x, h - hh, barW - 1, hh);
       x += barW;
     }
   }
 
-  // save CSV
   function saveCSV(){
     if(!snapshot.length){ alert('No data yet'); return; }
     const header = ['timestamp_ms','freq_hz','peak_db','confidence'];
-    const rows = [header.join(',')].concat(snapshot.slice(-1000).map(r=>r.join(',')));
+    const rows = [header.join(',')].concat(snapshot.slice(-1000).map(r => r.join(',')));
     const blob = new Blob([rows.join('\n')], {type:'text/csv'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href=url; a.download='snapshot.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download='snapshot.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
   }
 
-  // simple safety
   window.addEventListener('beforeunload', ()=>{ if(stream) stream.getTracks().forEach(t=>t.stop()); });
 
-  // expose debug API
-  window._drumFix = { start, stop, calibrateNoise, getState: ()=>({ running: !!isRunning, fft: analyser?analyser.fftSize:null }) };
-
-  // init
+  // start auto-resize
   resizeCanvas();
-})(); // IIFE
+})();
 </script>
 </body>
 </html>
