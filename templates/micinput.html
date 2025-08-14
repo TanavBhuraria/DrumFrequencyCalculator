@@ -1,18 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Professional Drum Frequency Analyzer</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Professional Drum Frequency Analyzer — Fixed</title>
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-    
+    /* (kept your original styling mostly intact) */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      background: linear-gradient(135deg, #1a1a2e, #16213e);
+      background: linear-gradient(135deg,#1a1a2e,#16213e);
       color: #fff;
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       min-height: 100vh;
@@ -22,541 +18,68 @@
       align-items: center;
       overflow-x: hidden;
     }
-    
-    .container {
-      max-width: 800px;
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-    
-    header {
-      text-align: center;
-      margin-bottom: 30px;
-      padding: 20px;
-      width: 100%;
-      position: relative;
-    }
-    
-    h1 {
-      font-size: 2.5rem;
-      margin-bottom: 10px;
-      background: linear-gradient(90deg, #ff7e5f, #feb47b);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    }
-    
-    .back-btn {
-      position: absolute;
-      top: 20px;
-      left: 20px;
-      background: rgba(255, 255, 255, 0.1);
-      color: #ff7e5f;
-      border: none;
-      padding: 10px 15px;
-      border-radius: 50px;
-      cursor: pointer;
-      font-size: 0.9rem;
-      transition: all 0.3s;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      z-index: 10;
-      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-      width: auto;
-      min-width: 90px;
-    }
-    
-    .back-btn:hover {
-      background: rgba(255, 126, 95, 0.2);
-      transform: translateY(-2px);
-    }
-    
-    .back-btn svg {
-      width: 16px;
-      height: 16px;
-      fill: #ff7e5f;
-    }
-    
-    .subtitle {
-      font-size: 1.2rem;
-      color: #a0a0d0;
-      max-width: 600px;
-      margin: 0 auto;
-      margin-top: 15px;
-    }
-    
-    .visualization {
-      width: 100%;
-      height: 200px;
-      background: rgba(0, 0, 0, 0.3);
-      border-radius: 12px;
-      margin-bottom: 30px;
-      position: relative;
-      overflow: hidden;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    }
-    
-    .drum-display {
-      position: absolute;
-      bottom: 0;
-      width: 100%;
-      height: 100%;
-      display: flex;
-      justify-content: center;
-      align-items: flex-end;
-      gap: 10px;
-      padding: 20px;
-    }
-    
-    .drum-pad {
-      width: 70px;
-      height: 70px;
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 50%;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      font-size: 1.2rem;
-      font-weight: bold;
-      color: rgba(255, 255, 255, 0.7);
-      transition: all 50ms ease-out;
-      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-      cursor: pointer;
-      will-change: transform, background-color;
-    }
-    
-    .drum-pad.active {
-      transform: scale(1.2);
-      background: rgba(255, 126, 95, 0.8);
-      box-shadow: 0 0 20px rgba(255, 126, 95, 0.7);
-    }
-    
-    .controls {
-      display: flex;
-      gap: 15px;
-      margin-bottom: 30px;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
-    
-    button {
-      background: linear-gradient(135deg, #ff7e5f, #feb47b);
-      color: white;
-      border: none;
-      padding: 14px 28px;
-      font-size: 1.1rem;
-      font-weight: 600;
-      border-radius: 50px;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      box-shadow: 0 4px 15px rgba(255, 126, 95, 0.4);
-      min-width: 180px;
-    }
-    
-    button:hover {
-      transform: translateY(-3px);
-      box-shadow: 0 6px 20px rgba(255, 126, 95, 0.6);
-    }
-    
-    button:disabled {
-      background: #555;
-      cursor: not-allowed;
-      transform: none;
-      box-shadow: none;
-    }
-    
-    .stats {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 20px;
-      width: 100%;
-      margin-bottom: 30px;
-    }
-    
-    .stat-card {
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 12px;
-      padding: 25px;
-      text-align: center;
-      backdrop-filter: blur(10px);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-    }
-    
-    .stat-card h2 {
-      font-size: 1.3rem;
-      margin-bottom: 15px;
-      color: #a0a0d0;
-    }
-    
-    .stat-value {
-      font-size: 3.5rem;
-      font-weight: 700;
-      background: linear-gradient(90deg, #ff7e5f, #feb47b);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-    
-    .settings {
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 12px;
-      padding: 25px;
-      width: 100%;
-      backdrop-filter: blur(10px);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-    }
-    
-    .slider-container {
-      margin-bottom: 20px;
-    }
-    
-    .slider-container label {
-      display: block;
-      margin-bottom: 10px;
-      font-size: 1.1rem;
-      color: #a0a0d0;
-      display: flex;
-      justify-content: space-between;
-    }
-    
-    .slider-container span {
-      font-weight: bold;
-      color: #ff7e5f;
-    }
-    
-    input[type="range"] {
-      width: 100%;
-      height: 8px;
-      border-radius: 4px;
-      background: rgba(255, 255, 255, 0.1);
-      outline: none;
-      -webkit-appearance: none;
-    }
-    
-    input[type="range"]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 22px;
-      height: 22px;
-      border-radius: 50%;
-      background: #ff7e5f;
-      cursor: pointer;
-      box-shadow: 0 0 10px rgba(255, 126, 95, 0.7);
-    }
-    
-    .canvas-container {
-      width: 100%;
-      height: 150px;
-      margin-top: 20px;
-      background: rgba(0, 0, 0, 0.2);
-      border-radius: 8px;
-      overflow: hidden;
-    }
-    
-    canvas {
-      width: 100%;
-      height: 100%;
-    }
-    
-    .hit-indicator {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-      z-index: 100;
-      opacity: 0;
-      transition: opacity 0.3s ease;
-    }
-    
-    .hit-indicator.active {
-      opacity: 1;
-    }
-    
-    .harmonic-display {
-      margin-top: 20px;
-      background: rgba(0, 0, 0, 0.2);
-      border-radius: 10px;
-      padding: 15px;
-      width: 100%;
-    }
-    
-    .harmonic-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 15px;
-      cursor: pointer;
-      padding: 8px 12px;
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.05);
-    }
-    
-    .harmonic-header:hover {
-      background: rgba(255, 255, 255, 0.1);
-    }
-    
-    .harmonic-content {
-      display: none;
-      padding: 10px;
-      background: rgba(0, 0, 0, 0.3);
-      border-radius: 8px;
-    }
-    
-    .harmonic-content.show {
-      display: block;
-    }
-    
-    .harmonic-list {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-      gap: 10px;
-    }
-    
-    .harmonic-item {
-      background: rgba(255, 255, 255, 0.05);
-      padding: 10px;
-      border-radius: 8px;
-      text-align: center;
-      transition: transform 0.2s;
-    }
-    
-    .harmonic-item:hover {
-      transform: translateY(-3px);
-      background: rgba(255, 255, 255, 0.1);
-    }
-    
-    .harmonic-label {
-      font-size: 0.9rem;
-      color: #a0a0d0;
-      margin-bottom: 5px;
-    }
-    
-    .harmonic-value {
-      font-size: 1.2rem;
-      font-weight: bold;
-      color: #ff7e5f;
-    }
-    
-    .drum-info {
-      background: rgba(0, 0, 0, 0.2);
-      border-radius: 10px;
-      padding: 15px;
-      margin-top: 20px;
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-    
-    .drum-info-title {
-      font-size: 1.2rem;
-      margin-bottom: 10px;
-      color: #ff7e5f;
-    }
-    
-    .drum-info-text {
-      text-align: center;
-      color: #a0a0d0;
-      line-height: 1.6;
-      max-width: 600px;
-    }
-    
-    footer {
-      margin-top: 40px;
-      text-align: center;
-      color: #777;
-      font-size: 0.9rem;
-      padding: 20px;
-    }
-    
-    .debug-panel {
-      background: rgba(0, 0, 0, 0.7);
-      color: #fff;
-      padding: 15px;
-      border-radius: 8px;
-      margin-bottom: 20px;
-      width: 100%;
-      font-family: monospace;
-    }
-    
-    .debug-row {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 5px;
-    }
-    
-    .debug-label {
-      color: #a0a0d0;
-    }
-    
-    .debug-value {
-      font-weight: bold;
-    }
-    
-    .status-indicator {
-      display: inline-block;
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-      margin-right: 8px;
-    }
-    
-    .status-active {
-      background-color: #4caf50;
-    }
-    
-    .status-inactive {
-      background-color: #f44336;
-    }
-    
-    .chart-container {
-      width: 100%;
-      height: 150px;
-      background: rgba(0, 0, 0, 0.2);
-      border-radius: 8px;
-      overflow: hidden;
-      margin-top: 20px;
-    }
-    
-    .confidence-bar {
-      height: 6px;
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 3px;
-      margin-top: 10px;
-      overflow: hidden;
-    }
-    
-    .confidence-level {
-      height: 100%;
-      background: linear-gradient(90deg, #f44336, #4caf50);
-      border-radius: 3px;
-      transition: width 0.3s ease;
-    }
-    
-    .confidence-label {
-      display: flex;
-      justify-content: space-between;
-      margin-top: 5px;
-      font-size: 0.8rem;
-      color: #a0a0d0;
-    }
-    
-    .tools-row {
-      display: flex;
-      gap: 15px;
-      margin-top: 20px;
-      flex-wrap: wrap;
-    }
-    
-    .tool-btn {
-      background: rgba(255, 255, 255, 0.05);
-      color: #a0a0d0;
-      border: none;
-      padding: 8px 15px;
-      border-radius: 20px;
-      cursor: pointer;
-      font-size: 0.9rem;
-      transition: all 0.3s;
-    }
-    
-    .tool-btn:hover {
-      background: rgba(255, 255, 255, 0.1);
-      color: #fff;
-    }
-    
-    .tool-btn.active {
-      background: rgba(255, 126, 95, 0.2);
-      color: #ff7e5f;
-    }
-    
-    .spectrum-display {
-      margin-top: 20px;
-      height: 120px;
-      background: rgba(0, 0, 0, 0.2);
-      border-radius: 8px;
-      padding: 10px;
-      display: flex;
-      align-items: flex-end;
-      justify-content: space-around;
-      gap: 2px;
-    }
-    
-    .spectrum-bar {
-      flex: 1;
-      background: linear-gradient(to top, #ff7e5f, #feb47b);
-      border-radius: 3px 3px 0 0;
-      min-width: 3px;
-      transition: height 0.1s;
-    }
-    
-    .frequency-range {
-      display: flex;
-      justify-content: space-between;
-      margin-top: 10px;
-      color: #a0a0d0;
-      font-size: 0.85rem;
-    }
-
-    .info-box {
-      background: rgba(255, 126, 95, 0.1);
-      border: 1px solid rgba(255, 126, 95, 0.3);
-      border-radius: 8px;
-      padding: 15px;
-      margin: 15px 0;
-      font-size: 0.9rem;
-    }
-    
-    .info-title {
-      color: #ff7e5f;
-      font-weight: bold;
-      margin-bottom: 5px;
-    }
+    .container { max-width: 800px; width: 100%; display:flex; flex-direction:column; align-items:center; }
+    header { text-align:center; margin-bottom:30px; padding:20px; width:100%; position:relative; }
+    h1 { font-size:2.2rem; background:linear-gradient(90deg,#ff7e5f,#feb47b); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+    .back-btn { position:absolute; top:20px; left:20px; background:rgba(255,255,255,0.1); color:#ff7e5f; border:none; padding:10px 15px; border-radius:50px; cursor:pointer; display:flex; gap:6px; align-items:center; }
+    .subtitle { font-size:1.05rem; color:#a0a0d0; margin-top:10px; max-width:600px; }
+    .visualization { width:100%; height:200px; background:rgba(0,0,0,0.3); border-radius:12px; margin-bottom:20px; position:relative; overflow:hidden; box-shadow:0 8px 32px rgba(0,0,0,0.3); }
+    .drum-display { position:absolute; bottom:0; width:100%; height:100%; display:flex; justify-content:center; align-items:flex-end; gap:10px; padding:20px; pointer-events:none; }
+    .drum-pad { pointer-events:none; width:70px; height:70px; background:rgba(255,255,255,0.08); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.9rem; color:rgba(255,255,255,0.8); transition:all 150ms; }
+    .drum-pad.active { transform:scale(1.2); background:rgba(255,126,95,0.85); box-shadow:0 0 20px rgba(255,126,95,0.6); }
+    .controls { display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; justify-content:center; }
+    button { background:linear-gradient(135deg,#ff7e5f,#feb47b); color:white; border:none; padding:12px 20px; font-size:1rem; border-radius:50px; cursor:pointer; min-width:140px; }
+    button:disabled { background:#555; cursor:not-allowed; }
+    .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:18px; width:100%; margin-bottom:20px; }
+    .stat-card { background:rgba(255,255,255,0.05); border-radius:12px; padding:18px; text-align:center; }
+    .stat-value { font-size:2.4rem; font-weight:700; background:linear-gradient(90deg,#ff7e5f,#feb47b); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+    .settings { background:rgba(255,255,255,0.04); border-radius:12px; padding:18px; width:100%; margin-bottom:20px; }
+    .slider-container { margin-bottom:12px; }
+    .slider-container label { display:flex; justify-content:space-between; color:#a0a0d0; margin-bottom:8px; }
+    input[type="range"] { width:100%; }
+    .canvas-container { width:100%; height:150px; margin-top:10px; background:rgba(0,0,0,0.2); border-radius:8px; overflow:hidden; }
+    canvas { width:100%; height:100%; display:block; }
+    .harmonic-display { margin-top:10px; background:rgba(0,0,0,0.2); border-radius:10px; padding:12px; width:100%; }
+    .harmonic-list { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+    .harmonic-item { background:rgba(255,255,255,0.03); padding:8px; border-radius:8px; text-align:center; }
+    .spectrum-display { margin-top:12px; width:100%; display:flex; gap:2px; align-items:flex-end; height:120px; background:rgba(0,0,0,0.15); border-radius:8px; padding:8px; }
+    .spectrum-bar { flex:1; min-width:3px; border-radius:3px 3px 0 0; background:linear-gradient(to top,#ff7e5f,#feb47b); transition:height 0.08s; }
+    .frequency-range { display:flex; justify-content:space-between; margin-top:8px; color:#a0a0d0; font-size:0.85rem; }
+    .debug-panel { background:rgba(0,0,0,0.7); color:#fff; padding:12px; border-radius:8px; width:100%; font-family:monospace; margin-bottom:12px; }
+    .debug-row { display:flex; justify-content:space-between; margin-bottom:6px; }
+    .info-box { background:rgba(255,126,95,0.08); padding:10px; border-radius:8px; margin-top:10px; width:100%; }
   </style>
 </head>
 <body>
   <div class="container">
     <header>
-      <button class="back-btn">
-        <svg viewBox="0 0 24 24">
-          <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
-        </svg>
-        Back
-      </button>
+      <button class="back-btn">◀ Back</button>
       <h1>Professional Drum Frequency Analyzer</h1>
       <p class="subtitle">Accurate frequency analysis for drum tuning and sound engineering</p>
     </header>
 
     <div class="debug-panel">
-      <div class="debug-row">
-        <div class="debug-label">Status:</div>
-        <div class="debug-value"><span class="status-indicator status-active"></span> Ready</div>
-      </div>
-      <div class="debug-row">
-        <div class="debug-label">FFT Size:</div>
-        <div class="debug-value" id="fftSize">8192</div>
-      </div>
-      <div class="debug-row">
-        <div class="debug-label">Sensitivity:</div>
-        <div class="debug-value" id="sensitivity">High</div>
-      </div>
-      <div class="debug-row">
-        <div class="debug-label">Min Frequency:</div>
-        <div class="debug-value" id="minFreq">20 Hz</div>
-      </div>
+      <div class="debug-row"><div>Status:</div><div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#4caf50;margin-right:8px"></span>Ready</div></div>
+      <div class="debug-row"><div>FFT Size:</div><div id="fftSize">8192</div></div>
+      <div class="debug-row"><div>Sensitivity:</div><div id="sensitivityLabel">0.10</div></div>
+      <div class="debug-row"><div>Min Frequency:</div><div id="minFreq">20 Hz</div></div>
     </div>
 
     <div class="visualization">
       <canvas id="spectrumCanvas"></canvas>
+      <div class="drum-display"></div>
     </div>
 
     <div class="controls">
       <button id="startBtn">Start Analysis</button>
       <button id="stopBtn" disabled>Stop Analysis</button>
+    </div>
+
+    <div class="settings">
+      <div class="slider-container">
+        <label>Sound Sensitivity <span id="sensitivityValueDisplay">0.10</span></label>
+        <input id="sensitivitySlider" type="range" min="0.05" max="0.15" step="0.005" value="0.10">
+      </div>
     </div>
 
     <div class="stats">
@@ -570,52 +93,24 @@
       </div>
       <div class="stat-card">
         <h2>Signal Confidence</h2>
-        <div class="confidence-bar">
-          <div class="confidence-level" style="width: 0%"></div>
+        <div style="margin-top:10px;width:100%;background:rgba(255,255,255,0.08);border-radius:6px;height:8px;overflow:hidden">
+          <div class="confidence-level" style="width:0%;height:100%;background:linear-gradient(90deg,#f44336,#4caf50);"></div>
         </div>
-        <div class="confidence-label">
-          <span>Low</span>
-          <span id="confidenceValue">0%</span>
-          <span>High</span>
-        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;color:#a0a0d0;font-size:0.85rem"><span>Low</span><span id="confidenceValue">0%</span><span>High</span></div>
       </div>
-    </div>
-
-    <div class="info-box">
-      <div class="info-title">Low Frequency Fix Applied</div>
-      <p>We've implemented parabolic interpolation with noise compensation to accurately detect low frequencies down to 20Hz.</p>
     </div>
 
     <div class="harmonic-display">
-      <div class="harmonic-header" id="harmonicToggle">
-        <h2>Harmonic Analysis</h2>
-        <span>▼</span>
-      </div>
-      <div class="harmonic-content" id="harmonicContent">
-        <div class="harmonic-list">
-          <div class="harmonic-item">
-            <div class="harmonic-label">1st Harmonic</div>
-            <div class="harmonic-value" id="harmonic1">-- Hz</div>
-          </div>
-          <div class="harmonic-item">
-            <div class="harmonic-label">2nd Harmonic</div>
-            <div class="harmonic-value" id="harmonic2">-- Hz</div>
-          </div>
-          <div class="harmonic-item">
-            <div class="harmonic-label">3rd Harmonic</div>
-            <div class="harmonic-value" id="harmonic3">-- Hz</div>
-          </div>
-          <div class="harmonic-item">
-            <div class="harmonic-label">4th Harmonic</div>
-            <div class="harmonic-value" id="harmonic4">-- Hz</div>
-          </div>
-        </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3 style="margin:0">Harmonic Analysis</h3><small style="color:#a0a0d0">1×, 2×, 3×, 4×</small></div>
+      <div class="harmonic-list">
+        <div class="harmonic-item"><div class="harmonic-label">1st</div><div class="harmonic-value" id="harmonic1">-- Hz</div></div>
+        <div class="harmonic-item"><div class="harmonic-label">2nd</div><div class="harmonic-value" id="harmonic2">-- Hz</div></div>
+        <div class="harmonic-item"><div class="harmonic-label">3rd</div><div class="harmonic-value" id="harmonic3">-- Hz</div></div>
+        <div class="harmonic-item"><div class="harmonic-label">4th</div><div class="harmonic-value" id="harmonic4">-- Hz</div></div>
       </div>
     </div>
 
-    <div class="spectrum-display" id="spectrumDisplay">
-      <!-- Spectrum bars will be generated by JS -->
-    </div>
+    <div class="spectrum-display" id="spectrumDisplay"></div>
     <div class="frequency-range">
       <span>20 Hz</span>
       <span>200 Hz</span>
@@ -623,27 +118,17 @@
       <span>20 kHz</span>
     </div>
 
-    <div class="drum-info">
-      <div class="drum-info-title">Drum Tuning Tips</div>
-      <div class="drum-info-text">
-        For kick drums, aim for 60-80Hz fundamental. Snares sound best between 180-220Hz. Toms range from 80-200Hz depending on size.
-      </div>
+    <div class="info-box">
+      <div style="font-weight:bold;color:#ff7e5f;margin-bottom:6px">Low Frequency Fix Applied</div>
+      <div>Using float FFT data, linear magnitude conversion and parabolic interpolation to detect fundamentals down to ~20Hz more reliably.</div>
     </div>
 
-    <div class="tools-row">
-      <button class="tool-btn active">Precision Mode</button>
-      <button class="tool-btn">Low Boost</button>
-      <button class="tool-btn">Save Snapshot</button>
-    </div>
-
-    <footer>
-      Professional Drum Frequency Analyzer v2.1 | Low Frequency Fix Applied
-    </footer>
+    <footer style="margin-top:18px;color:#888">Professional Drum Frequency Analyzer v2.1 — Fixed</footer>
   </div>
 
-   <script>
+  <script>
     document.addEventListener('DOMContentLoaded', () => {
-      // Audio analysis elements
+      // DOM
       const startBtn = document.getElementById('startBtn');
       const stopBtn = document.getElementById('stopBtn');
       const fundamentalFreqEl = document.getElementById('fundamentalFreq');
@@ -653,270 +138,315 @@
       const spectrumDisplay = document.getElementById('spectrumDisplay');
       const spectrumCanvas = document.getElementById('spectrumCanvas');
       const canvasCtx = spectrumCanvas.getContext('2d');
-      
-      // Harmonic elements
-      const harmonicToggle = document.getElementById('harmonicToggle');
-      const harmonicContent = document.getElementById('harmonicContent');
+      const fftSizeLabel = document.getElementById('fftSize');
+      const sensitivitySlider = document.getElementById('sensitivitySlider');
+      const sensitivityValueDisplay = document.getElementById('sensitivityValueDisplay');
       const harmonicEls = {
         1: document.getElementById('harmonic1'),
         2: document.getElementById('harmonic2'),
         3: document.getElementById('harmonic3'),
-        4: document.getElementById('harmonic4')
+        4: document.getElementById('harmonic4'),
       };
-      
-      // Audio variables
-      let audioContext;
-      let analyser;
-      let microphone;
+
+      // Audio vars
+      let audioContext = null;
+      let analyser = null;
+      let microphone = null;
+      let mediaStream = null; // store real MediaStream so we can stop it later
       let isRecording = false;
-      let animationId;
-      
-      // Initialize spectrum bars
+      let animationId = null;
+      let floatDataArray = null;
+      let spectrumBarsCount = 64;
+
+      // init UI
+      fftSizeLabel.textContent = 8192;
+      sensitivityValueDisplay.textContent = parseFloat(sensitivitySlider.value).toFixed(3);
+
+      // set canvas pixel ratio
+      function resizeCanvas() {
+        const dpr = window.devicePixelRatio || 1;
+        const w = spectrumCanvas.clientWidth;
+        const h = spectrumCanvas.clientHeight;
+        spectrumCanvas.width = Math.max(1, Math.floor(w * dpr));
+        spectrumCanvas.height = Math.max(1, Math.floor(h * dpr));
+        canvasCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+      window.addEventListener('resize', resizeCanvas);
+      resizeCanvas();
+
+      // initialize spectrum bars
       function initSpectrumBars() {
         spectrumDisplay.innerHTML = '';
-        for (let i = 0; i < 64; i++) {
+        for (let i = 0; i < spectrumBarsCount; i++) {
           const bar = document.createElement('div');
           bar.className = 'spectrum-bar';
           bar.style.height = '5px';
           spectrumDisplay.appendChild(bar);
         }
       }
-      
-      // Toggle harmonic display
-      harmonicToggle.addEventListener('click', () => {
-        harmonicContent.classList.toggle('show');
-        harmonicToggle.querySelector('span').textContent = 
-          harmonicContent.classList.contains('show') ? '▲' : '▼';
-      });
-      
-      // Fixed: Removed the nested event listener
-      // Start audio analysis
-      startBtn.addEventListener('click', async () => {
-        if (isRecording) return;
-        
-        try {
-          // Initialize audio context
-          if (!audioContext) {
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-          }
-          
-          // Resume audio context if needed (especially for iOS/Safari)
-          if (audioContext.state === 'suspended') {
-            await audioContext.resume();
-          }
-          
-          // Clean up any existing microphone
-          if (microphone) {
-            microphone.disconnect();
-            microphone.mediaStream.getTracks().forEach(track => track.stop());
-          }
+      initSpectrumBars();
 
-          // Create analyser with larger FFT for better low frequency resolution
-          analyser = audioContext.createAnalyser();
-          analyser.fftSize = 8192; // Increased for low frequency accuracy
-          analyser.minDecibels = -90;
-          analyser.maxDecibels = -20;
-          analyser.smoothingTimeConstant = 0.7;
-          
-          // Get microphone access
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          microphone = audioContext.createMediaStreamSource(stream);
-          microphone.connect(analyser);
-          
-          // Set canvas dimensions
-          spectrumCanvas.width = spectrumCanvas.offsetWidth;
-          spectrumCanvas.height = spectrumCanvas.offsetHeight;
-          
-          isRecording = true;
-          startBtn.disabled = true;
-          stopBtn.disabled = false;
-          
-          // Initialize spectrum bars
-          initSpectrumBars();
-          
-          // Start visualization loop
-          visualize();
-        } catch (err) {
-          console.error('Error accessing microphone:', err);
-          alert('Could not access microphone. Please check permissions.');
-        }
-      });
-      
-      // Stop audio analysis
-      stopBtn.addEventListener('click', () => {
-        if (!isRecording) return;
-        
-        isRecording = false;
-        if (microphone) {
-          microphone.disconnect();
-          microphone.mediaStream.getTracks().forEach(track => track.stop());
-          microphone = null;
-        }
-        if (audioContext) {
-          audioContext.close().then(() => {
-            audioContext = null;
-          });
-        }
-        startBtn.disabled = false;
-        stopBtn.disabled = true;
-        
-        // Stop animation
-        cancelAnimationFrame(animationId);
-      });
-      
-      // Frequency analysis with harmonic validation
-      function analyzeFundamentalFrequency(dataArray, sampleRate, fftSize) {
-        const bufferLength = dataArray.length;
-        const frequencyResolution = sampleRate / fftSize;
-        
-        // 1. Find the 5 strongest peaks in low frequency range (20-300Hz)
-        const lowFreqMaxBin = Math.floor(300 / frequencyResolution);
-        const peaks = [];
-        
-        for (let i = 2; i < lowFreqMaxBin; i++) {
-          if (dataArray[i] > dataArray[i-1] && dataArray[i] > dataArray[i+1]) {
-            peaks.push({
-              bin: i,
-              value: dataArray[i],
-              freq: i * frequencyResolution
-            });
-          }
-        }
-        
-        // Sort by amplitude and take top 5
-        peaks.sort((a, b) => b.value - a.value).splice(5);
-        
-        // 2. Validate peaks by checking for harmonics
-        const validatedPeaks = peaks.map(peak => {
-          let harmonicScore = 0;
-          
-          // Check for harmonics (2x, 3x, 4x frequency)
-          for (let h = 2; h <= 4; h++) {
-            const harmonicFreq = peak.freq * h;
-            const harmonicBin = Math.round(harmonicFreq / frequencyResolution);
-            
-            if (harmonicBin < bufferLength && dataArray[harmonicBin] > peak.value * 0.3) {
-              harmonicScore++;
-            }
-          }
-          
-          return {
-            ...peak,
-            harmonicScore,
-            confidence: peak.value * (1 + harmonicScore * 0.2) // Boost confidence for harmonic matches
-          };
-        });
-                
-        // 3. Select the peak with highest confidence that has at least one harmonic
-        validatedPeaks.sort((a, b) => b.confidence - a.confidence);
-        const bestPeak = validatedPeaks.find(p => p.harmonicScore > 0) || validatedPeaks[0] || { freq: 0, confidence: 0 };
-        
-        // 4. Apply parabolic interpolation for precise frequency
-        if (bestPeak.bin > 0 && bestPeak.bin < bufferLength - 1) {
-          const prev = dataArray[bestPeak.bin - 1];
-          const next = dataArray[bestPeak.bin + 1];
-          const delta = (next - prev) / (2 * (2 * bestPeak.value - prev - next));
-          bestPeak.freq = (bestPeak.bin + delta) * frequencyResolution;
-        }
-        
-        return {
-          frequency: bestPeak.freq,
-          confidence: Math.min(100, Math.round(bestPeak.confidence / 2.55))
-        };
-      }
-      
-      // Visualize audio data
-      function visualize() {
-        if (!isRecording) return;
-        
-        animationId = requestAnimationFrame(visualize);
-        
-        // Get frequency data
-        const bufferLength = analyser.frequencyBinCount;
-        const dataArray = new Uint8Array(bufferLength);
-        analyser.getByteFrequencyData(dataArray);
-        
-        // Clear canvas
-        canvasCtx.clearRect(0, 0, spectrumCanvas.width, spectrumCanvas.height);
-        
-        // Draw frequency spectrum
-        const barWidth = (spectrumCanvas.width / bufferLength) * 2.5;
-        let barHeight;
-        let x = 0;
-        
-        // Advanced frequency analysis with harmonic validation
-        const analysis = analyzeFundamentalFrequency(dataArray, audioContext.sampleRate, analyser.fftSize);
-        const fundamentalFrequency = analysis.frequency;
-        const confidence = analysis.confidence;
-          
-        fundamentalFreqEl.textContent = fundamentalFrequency.toFixed(1) + ' Hz';
-        peakAmplitudeEl.textContent = Math.round(analysis.confidence * 2.55) + ' dB';
-        confidenceValueEl.textContent = confidence + '%';
-        confidenceLevelEl.style.width = confidence + '%';
-          
-        // Update harmonic displays
-        for (let i = 1; i <= 4; i++) {
-          harmonicEls[i].textContent = (fundamentalFrequency * (i + 1)).toFixed(1) + ' Hz';
-        }
-        
-        // Update spectrum bars
-        const spectrumBars = spectrumDisplay.querySelectorAll('.spectrum-bar');
-        const fundamentalBin = Math.floor(fundamentalFrequency / (audioContext.sampleRate / analyser.fftSize));
-        
-        for (let i = 0; i < spectrumBars.length; i++) {
-          // Logarithmic scaling for better low-frequency representation
-          const bin = Math.floor(Math.pow(i / spectrumBars.length, 2) * bufferLength);
-          const value = dataArray[bin] || 0;
-          const height = Math.max(5, value / 255 * 100);
-          spectrumBars[i].style.height = height + 'px';
-          
-          // Highlight fundamental frequency
-          if (bin === fundamentalBin) {
-            spectrumBars[i].style.background = 'linear-gradient(to top, #4caf50, #8bc34a)';
-          } else {
-            spectrumBars[i].style.background = 'linear-gradient(to top, #ff7e5f, #feb47b)';
-          }
-        }
-        
-        // Draw waveform on canvas
-        for (let i = 0; i < bufferLength; i++) {
-          barHeight = (dataArray[i] / 255) * spectrumCanvas.height;
-          
-          // Highlight low frequencies
-          const isLowFreq = i < bufferLength / 4;
-          canvasCtx.fillStyle = isLowFreq ? 
-            `rgba(255, 126, 95, ${dataArray[i] / 255})` : 
-            `rgba(254, 180, 123, ${dataArray[i] / 255})`;
-          
-          canvasCtx.fillRect(x, spectrumCanvas.height - barHeight, barWidth, barHeight);
-          x += barWidth + 1;
-        }
-      }
-      
-      // Simulate drum hits for demo
-      setInterval(() => {
-        if (!isRecording) return;
-        
-        // Randomly trigger drum pad visualization
-        const pads = document.querySelectorAll('.drum-pad');
-        const randomPad = pads[Math.floor(Math.random() * pads.length)];
-        
-        randomPad.classList.add('active');
-        setTimeout(() => {
-          randomPad.classList.remove('active');
-        }, 150);
-      }, 1500);
-      
-      // Initialize drum pads
-      const drumNames = ['Kick', 'Snare', 'Hi-Hat', 'Tom 1', 'Tom 2', 'Floor Tom', 'Ride', 'Crash'];
+      // drum pads (demo)
+      const drumNames = ['Kick','Snare','Hi-Hat','Tom 1','Tom 2','Floor Tom','Ride','Crash'];
       const drumDisplay = document.querySelector('.drum-display');
-      
       drumNames.forEach(name => {
         const pad = document.createElement('div');
         pad.className = 'drum-pad';
         pad.textContent = name;
         drumDisplay.appendChild(pad);
       });
+
+      // demo pad animation moved AFTER pads exist
+      setInterval(() => {
+        if (!isRecording) return;
+        const pads = document.querySelectorAll('.drum-pad');
+        if (!pads.length) return;
+        const idx = Math.floor(Math.random() * pads.length);
+        pads[idx].classList.add('active');
+        setTimeout(() => pads[idx].classList.remove('active'), 150);
+      }, 1500);
+
+      // sensitivity control
+      let sensitivity = parseFloat(sensitivitySlider.value); // 0.05 - 0.15
+      sensitivitySlider.addEventListener('input', (e) => {
+        sensitivity = parseFloat(e.target.value);
+        sensitivityValueDisplay.textContent = sensitivity.toFixed(3);
+        document.getElementById('sensitivityLabel').textContent = sensitivity.toFixed(2);
+      });
+
+      // Start / Stop
+      startBtn.addEventListener('click', startAnalysis);
+      stopBtn.addEventListener('click', stopAnalysis);
+
+      async function startAnalysis() {
+        if (isRecording) return;
+        try {
+          if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+          if (audioContext.state === 'suspended') await audioContext.resume();
+
+          // stop any previous media stream safely
+          if (mediaStream) {
+            mediaStream.getTracks().forEach(t => t.stop());
+            mediaStream = null;
+          }
+          if (microphone) {
+            try { microphone.disconnect(); } catch(e) {}
+            microphone = null;
+          }
+
+          // create analyser
+          analyser = audioContext.createAnalyser();
+          analyser.fftSize = 8192; // bigFFT for low-frequency resolution
+          analyser.minDecibels = -100;
+          analyser.maxDecibels = -10;
+          analyser.smoothingTimeConstant = 0.6;
+          const bufferLength = analyser.frequencyBinCount;
+          floatDataArray = new Float32Array(bufferLength);
+
+          // get stream
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          mediaStream = stream;
+          microphone = audioContext.createMediaStreamSource(stream);
+          microphone.connect(analyser);
+
+          isRecording = true;
+          startBtn.disabled = true;
+          stopBtn.disabled = false;
+
+          resizeCanvas();
+          visualize();
+        } catch (err) {
+          console.error('Start failed:', err);
+          alert('Could not start audio. Check microphone permissions.');
+        }
+      }
+
+      function stopAnalysis() {
+        if (!isRecording) return;
+        isRecording = false;
+
+        if (microphone) {
+          try { microphone.disconnect(); } catch(e) {}
+          microphone = null;
+        }
+        if (mediaStream) {
+          mediaStream.getTracks().forEach(t => t.stop());
+          mediaStream = null;
+        }
+        if (analyser) {
+          try { analyser.disconnect(); } catch(e) {}
+          analyser = null;
+        }
+        if (audioContext) {
+          audioContext.close().catch(()=>{}).finally(() => { audioContext = null; });
+        }
+
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+
+        if (animationId) cancelAnimationFrame(animationId);
+        animationId = null;
+        fundamentalFreqEl.textContent = '-- Hz';
+        peakAmplitudeEl.textContent = '-- dB';
+        confidenceValueEl.textContent = '0%';
+        confidenceLevelEl.style.width = '0%';
+      }
+
+      // Utility: convert bin -> frequency resolution
+      function binToFreq(bin, sampleRate, fftSize) {
+        return bin * (sampleRate / fftSize);
+      }
+
+      // analyze fundamentals using float FFT data and linear mags
+      function analyzeFundamentalFrequency(floatDbArray, sampleRate, fftSize) {
+        const bufferLength = floatDbArray.length;
+        // convert dB -> linear amplitude (20 * log10 -> amplitude)
+        const mags = new Float32Array(bufferLength);
+        let maxMag = 0;
+        for (let i = 0; i < bufferLength; i++) {
+          // floatDbArray contains negative dB values (e.g. -80..-10)
+          const db = floatDbArray[i];
+          const lin = Math.pow(10, db / 20); // linear amplitude
+          mags[i] = lin;
+          if (lin > maxMag) maxMag = lin;
+        }
+        if (maxMag === 0) maxMag = 1e-12;
+
+        // frequency resolution
+        const freqRes = sampleRate / fftSize;
+        const minBin = Math.max(2, Math.floor(20 / freqRes)); // >=20Hz
+        const lowFreqMaxBin = Math.min(bufferLength - 2, Math.floor(300 / freqRes)); // up to 300Hz
+
+        // find local peaks in the low band with normalized magnitude threshold (user sensitivity)
+        const normalized = new Float32Array(bufferLength);
+        for (let i = minBin; i <= lowFreqMaxBin; i++) normalized[i] = mags[i] / maxMag;
+
+        const peakCandidates = [];
+        for (let i = minBin; i <= lowFreqMaxBin; i++) {
+          // local peak & above sensitivity threshold
+          if (normalized[i] > normalized[i - 1] && normalized[i] > normalized[i + 1] && normalized[i] >= sensitivity) {
+            peakCandidates.push({ bin: i, norm: normalized[i], mag: mags[i], db: 20 * Math.log10(mags[i] + 1e-12), freq: i * freqRes });
+          }
+        }
+
+        // take top 6 by norm
+        peakCandidates.sort((a, b) => b.norm - a.norm);
+        const topPeaks = peakCandidates.slice(0, 6);
+
+        // validate by checking harmonics and compute confidence
+        const validated = topPeaks.map(p => {
+          let harmonicScore = 0;
+          for (let h = 2; h <= 4; h++) {
+            const hBin = Math.round((p.bin * h));
+            if (hBin < bufferLength && normalized[hBin] >= p.norm * 0.25) {
+              harmonicScore++;
+            }
+          }
+          // parabolic interpolation (using linear mag values)
+          let refinedFreq = p.freq;
+          const b = p.bin;
+          if (b > 1 && b < bufferLength - 1) {
+            const left = mags[b - 1], center = mags[b], right = mags[b + 1];
+            const denom = (left - 2 * center + right);
+            if (Math.abs(denom) > 1e-12) {
+              const delta = 0.5 * (left - right) / denom; // shift in bins
+              refinedFreq = (b + delta) * freqRes;
+            }
+          }
+          // confidence scale: normalized peak * 80 + harmonic*5 (cap 100)
+          const confidence = Math.min(100, Math.round(p.norm * 80 + harmonicScore * 5));
+          return { ...p, harmonicScore, refinedFreq, confidence };
+        });
+
+        // choose best: highest confidence, prefer at least one harmonic
+        validated.sort((a, b) => {
+          if (b.confidence !== a.confidence) return b.confidence - a.confidence;
+          return b.norm - a.norm;
+        });
+
+        const best = validated[0] || null;
+
+        if (!best) return { frequency: 0, confidence: 0, peakDb: null };
+
+        return { frequency: best.refinedFreq, confidence: best.confidence, peakDb: best.db };
+      }
+
+      // main visualization loop
+      function visualize() {
+        if (!isRecording || !analyser || !audioContext) return;
+        animationId = requestAnimationFrame(visualize);
+
+        const bufferLength = analyser.frequencyBinCount; // fftSize/2
+        if (!floatDataArray || floatDataArray.length !== bufferLength) floatDataArray = new Float32Array(bufferLength);
+        analyser.getFloatFrequencyData(floatDataArray);
+
+        // analyze fundamentals
+        const analysis = analyzeFundamentalFrequency(floatDataArray, audioContext.sampleRate, analyser.fftSize);
+        const fundamentalFrequency = analysis.frequency || 0;
+        const confidence = analysis.confidence || 0;
+
+        // Update UI
+        if (fundamentalFrequency > 0) {
+          fundamentalFreqEl.textContent = fundamentalFrequency.toFixed(1) + ' Hz';
+        } else {
+          fundamentalFreqEl.textContent = '-- Hz';
+        }
+        if (analysis.peakDb !== null) {
+          peakAmplitudeEl.textContent = analysis.peakDb.toFixed(0) + ' dB';
+        } else {
+          peakAmplitudeEl.textContent = '-- dB';
+        }
+        confidenceValueEl.textContent = confidence + '%';
+        confidenceLevelEl.style.width = confidence + '%';
+
+        for (let i = 1; i <= 4; i++) {
+          if (fundamentalFrequency > 0) harmonicEls[i].textContent = (fundamentalFrequency * i).toFixed(1) + ' Hz';
+          else harmonicEls[i].textContent = '-- Hz';
+        }
+
+        // draw spectrum bars (log-ish mapping to show low freqs better)
+        const spectrumBars = spectrumDisplay.querySelectorAll('.spectrum-bar');
+        const bars = spectrumBars.length;
+        const sampleRate = audioContext.sampleRate;
+        const freqRes = sampleRate / analyser.fftSize;
+
+        for (let i = 0; i < bars; i++) {
+          // place bins with quadratic allocation to emphasize lows
+          const bin = Math.floor(Math.pow(i / bars, 2) * bufferLength);
+          const db = floatDataArray[bin] || -130;
+          const lin = Math.pow(10, db / 20);
+          // map lin (very small) to visual height
+          const height = Math.max(3, Math.min(120, (lin * 300) )); // tweak multiplier for visible range
+          spectrumBars[i].style.height = height + 'px';
+
+          // highlight approximate fundamental bin
+          const fundBin = Math.floor(fundamentalFrequency / freqRes);
+          if (Math.abs(bin - fundBin) <= 1 && fundamentalFrequency > 0) {
+            spectrumBars[i].style.background = 'linear-gradient(to top,#4caf50,#8bc34a)';
+          } else {
+            spectrumBars[i].style.background = 'linear-gradient(to top,#ff7e5f,#feb47b)';
+          }
+        }
+
+        // draw frequency waveform-style bars on canvas for detail
+        canvasCtx.clearRect(0, 0, spectrumCanvas.width, spectrumCanvas.height);
+        const drawBins = bufferLength;
+        const canvasW = spectrumCanvas.width / (window.devicePixelRatio || 1);
+        const canvasH = spectrumCanvas.height / (window.devicePixelRatio || 1);
+        const barW = canvasW / Math.min(512, drawBins);
+        let x = 0;
+        const maxDraw = Math.min(drawBins, 512);
+        for (let i = 0; i < maxDraw; i++) {
+          const db = floatDataArray[i];
+          const lin = Math.pow(10, db / 20);
+          const h = Math.max(1, (lin * canvasH * 1.2));
+          const isLow = i < (drawBins / 6);
+          canvasCtx.fillStyle = isLow ? `rgba(255,126,95,${Math.min(1, (lin*4))})` : `rgba(254,180,123,${Math.min(1, (lin*2))})`;
+          canvasCtx.fillRect(x, canvasH - h, barW, h);
+          x += barW;
+        }
+      }
     });
   </script>
 </body>
