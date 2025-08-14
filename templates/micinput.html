@@ -1,886 +1,423 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Professional Drum Frequency Analyzer — Verbose Full</title>
-  <style>
-    /* =========================
-       FULL ORIGINAL-STYLE STYLING
-       (kept nearly identical to your original, expanded with extra classes kept)
-       ========================= */
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      background: linear-gradient(135deg, #1a1a2e, #16213e);
-      color: #fff;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      min-height: 100vh;
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      overflow-x: hidden;
-    }
-    .container {
-      max-width: 980px;
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-    header {
-      text-align: center;
-      margin-bottom: 30px;
-      padding: 20px;
-      width: 100%;
-      position: relative;
-    }
-    h1 {
-      font-size: 2.5rem;
-      margin-bottom: 10px;
-      background: linear-gradient(90deg, #ff7e5f, #feb47b);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      text-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    }
-    .back-btn {
-      position: absolute;
-      top: 20px;
-      left: 20px;
-      background: rgba(255,255,255,0.1);
-      color: #ff7e5f;
-      border: none;
-      padding: 10px 15px;
-      border-radius: 50px;
-      cursor: pointer;
-      font-size: 0.9rem;
-      transition: all 0.3s;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      z-index: 10;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-      width: auto;
-      min-width: 90px;
-    }
-    .back-btn:hover { background: rgba(255,126,95,0.2); transform: translateY(-2px); }
-    .subtitle { font-size: 1.2rem; color: #a0a0d0; max-width: 700px; margin: 0 auto; margin-top: 15px; }
-
-    /* Visualization area */
-    .visualization {
-      width: 100%;
-      height: 230px;
-      background: rgba(0,0,0,0.3);
-      border-radius: 12px;
-      margin-bottom: 30px;
-      position: relative;
-      overflow: hidden;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-    }
-    canvas { width: 100%; height: 100%; display:block; }
-
-    /* Drum display (kept) */
-    .drum-display {
-      position: absolute;
-      bottom: 0;
-      width: 100%;
-      height: 100%;
-      display: flex;
-      justify-content: center;
-      align-items: flex-end;
-      gap: 10px;
-      padding: 20px;
-      pointer-events: none;
-    }
-    .drum-pad {
-      width: 70px;
-      height: 70px;
-      background: rgba(255,255,255,0.1);
-      border-radius: 50%;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      font-size: 1rem;
-      font-weight: bold;
-      color: rgba(255,255,255,0.8);
-      transition: all 140ms ease-out;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-      will-change: transform, background-color;
-    }
-    .drum-pad.active {
-      transform: scale(1.2);
-      background: rgba(255,126,95,0.85);
-      box-shadow: 0 0 20px rgba(255,126,95,0.7);
-    }
-
-    /* Controls & settings */
-    .controls { display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; justify-content: center; align-items:center; }
-    .controls button, .tools-row button { background: linear-gradient(135deg, #ff7e5f, #feb47b); color:white; border:none; padding:12px 18px; font-size:1rem; font-weight:600; border-radius:50px; cursor:pointer; box-shadow: 0 4px 15px rgba(255,126,95,0.3); }
-    .controls button:disabled { background: #555; cursor:not-allowed; transform: none; box-shadow:none; }
-
-    .settings {
-      background: rgba(255,255,255,0.03);
-      border-radius: 12px;
-      padding: 18px;
-      width: 100%;
-      display:flex;
-      gap:12px;
-      align-items:center;
-      justify-content:space-between;
-      margin-bottom: 18px;
-      flex-wrap:wrap;
-    }
-    .slider-container { margin-bottom: 0; flex:1; min-width:240px; }
-    .slider-container label { display:block; margin-bottom:8px; font-size:1rem; color:#a0a0d0; display:flex; justify-content:space-between; align-items:center; }
-    .slider-container span { font-weight:bold; color:#ff7e5f; }
-    input[type="range"] { width:100%; height:8px; border-radius:4px; background: rgba(255,255,255,0.08); -webkit-appearance:none; }
-    input[type="range"]::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:#ff7e5f; cursor:pointer; box-shadow:0 0 8px rgba(255,126,95,0.7); }
-
-    .fft-select, .select { padding:8px 12px; border-radius:8px; background: rgba(0,0,0,0.22); color:#fff; border:1px solid rgba(255,255,255,0.03); }
-
-    /* Stats + harmonic */
-    .stats { display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:18px; width:100%; margin-bottom: 20px; }
-    .stat-card { background: rgba(255,255,255,0.05); border-radius: 12px; padding: 20px; text-align:center; backdrop-filter: blur(10px); box-shadow: 0 8px 32px rgba(0,0,0,0.1); border: 1px solid rgba(255,255,255,0.06); }
-    .stat-card h2 { font-size:1.05rem; margin-bottom:8px; color:#a0a0d0; }
-    .stat-value { font-size:2.6rem; font-weight:700; background:linear-gradient(90deg,#ff7e5f,#feb47b); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
-
-    .harmonic-display { margin-top: 8px; background: rgba(0,0,0,0.04); border-radius: 10px; padding: 16px; width:100%; }
-    .harmonic-list { display:flex; gap:8px; align-items:center; justify-content:space-between; flex-wrap:wrap; }
-
-    /* Spectrum display */
-    .spectrum-display {
-      margin-top: 12px;
-      width: 100%;
-      height: 140px;
-      background: rgba(0,0,0,0.15);
-      border-radius: 8px;
-      padding: 10px;
-      display:flex;
-      align-items:flex-end;
-      gap:2px;
-      overflow:hidden;
-    }
-    .spectrum-bar { flex:1; background: linear-gradient(to top, #ff7e5f, #feb47b); border-radius: 3px 3px 0 0; min-width: 3px; transition: height 0.08s; }
-
-    .frequency-range { display:flex; justify-content:space-between; margin-top:10px; color:#a0a0d0; font-size:0.85rem; width:100%; }
-
-    .debug-panel { background: rgba(0,0,0,0.7); color:#fff; padding:15px; border-radius:8px; margin-bottom: 18px; width:100%; font-family: monospace; }
-    .debug-row { display:flex; justify-content:space-between; margin-bottom:6px; }
-    .status-indicator { display:inline-block; width:12px; height:12px; border-radius:50%; margin-right:8px; }
-    .status-active { background-color:#4caf50; }
-    .status-inactive { background-color:#f44336; }
-
-    .tools-row { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
-
-    .info-box { background: rgba(255,126,95,0.08); border-radius:8px; padding:14px; width:100%; margin-top:12px; font-size:0.95rem; color:#ddd; }
-
-    footer { margin-top: 30px; color:#888; font-size:0.9rem; }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Drum Frequency Analyzer — SNR & Envelope Fix</title>
+<style>
+/* keep UI similar to your verbose version (compacted) */
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:linear-gradient(135deg,#1a1a2e,#16213e);color:#fff;font-family:Segoe UI, Tahoma, Verdana;min-height:100vh;padding:20px;display:flex;flex-direction:column;align-items:center}
+.container{max-width:980px;width:100%}
+header{text-align:center;margin-bottom:18px}
+h1{font-size:2.2rem;background:linear-gradient(90deg,#ff7e5f,#feb47b);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.subtitle{color:#a0a0d0;margin-top:6px}
+.visualization{width:100%;height:230px;background:rgba(0,0,0,0.28);border-radius:12px;margin-bottom:18px;position:relative;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.25)}
+canvas{width:100%;height:100%;display:block}
+.drum-display{position:absolute;bottom:0;width:100%;height:100%;display:flex;justify-content:center;align-items:flex-end;gap:10px;padding:20px;pointer-events:none}
+.drum-pad{pointer-events:none;width:70px;height:70px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.85);transition:all 160ms}
+.drum-pad.active{transform:scale(1.16);background:rgba(255,126,95,0.86);box-shadow:0 0 22px rgba(255,126,95,.5)}
+.controls{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;justify-content:center}
+button{background:linear-gradient(135deg,#ff7e5f,#feb47b);color:#fff;border:none;padding:12px 18px;border-radius:999px;cursor:pointer;font-weight:600}
+button:disabled{background:#555;cursor:not-allowed}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;width:100%;margin-bottom:12px}
+.stat-card{background:rgba(255,255,255,0.04);border-radius:12px;padding:16px;text-align:center}
+.stat-value{font-size:2.4rem;font-weight:700;background:linear-gradient(90deg,#ff7e5f,#feb47b);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.settings{background:rgba(255,255,255,0.04);border-radius:12px;padding:14px;display:flex;gap:12px;align-items:center;width:100%;margin-bottom:12px;flex-wrap:wrap}
+.slider-container{flex:1;min-width:220px}
+input[type="range"]{width:100%}
+.spectrum-display{margin-top:10px;width:100%;display:flex;gap:2px;align-items:flex-end;height:120px;background:rgba(0,0,0,.15);border-radius:8px;padding:8px}
+.spectrum-bar{flex:1;min-width:3px;border-radius:3px 3px 0 0;background:linear-gradient(to top,#ff7e5f,#feb47b);transition:height .07s}
+.frequency-range{display:flex;justify-content:space-between;margin-top:8px;color:#a0a0d0;font-size:.85rem}
+.harmonic-display{background:rgba(0,0,0,.12);border-radius:8px;padding:10px;width:100%;margin-top:8px}
+.harmonic-list{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px}
+.harmonic-item{background:rgba(255,255,255,0.03);padding:8px;border-radius:8px;text-align:center}
+.debug-panel{background:rgba(0,0,0,0.7);color:#fff;padding:10px;border-radius:8px;width:100%;font-family:monospace;margin-bottom:12px}
+.debug-row{display:flex;justify-content:space-between;margin-bottom:6px}
+.info-box{background:rgba(255,126,95,0.08);padding:10px;border-radius:8px;width:100%;margin-top:10px}
+</style>
 </head>
 <body>
-  <div class="container">
-    <header>
-      <button class="back-btn" id="backBtn">
-        <svg viewBox="0 0 24 24" width="16" height="16" style="margin-right:6px;fill:#ff7e5f"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
-        Back
-      </button>
-      <h1>Professional Drum Frequency Analyzer</h1>
-      <p class="subtitle">Accurate frequency analysis for drum tuning and sound engineering — verbose full edition</p>
-    </header>
+<div class="container">
+  <header>
+    <h1>Drum Frequency Analyzer — SNR & Envelope Fix</h1>
+    <p class="subtitle">Silence ≈ 0% confidence. Hit spikes ≥70% (tuned for drums).</p>
+  </header>
 
-    <!-- debug panel (kept) -->
-    <div class="debug-panel">
-      <div class="debug-row">
-        <div class="debug-label">Status:</div>
-        <div class="debug-value"><span id="statusLed" class="status-indicator status-inactive"></span><span id="statusText">Idle</span></div>
-      </div>
-      <div class="debug-row"><div class="debug-label">FFT Size:</div><div class="debug-value" id="fftSizeLabel">8192</div></div>
-      <div class="debug-row"><div class="debug-label">Sensitivity:</div><div class="debug-value" id="sensLabel">0.10</div></div>
-      <div class="debug-row"><div class="debug-label">Min Frequency:</div><div class="debug-value" id="minFreqLabel">20 Hz</div></div>
-      <div class="debug-row"><div class="debug-label">Sample Rate:</div><div class="debug-value" id="sampleRateLabel">—</div></div>
-    </div>
-
-    <!-- visualization canvas -->
-    <div class="visualization" id="vizWrap">
-      <canvas id="spectrumCanvas" aria-label="Spectrum canvas"></canvas>
-      <div class="drum-display" id="drumDisplay"></div>
-    </div>
-
-    <!-- primary controls -->
-    <div class="controls">
-      <button id="startBtn">Start Analysis</button>
-      <button id="stopBtn" disabled>Stop Analysis</button>
-      <div class="tools-row">
-        <button id="calibrateBtn">Calibrate Noise</button>
-        <button id="snapshotBtn">Save Snapshot CSV</button>
-        <select id="fftSelect" class="fft-select" title="FFT size">
-          <option value="8192">FFT 8192 (±~5 Hz)</option>
-          <option value="16384">FFT 16384 (±~2.7 Hz)</option>
-          <option value="32768">FFT 32768 (±~1.35 Hz)</option>
-        </select>
-      </div>
-    </div>
-
-    <!-- user settings -->
-    <div class="settings">
-      <div class="slider-container">
-        <label for="sensitivity">Sound Sensitivity <span id="sensitivityDisplay">0.10</span></label>
-        <input id="sensitivity" type="range" min="0.05" max="0.15" step="0.005" value="0.10" />
-      </div>
-      <div style="min-width:220px;">
-        <label for="lowpassSelect">Display Low-pass</label>
-        <select id="lowpassSelect" class="select">
-          <option value="20000">Off</option>
-          <option value="5000">5 kHz</option>
-          <option value="2000">2 kHz</option>
-          <option value="800">800 Hz</option>
-        </select>
-      </div>
-      <div style="min-width:160px;">
-        <label>Calibrate on Start</label><br/>
-        <input id="autoCalibrate" type="checkbox" checked /> auto
-      </div>
-    </div>
-
-    <!-- stats -->
-    <div class="stats">
-      <div class="stat-card">
-        <h2>Fundamental Frequency</h2>
-        <div class="stat-value" id="fundamentalFreq">-- Hz</div>
-      </div>
-      <div class="stat-card">
-        <h2>Peak Amplitude</h2>
-        <div class="stat-value" id="peakAmplitude">-- dB</div>
-      </div>
-      <div class="stat-card">
-        <h2>Signal Confidence</h2>
-        <div style="margin-top:12px;width:100%;background:rgba(255,255,255,0.08);border-radius:6px;height:10px;overflow:hidden">
-          <div id="confidenceLevel" style="width:0%;height:100%;background:linear-gradient(90deg,#f44336,#4caf50);border-radius:6px"></div>
-        </div>
-        <div style="display:flex;justify-content:space-between;margin-top:6px;color:#a0a0d0;font-size:0.85rem"><span>Low</span><span id="confidenceValue">0%</span><span>High</span></div>
-      </div>
-    </div>
-
-    <!-- info / harmonic area -->
-    <div class="harmonic-display">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <h3 style="margin:0">Harmonic Analysis</h3>
-        <small style="color:#a0a0d0">parabolic interpolation + harmonic checks</small>
-      </div>
-      <div class="harmonic-list" id="harmonicList">
-        <div class="harmonic-item"><div class="harmonic-label">1st Harmonic</div><div class="harmonic-value" id="harmonic1">-- Hz</div></div>
-        <div class="harmonic-item"><div class="harmonic-label">2nd Harmonic</div><div class="harmonic-value" id="harmonic2">-- Hz</div></div>
-        <div class="harmonic-item"><div class="harmonic-label">3rd Harmonic</div><div class="harmonic-value" id="harmonic3">-- Hz</div></div>
-        <div class="harmonic-item"><div class="harmonic-label">4th Harmonic</div><div class="harmonic-value" id="harmonic4">-- Hz</div></div>
-      </div>
-    </div>
-
-    <!-- spectrum bars -->
-    <div class="spectrum-display" id="spectrumDisplay"></div>
-    <div class="frequency-range">
-      <span>20 Hz</span>
-      <span>200 Hz</span>
-      <span>2 kHz</span>
-      <span>20 kHz</span>
-    </div>
-
-    <div class="info-box">
-      <strong>Low Frequency Fix Applied</strong>
-      <p>This verbose version keeps all UI elements and extends the analyzer with: float FFT, per-bin adaptive noise floor (rise/fall), parabolic interpolation on linear mags, harmonic validation, CSV snapshot, and FFT choices. Calibrate in a quiet environment for best results.</p>
-    </div>
-
-    <footer>Professional Drum Frequency Analyzer — Verbose Full Edition</footer>
+  <div class="debug-panel">
+    <div class="debug-row"><div>Status:</div><div id="status">Idle</div></div>
+    <div class="debug-row"><div>FFT Size:</div><div id="fftSize">8192</div></div>
+    <div class="debug-row"><div>Sensitivity:</div><div id="sensLabel">0.100</div></div>
+    <div class="debug-row"><div>Min Frequency:</div><div id="minFreq">20 Hz</div></div>
   </div>
 
-  <!-- =========================
-       SCRIPT: FULL VERBOSE LOGIC
-       Keep every relevant variable & step (long and commented)
-       ========================= -->
-  <script>
-  /* ==========================================================================
-     Professional Drum Frequency Analyzer — Verbose Full Edition
-     - preserves original structure and expands to add robust detection
-     - long, explicit, well-commented
-     ========================================================================== */
+  <div class="visualization">
+    <canvas id="canvas"></canvas>
+    <div class="drum-display" id="drumDisplay"></div>
+  </div>
 
-  (function () {
-    // -------------------------
-    // DOM references (preserve original IDs & classes)
-    // -------------------------
-    const startBtn = document.getElementById('startBtn');
-    const stopBtn = document.getElementById('stopBtn');
-    const calibrateBtn = document.getElementById('calibrateBtn');
-    const snapshotBtn = document.getElementById('snapshotBtn');
-    const spectrumCanvas = document.getElementById('spectrumCanvas');
-    const spectrumDisplay = document.getElementById('spectrumDisplay');
-    const sensitivitySlider = document.getElementById('sensitivity');
-    const sensitivityDisplay = document.getElementById('sensitivityDisplay');
-    const fftSelect = document.getElementById('fftSelect');
-    const lowpassSelect = document.getElementById('lowpassSelect');
-    const autoCalibrateCheckbox = document.getElementById('autoCalibrate');
-    const confidenceLevelEl = document.getElementById('confidenceLevel');
-    const confidenceValueEl = document.getElementById('confidenceValue');
-    const fundamentalFreqEl = document.getElementById('fundamentalFreq');
-    const peakAmplitudeEl = document.getElementById('peakAmplitude');
-    const harmonicEls = {
-      1: document.getElementById('harmonic1'),
-      2: document.getElementById('harmonic2'),
-      3: document.getElementById('harmonic3'),
-      4: document.getElementById('harmonic4')
-    };
-    const fftSizeLabel = document.getElementById('fftSizeLabel');
-    const minFreqLabel = document.getElementById('minFreqLabel');
-    const sampleRateLabel = document.getElementById('sampleRateLabel');
-    const statusLed = document.getElementById('statusLed');
-    const statusText = document.getElementById('statusText');
-    const drumDisplay = document.getElementById('drumDisplay');
+  <div class="controls">
+    <button id="startBtn">Start</button>
+    <button id="stopBtn" disabled>Stop</button>
+    <button id="calBtn">Calibrate</button>
+    <button id="snapBtn">Save CSV</button>
+    <select id="fftSelect">
+      <option value="8192">8192 (±5 Hz)</option>
+      <option value="16384">16384 (±2.7 Hz)</option>
+      <option value="32768">32768 (±1.35 Hz)</option>
+    </select>
+  </div>
 
-    // -------------------------
-    // Canvas/resolution setup
-    // -------------------------
-    const canvasCtx = spectrumCanvas.getContext('2d');
+  <div class="settings">
+    <div class="slider-container">
+      <label>Sound Sensitivity <span id="sensValue">0.100</span></label>
+      <input id="sensitivity" type="range" min="0.05" max="0.15" step="0.005" value="0.10" />
+    </div>
+    <div>
+      <label>Display LP</label><br/>
+      <select id="dispLP"><option value="20000">Off</option><option value="5000">5k</option><option value="2000">2k</option><option value="800">800</option></select>
+    </div>
+  </div>
 
-    function resizeCanvas() {
-      // scale canvas for DPR
-      const dpr = window.devicePixelRatio || 1;
-      const w = spectrumCanvas.clientWidth;
-      const h = spectrumCanvas.clientHeight;
-      spectrumCanvas.width = Math.max(1, Math.floor(w * dpr));
-      spectrumCanvas.height = Math.max(1, Math.floor(h * dpr));
-      canvasCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  <div class="stats">
+    <div class="stat-card"><h2>Fundamental</h2><div class="stat-value" id="fund">-- Hz</div></div>
+    <div class="stat-card"><h2>Peak Amp</h2><div class="stat-value" id="peak">-- dB</div></div>
+    <div class="stat-card">
+      <h2>Signal Confidence</h2>
+      <div style="margin-top:10px;background:rgba(255,255,255,0.08);border-radius:6px;height:10px;overflow:hidden">
+        <div id="confBar" style="width:0%;height:100%;background:linear-gradient(90deg,#f44336,#4caf50)"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:6px;color:#a0a0d0;font-size:.85rem"><span>Low</span><span id="confLabel">0%</span><span>High</span></div>
+    </div>
+  </div>
+
+  <div class="harmonic-display">
+    <div style="display:flex;justify-content:space-between;align-items:center"><strong>Harmonics</strong><span style="color:#a0a0d0">1×–4×</span></div>
+    <div class="harmonic-list">
+      <div class="harmonic-item"><div id="h1">-- Hz</div></div>
+      <div class="harmonic-item"><div id="h2">-- Hz</div></div>
+      <div class="harmonic-item"><div id="h3">-- Hz</div></div>
+      <div class="harmonic-item"><div id="h4">-- Hz</div></div>
+    </div>
+  </div>
+
+  <div class="spectrum-display" id="bars"></div>
+  <div class="frequency-range"><span>20 Hz</span><span>200 Hz</span><span>2 kHz</span><span>20 kHz</span></div>
+  <div class="info-box">Calibrate in quiet room. If you still see noise as hits, tell me your browser & mic (laptop/external) and I’ll tune thresholds.</div>
+</div>
+
+<script>
+/* New detection: SNR (dB) + band-energy envelope + proportion-of-bins gating.
+   Key thresholds:
+   - snrThresholdDb = 8 dB  (bin considered 'signal' if SNR >= this)
+   - minBinProportion = 0.02 (at least 2% of bins in band must exceed SNR)
+   - envelopeRatioThreshold = 2.8 (short-term / long-term energy ratio)
+   - smoothing applied to displayed confidence
+*/
+
+(function(){
+  // DOM refs
+  const startBtn = document.getElementById('startBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const calBtn = document.getElementById('calBtn');
+  const snapBtn = document.getElementById('snapBtn');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const barsContainer = document.getElementById('bars');
+  const fftSelect = document.getElementById('fftSelect');
+  const sensitivity = document.getElementById('sensitivity');
+  const sensValue = document.getElementById('sensValue');
+  const confBar = document.getElementById('confBar');
+  const confLabel = document.getElementById('confLabel');
+  const fundEl = document.getElementById('fund');
+  const peakEl = document.getElementById('peak');
+  const hEls = [null, document.getElementById('h1'), document.getElementById('h2'), document.getElementById('h3'), document.getElementById('h4')];
+
+  // bars
+  const BAR_COUNT = 64;
+  function makeBars(){ barsContainer.innerHTML=''; for(let i=0;i<BAR_COUNT;i++){ const d=document.createElement('div'); d.className='spectrum-bar'; d.style.height='4px'; barsContainer.appendChild(d);} }
+  makeBars();
+
+  // pads
+  const drumDisplay = document.getElementById('drumDisplay');
+  ['Kick','Snare','Hi-Hat','Tom1','Tom2','Floor','Ride','Crash'].forEach(n=>{const e=document.createElement('div');e.className='drum-pad';e.textContent=n;drumDisplay.appendChild(e);});
+
+  // audio state
+  let audioCtx=null, analyser=null, source=null, stream=null;
+  let floatFreq=null, noiseFloor=null;
+  let isRunning=false, rafId=null;
+  let snapshot=[];
+
+  // envelope trackers
+  let bandEnergyShort=0, bandEnergyLong=0;
+  // parameters (tweakable)
+  const snrThresholdDb = 8; // dB
+  const minBinProportion = 0.02; // proportion of bins in band
+  const envelopeRatioThreshold = 2.8; // short/long energy ratio for transient
+  const eps = 1e-12;
+
+  // noise floor EMA params (rise VERY slow to avoid absorbing hits; fall moderate)
+  const alphaRise = 0.0015;   // when mag > floor -> floor slowly moves up
+  const alphaFall = 0.04;     // when mag < floor -> floor falls faster to follow quieter environments
+  const noiseMargin = 1.15;   // margin multiplier for safety
+
+  // envelope smoothing alphas (short ~50ms, long ~500ms approximate via alpha)
+  const shortAlpha = 0.12; // ~50-100ms depending on frame rate
+  const longAlpha = 0.01;  // slow (~500ms+)
+
+  // UI helpers
+  function resizeCanvas(){
+    const dpr = window.devicePixelRatio||1; const w=canvas.clientWidth; const h=canvas.clientHeight;
+    canvas.width = Math.max(1, Math.floor(w*dpr)); canvas.height = Math.max(1, Math.floor(h*dpr));
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+
+  // sensitivity UI
+  sensValue.textContent = parseFloat(sensitivity.value).toFixed(3);
+  sensitivity.addEventListener('input', ()=>{ sensValue.textContent = parseFloat(sensitivity.value).toFixed(3); document.getElementById('sensLabel').textContent = parseFloat(sensitivity.value).toFixed(3); });
+
+  // start/stop
+  startBtn.onclick = start;
+  stopBtn.onclick = stop;
+  calBtn.onclick = ()=>{ if(analyser) calibrateNoise(1.2); else alert('Start first'); };
+  snapBtn.onclick = saveCSV;
+
+  async function start(){
+    if(isRunning) return;
+    try{
+      audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+      stream = await navigator.mediaDevices.getUserMedia({audio:true});
+      source = audioCtx.createMediaStreamSource(stream);
+      analyser = audioCtx.createAnalyser();
+      analyser.smoothingTimeConstant = 0.55;
+      analyser.minDecibels = -120; analyser.maxDecibels = -10;
+      // set FFT
+      const req = parseInt(fftSelect.value,10) || 8192;
+      try{ analyser.fftSize = req; } catch(e){ analyser.fftSize = 8192; }
+      document.getElementById('fftSize').textContent = analyser.fftSize;
+      source.connect(analyser);
+      floatFreq = new Float32Array(analyser.frequencyBinCount);
+      noiseFloor = new Float32Array(analyser.frequencyBinCount); for(let i=0;i<noiseFloor.length;i++) noiseFloor[i]=1e-12;
+      // init envelopes
+      bandEnergyShort = 0; bandEnergyLong = 0;
+
+      isRunning=true; startBtn.disabled=true; stopBtn.disabled=false; document.getElementById('status').textContent='Running';
+      // auto calibrate briefly
+      await calibrateNoise(0.9);
+      visualize();
+      demoPads();
+    }catch(err){
+      console.error(err); alert('Mic access failed'); document.getElementById('status').textContent='Error';
+      stop();
     }
-    window.addEventListener('resize', resizeCanvas);
-    resizeCanvas();
+  }
 
-    // -------------------------
-    // Build drum pads (keep from original)
-    // -------------------------
-    const drumNames = ['Kick', 'Snare', 'Hi-Hat', 'Tom 1', 'Tom 2', 'Floor Tom', 'Ride', 'Crash'];
-    drumNames.forEach(name => {
-      const pad = document.createElement('div');
-      pad.className = 'drum-pad';
-      pad.textContent = name;
-      drumDisplay.appendChild(pad);
-    });
+  function stop(){
+    if(!isRunning) return;
+    isRunning=false; startBtn.disabled=false; stopBtn.disabled=true; document.getElementById('status').textContent='Stopped';
+    if(rafId) cancelAnimationFrame(rafId);
+    rafId=null;
+    if(stream){ try{ stream.getTracks().forEach(t=>t.stop()); }catch(e){} stream=null; }
+    if(source){ try{ source.disconnect(); }catch(e){} source=null; }
+    if(analyser){ try{ analyser.disconnect(); }catch(e){} analyser=null; }
+    if(audioCtx){ audioCtx.close().catch(()=>{}).then(()=>audioCtx=null); }
+    // reset display
+    fundEl.textContent='-- Hz'; peakEl.textContent='-- dB'; confBar.style.width='0%'; confLabel.textContent='0%'; for(let i=1;i<=4;i++) hEls[i].textContent='-- Hz';
+    snapshot=[];
+  }
 
-    // demo pad trigger interval holder
-    let demoPadInterval = null;
-
-    // -------------------------
-    // Build spectrum bars (64 bars like original)
-    // -------------------------
-    const SPECTRUM_BAR_COUNT = 64;
-    function initSpectrumBars() {
-      spectrumDisplay.innerHTML = '';
-      for (let i = 0; i < SPECTRUM_BAR_COUNT; i++) {
-        const bar = document.createElement('div');
-        bar.className = 'spectrum-bar';
-        bar.style.height = '5px';
-        spectrumDisplay.appendChild(bar);
-      }
+  // calibrate: simple avg baseline for noiseFloor
+  async function calibrateNoise(duration=1.2){
+    if(!analyser) return;
+    document.getElementById('status').textContent='Calibrating...';
+    const acc = new Float32Array(analyser.frequencyBinCount);
+    let frames=0; const start = performance.now();
+    while(performance.now()-start < duration*1000){
+      analyser.getFloatFrequencyData(floatFreq);
+      for(let i=0;i<floatFreq.length;i++){ acc[i] += Math.pow(10, floatFreq[i]/20); }
+      frames++;
+      await new Promise(r=>setTimeout(r,40));
     }
-    initSpectrumBars();
+    if(frames>0){ for(let i=0;i<acc.length;i++) noiseFloor[i] = acc[i]/frames + eps; }
+    document.getElementById('status').textContent='Calibrated';
+  }
 
-    // -------------------------
-    // Audio / analysis state
-    // -------------------------
-    let audioContext = null;
-    let analyser = null;
-    let mediaStream = null;
-    let mediaSource = null;
-    let isRecording = false;
-    let rafId = null;
-    let floatFreqData = null;             // Float32Array for getFloatFrequencyData
-    let noiseFloor = null;                // per-bin linear magnitude noise floor
-    let noiseCalibrated = false;
-    let calibrationAccumulator = null;
-    let calibrationFrames = 0;
-    let runningGlobalPeak = 1e-9;         // running global peak linear mag for normalization
-    let displayedConfidence = 0;          // for smoothing UI
-    let snapshotBuffer = [];              // store snapshots for CSV
+  // small demo pad visual (unchanged)
+  let demoInterval=null;
+  function demoPads(){ if(demoInterval) return; demoInterval=setInterval(()=>{ if(!isRunning) return; const pads=document.querySelectorAll('.drum-pad'); const idx=Math.floor(Math.random()*pads.length); pads[idx].classList.add('active'); setTimeout(()=>pads[idx].classList.remove('active'),140); },1500); }
+  function stopDemoPads(){ if(demoInterval){ clearInterval(demoInterval); demoInterval=null; } }
 
-    // default EMA parameters (tunable)
-    const NOISE_ALPHA_RISE = 0.004;  // how fast noise floor rises when signal > floor (slow to avoid absorb hits)
-    const NOISE_ALPHA_FALL = 0.10;   // how fast floor decays when signal < floor (faster so baseline follows quiet)
-    const NOISE_MULT = 1.12;         // margin factor above measured floor to treat "above noise"
+  // Main analyze & visualize loop
+  let displayedConf = 0; // smooth display
+  function visualize(){
+    if(!isRunning || !analyser) return;
+    rafId = requestAnimationFrame(visualize);
+    const binCount = analyser.frequencyBinCount;
+    analyser.getFloatFrequencyData(floatFreq); // fill floatFreq with dB
 
-    // -------------------------
-    // Utility: safe set analyser fft size with fallback
-    // -------------------------
-    function setAnalyserFFT(size) {
-      const allowed = [32768, 16384, 8192, 4096, 2048, 1024, 512, 256, 128, 64, 32];
-      let chosen = allowed.includes(size) ? size : allowed.find(v => v <= size) || 8192;
-      try {
-        analyser.fftSize = chosen;
-      } catch (e) {
-        // some browsers may restrict to smaller sizes — gracefully fall back
-        analyser.fftSize = 8192;
-      }
-      fftSizeLabel.textContent = analyser.fftSize;
-    }
-
-    // -------------------------
-    // Start / stop lifecycle
-    // -------------------------
-    startBtn.addEventListener('click', startAnalysis);
-    stopBtn.addEventListener('click', stopAnalysis);
-    calibrateBtn.addEventListener('click', async () => {
-      if (!analyser) {
-        alert('Start analysis first to calibrate.');
-        return;
-      }
-      await calibrateNoise(1.5);
-    });
-    snapshotBtn.addEventListener('click', saveSnapshotCSV);
-
-    async function startAnalysis() {
-      if (isRecording) return;
-      try {
-        // create audio context
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        sampleRateLabel.textContent = audioContext.sampleRate + ' Hz';
-
-        // request mic
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        // store stream for cleanup
-        mediaStream = stream;
-
-        // create source & analyser
-        mediaSource = audioContext.createMediaStreamSource(stream);
-        analyser = audioContext.createAnalyser();
-
-        // smoothing and decibel range tuned for detection
-        analyser.smoothingTimeConstant = 0.6; // moderate smoothing — tweak if you want faster transient response
-        analyser.minDecibels = -120;
-        analyser.maxDecibels = -10;
-
-        // set FFT size from user choice
-        const chosenFFT = parseInt(fftSelect.value, 10) || 8192;
-        setAnalyserFFT(chosenFFT);
-
-        // allocate arrays
-        floatFreqData = new Float32Array(analyser.frequencyBinCount);
-        noiseFloor = new Float32Array(analyser.frequencyBinCount);
-        for (let i = 0; i < noiseFloor.length; i++) noiseFloor[i] = 1e-12; // initial tiny floor
-
-        // connect and start
-        mediaSource.connect(analyser);
-
-        // UI state
-        isRecording = true;
-        startBtn.disabled = true;
-        stopBtn.disabled = false;
-        statusLed.classList.remove('status-inactive');
-        statusLed.classList.add('status-active');
-        statusText.textContent = 'Running';
-
-        // optionally auto-calibrate briefly
-        if (autoCalibrateCheckbox.checked) {
-          await calibrateNoise(1.2);
-        }
-
-        // start rendering loop & demo pads
-        visualize();
-        startDemoPads();
-
-      } catch (err) {
-        console.error('Error starting analysis:', err);
-        alert('Could not start audio analysis. Check microphone permissions and try again.');
-        statusText.textContent = 'Error';
-        statusLed.classList.remove('status-active');
-        statusLed.classList.add('status-inactive');
-      }
-    }
-
-    function stopAnalysis() {
-      if (!isRecording) return;
-
-      // stop raf
-      if (rafId) cancelAnimationFrame(rafId);
-      rafId = null;
-
-      // stop demo pads
-      stopDemoPads();
-
-      // stop media tracks
-      if (mediaStream) {
-        try { mediaStream.getTracks().forEach(t => t.stop()); } catch (e) { console.warn(e); }
-        mediaStream = null;
-      }
-
-      // disconnect nodes and close context
-      if (mediaSource) {
-        try { mediaSource.disconnect(); } catch (e) {}
-        mediaSource = null;
-      }
-      if (analyser) {
-        try { analyser.disconnect(); } catch (e) {}
-        analyser = null;
-      }
-      if (audioContext) {
-        try { audioContext.close(); } catch (e) {}
-        audioContext = null;
-      }
-
-      // reset flags & UI
-      isRecording = false;
-      startBtn.disabled = false;
-      stopBtn.disabled = true;
-      statusText.textContent = 'Stopped';
-      statusLed.classList.remove('status-active');
-      statusLed.classList.add('status-inactive');
-
-      // clear UI values
-      fundamentalFreqEl.textContent = '-- Hz';
-      peakAmplitudeEl.textContent = '-- dB';
-      confidenceLevelEl.style.width = '0%';
-      confidenceValueEl.textContent = '0%';
-      for (let i = 1; i <= 4; i++) harmonicEls[i].textContent = '-- Hz';
-      snapshotBuffer = [];
-      runningGlobalPeak = 1e-9;
-    }
-
-    // -------------------------
-    // Demo pads visual (keeps your "random pad trigger" behavior)
-    // -------------------------
-    function startDemoPads() {
-      if (demoPadInterval) return;
-      demoPadInterval = setInterval(() => {
-        if (!isRecording) return;
-        const pads = document.querySelectorAll('.drum-pad');
-        if (!pads || pads.length === 0) return;
-        const randomPad = pads[Math.floor(Math.random() * pads.length)];
-        randomPad.classList.add('active');
-        setTimeout(() => randomPad.classList.remove('active'), 140);
-      }, 1500);
-    }
-    function stopDemoPads() {
-      if (demoPadInterval) { clearInterval(demoPadInterval); demoPadInterval = null; }
-    }
-
-    // -------------------------
-    // Noise calibration (averaging) — returns after duration seconds
-    // -------------------------
-    async function calibrateNoise(durationSeconds = 1.5) {
-      if (!analyser) return;
-      statusText.textContent = 'Calibrating... (be quiet)';
-      // accumulate magnitude per bin
-      const len = analyser.frequencyBinCount;
-      calibrationAccumulator = new Float32Array(len);
-      calibrationFrames = 0;
-      const start = performance.now();
-      while (performance.now() - start < durationSeconds * 1000) {
-        analyser.getFloatFrequencyData(floatFreqData);
-        for (let i = 0; i < len; i++) {
-          // convert each dB bin to linear magnitude and accumulate
-          calibrationAccumulator[i] += Math.pow(10, floatFreqData[i] / 20);
-        }
-        calibrationFrames++;
-        // small sleep to avoid busy loop
-        await new Promise(r => setTimeout(r, 40));
-      }
-      if (calibrationFrames > 0) {
-        for (let i = 0; i < len; i++) {
-          // average
-          noiseFloor[i] = (calibrationAccumulator[i] / calibrationFrames) + 1e-12;
-        }
-        noiseCalibrated = true;
-      }
-      statusText.textContent = 'Calibrated';
-    }
-
-    // -------------------------
-    // Main analysis function (called by RAF)
-    // - performs:
-    //    1. getFloatFrequencyData
-    //    2. per-bin linear conversion
-    //    3. adaptive noise floor update (EMA with rise/fall)
-    //    4. subtract noise floor & find best peak in low band (20-300Hz)
-    //    5. parabolic interpolation on linear adjusted mags
-    //    6. harmonic validation & confidence computation
-    //    7. smoothing & UI update
-    // -------------------------
-    function visualize() {
-      if (!isRecording || !analyser || !audioContext) return;
-      rafId = requestAnimationFrame(visualize);
-
-      const binCount = analyser.frequencyBinCount;
-      const sampleRate = audioContext.sampleRate || 44100;
-      const freqRes = sampleRate / analyser.fftSize;
-
-      // read float dB data (preserves dynamic range)
-      analyser.getFloatFrequencyData(floatFreqData);
-
-      // convert to linear mags (and find current frame max)
-      const linearMags = new Float32Array(binCount);
-      let currentFrameMax = 0;
-      for (let i = 0; i < binCount; i++) {
-        const db = floatFreqData[i]; // negative values mostly
-        const lin = Math.pow(10, db / 20); // linear magnitude
-        linearMags[i] = lin;
-        if (lin > currentFrameMax) currentFrameMax = lin;
-      }
-
-      // update running global peak (slow decay) to provide normalization baseline
-      if (currentFrameMax > runningGlobalPeak) runningGlobalPeak = currentFrameMax;
-      else runningGlobalPeak *= 0.995; // slow decay over time
-
-      // adaptive per-bin noise floor: rise when mag > floor slowly, fall faster when mag < floor
-      // this keeps sudden hits from permanently raising the floor, but follows quieter conditions
-      for (let i = 0; i < binCount; i++) {
-        const mag = linearMags[i];
-        const floor = noiseFloor[i] || 1e-12;
-        if (mag > floor) {
-          // gentle rise
-          noiseFloor[i] = floor * (1 - NOISE_ALPHA_RISE) + mag * NOISE_ALPHA_RISE;
-        } else {
-          // faster fall
-          noiseFloor[i] = floor * (1 - NOISE_ALPHA_FALL) + mag * NOISE_ALPHA_FALL;
-        }
-      }
-
-      // primary analysis band: 20 Hz -> 300 Hz for fundamentals
-      const minBin = Math.max(2, Math.floor(20 / freqRes));
-      const maxBin = Math.min(binCount - 2, Math.floor(300 / freqRes));
-
-      // subtract noise floor with margin multiplier — per-bin adjusted mags
-      const adjustedMags = new Float32Array(binCount);
-      let adjustedMax = 0;
-      let bestBin = minBin;
-      let bestVal = 0;
-      for (let i = minBin; i <= maxBin; i++) {
-        const val = Math.max(0, linearMags[i] - (noiseFloor[i] * NOISE_MULT));
-        adjustedMags[i] = val;
-        if (val > adjustedMax) adjustedMax = val;
-        if (val > bestVal) { bestVal = val; bestBin = i; }
-      }
-
-      // If adjustedMax is extremely small -> silence; drive confidence down to zero smoothly
-      if (adjustedMax < 1e-9) {
-        // smooth displayedConfidence down
-        displayedConfidence = displayedConfidence * 0.82;
-        const confPercent = Math.max(0, Math.round(displayedConfidence));
-        updateUI(0, null, confPercent);
-        // still draw bars (show noise-level)
-        drawBars(floatFreqData, 0);
-        drawCanvas(floatFreqData);
-        return;
-      }
-
-      // harmonic validation - check energy at approx 2x, 3x, 4x
-      let harmonicScore = 0;
-      for (let h = 2; h <= 4; h++) {
-        const hb = Math.round(bestBin * h);
-        if (hb < binCount && adjustedMags[hb] >= (adjustedMags[bestBin] * 0.22)) harmonicScore++;
-      }
-
-      // low-frequency boost (favor lower bins modestly - helps kick detection)
-      const lowBoost = 1 + Math.max(0, (1 - (bestBin - minBin) / Math.max(1, (maxBin - minBin))) * 0.18);
-
-      // normalized peak relative to runningGlobalPeak for environment-independent confidence
-      const normalizedPeak = Math.min(1, (bestVal * lowBoost) / (runningGlobalPeak + 1e-12));
-
-      // base confidence: scale normalizedPeak to 0-100
-      let baseConfidence = normalizedPeak * 100;
-
-      // harmonic bonus (small)
-      baseConfidence = Math.min(100, baseConfidence + harmonicScore * 6);
-
-      // sensitivity slider adjustment:
-      // slider 0.05 => most sensitive -> we amplify confidence
-      // slider 0.15 => least sensitive -> reduce confidence
-      const sensitivity = parseFloat(sensitivitySlider.value) || 0.10;
-      const sensNorm = (0.15 - sensitivity) / 0.10; // 0..1
-      baseConfidence = baseConfidence * (1 + 0.22 * sensNorm);
-
-      // guard: require bestVal to be at least some tiny absolute threshold above local floor
-      const localNoiseVal = noiseFloor[bestBin] || 1e-12;
-      const minAbsoluteAboveNoise = localNoiseVal * 0.02; // absolute gating - prevents minuscule floor differences from tripping
-      let finalConfidence = 0;
-      if (bestVal > minAbsoluteAboveNoise) {
-        finalConfidence = baseConfidence;
+    // convert to linear mags and update adaptive noiseFloor (EMA rise/fall)
+    const mags = new Float32Array(binCount);
+    let frameMax = 0;
+    for(let i=0;i<binCount;i++){
+      const lin = Math.pow(10, floatFreq[i]/20);
+      mags[i]=lin;
+      if(lin>frameMax) frameMax = lin;
+      const nf = noiseFloor[i]||1e-12;
+      if(lin > nf){
+        noiseFloor[i] = nf*(1-alphaRise) + lin*alphaRise; // slow rise
       } else {
-        finalConfidence = 0;
-      }
-
-      // temporal smoothing for displayed confidence (UI looks stable)
-      displayedConfidence = displayedConfidence * 0.76 + finalConfidence * 0.24;
-      const confPercent = Math.max(0, Math.min(100, Math.round(displayedConfidence)));
-
-      // parabolic interpolation for refined frequency estimation (use adjusted mags)
-      let refinedFreq = 0;
-      if (bestBin > 1 && bestBin < binCount - 1) {
-        const left = adjustedMags[bestBin - 1];
-        const center = adjustedMags[bestBin];
-        const right = adjustedMags[bestBin + 1];
-        const denom = (left - 2 * center + right);
-        let delta = 0;
-        if (Math.abs(denom) > 1e-12) delta = 0.5 * (left - right) / denom;
-        refinedFreq = (bestBin + delta) * freqRes;
-      } else {
-        refinedFreq = bestBin * freqRes;
-      }
-
-      // peak amplitude in dB for UI readout (floatFreqData)
-      const peakDb = floatFreqData[bestBin] !== undefined ? floatFreqData[bestBin] : null;
-
-      // update snapshot buffer for CSV (time, freq, peakDb, confPercent)
-      snapshotBuffer.push([Date.now(), refinedFreq.toFixed(2), peakDb !== null ? peakDb.toFixed(1) : '', confPercent]);
-      if (snapshotBuffer.length > 5000) snapshotBuffer.shift(); // avoid unbounded growth
-
-      // UI update
-      updateUI(refinedFreq, peakDb, confPercent);
-
-      // draw spectrum bars & canvas
-      drawBars(floatFreqData, refinedFreq);
-      drawCanvas(floatFreqData);
-    } // visualize()
-
-    // -------------------------
-    // UI update helper
-    // -------------------------
-    function updateUI(freq, peakDb, confPercent) {
-      if (freq && freq > 0) fundamentalFreqEl.textContent = freq.toFixed(2) + ' Hz';
-      else fundamentalFreqEl.textContent = '-- Hz';
-      peakAmplitudeEl.textContent = (peakDb !== null && peakDb !== undefined && peakDb > -120) ? Math.round(peakDb) + ' dB' : '-- dB';
-      confidenceLevelEl.style.width = confPercent + '%';
-      confidenceValueEl.textContent = confPercent + '%';
-      for (let i = 1; i <= 4; i++) {
-        if (freq && freq > 0) harmonicEls[i].textContent = (freq * i).toFixed(1) + ' Hz';
-        else harmonicEls[i].textContent = '-- Hz';
+        noiseFloor[i] = nf*(1-alphaFall) + lin*alphaFall; // faster fall
       }
     }
 
-    // -------------------------
-    // Visual helpers: Bars + Canvas
-    // -------------------------
-    function drawBars(floatDbArray, refinedFreq) {
-      const bars = spectrumDisplay.querySelectorAll('.spectrum-bar');
-      const barsN = bars.length;
-      const sampleRate = audioContext ? audioContext.sampleRate : 44100;
-      const freqRes = analyser ? (sampleRate / analyser.fftSize) : 1;
-      const maxDrawBins = Math.min(floatDbArray.length, 1024);
+    // frequency resolution
+    const sampleRate = audioCtx ? audioCtx.sampleRate : 44100;
+    const freqRes = sampleRate / analyser.fftSize;
+    const minBin = Math.max(2, Math.floor(20 / freqRes));
+    const maxBin = Math.min(binCount-2, Math.floor(300 / freqRes));
+    const bandBins = Math.max(1, maxBin - minBin + 1);
 
-      for (let i = 0; i < barsN; i++) {
-        // quadratic mapping to favor low frequencies visually
-        const bin = Math.floor(Math.pow(i / barsN, 2) * maxDrawBins);
-        const db = floatDbArray[bin] || -140;
-        const lin = Math.pow(10, db / 20);
-        const height = Math.max(3, Math.min(130, lin * 400)); // visual scaling tuned for clarity
-        bars[i].style.height = height + 'px';
-
-        const fundBin = refinedFreq ? Math.floor(refinedFreq / freqRes) : -999999;
-        if (Math.abs(bin - fundBin) <= 1 && refinedFreq > 0) {
-          bars[i].style.background = 'linear-gradient(to top,#4caf50,#8bc34a)';
-        } else {
-          bars[i].style.background = 'linear-gradient(to top,#ff7e5f,#feb47b)';
-        }
-      }
+    // compute per-bin SNR in dB and count bins above snrThresholdDb
+    let countAbove = 0;
+    let snrSumTop = []; // store SNRs for top calculation
+    for(let i=minBin;i<=maxBin;i++){
+      const nf = noiseFloor[i] || eps;
+      const snr = 20 * Math.log10( (mags[i] + eps) / (nf + eps) ); // positive when above floor
+      if(snr >= snrThresholdDb) { countAbove++; snrSumTop.push(snr); }
     }
 
-    function drawCanvas(floatDbArray) {
-      // draw first N bins as a detailed spectrum on the canvas
-      canvasCtx.clearRect(0, 0, spectrumCanvas.width, spectrumCanvas.height);
-      const dpr = window.devicePixelRatio || 1;
-      const w = spectrumCanvas.width / dpr;
-      const h = spectrumCanvas.height / dpr;
-      const bins = Math.min(floatDbArray.length, 1024);
-      const step = Math.max(1, Math.floor(bins / Math.min(512, bins)));
-      const barW = w / (bins / step);
-      let x = 0;
-      for (let i = 0; i < bins; i += step) {
-        const db = floatDbArray[i] || -140;
-        const lin = Math.pow(10, db / 20);
-        const height = Math.max(1, Math.min(h, lin * h * 1.6));
-        const isLow = i < bins / 6;
-        canvasCtx.fillStyle = isLow ? `rgba(255,126,95,${Math.min(0.95, lin * 4)})` : `rgba(254,180,123,${Math.min(0.95, lin * 2)})`;
-        canvasCtx.fillRect(x, h - height, barW - 1, height);
-        x += barW;
-      }
+    // compute proportion
+    const proportion = countAbove / bandBins;
+
+    // compute envelope energies: short & long using mag^2
+    let frameEnergy = 0;
+    for(let i=minBin;i<=maxBin;i++) frameEnergy += mags[i]*mags[i];
+    // EMA updates
+    bandEnergyShort = bandEnergyShort*(1-shortAlpha) + frameEnergy*shortAlpha;
+    bandEnergyLong = bandEnergyLong*(1-longAlpha) + frameEnergy*longAlpha;
+    const envelopeRatio = (bandEnergyLong < 1e-18) ? 999 : Math.max(1e-6, bandEnergyShort / (bandEnergyLong + eps));
+
+    // avg top SNR (take mean of top up to 5 SNRs)
+    snrSumTop.sort((a,b)=>b-a);
+    const topN = Math.min(5, snrSumTop.length);
+    const avgTopSNR = topN>0 ? (snrSumTop.slice(0,topN).reduce((s,v)=>s+v,0)/topN) : 0;
+
+    // Compute confidence:
+    // - require envelopeRatio and proportion gating AND avgTopSNR somewhat above threshold
+    // Map avgTopSNR - snrThresholdDb to a score 0..100, scale by proportion (0..1) and envelope factor (clamped)
+    const snrExcess = Math.max(0, avgTopSNR - snrThresholdDb);
+    // map snrExcess (dB) to 0..1 via a soft scale: 0dB =>0, 20dB =>1
+    const snrFactor = Math.min(1, snrExcess / 20);
+    const envelopeFactor = Math.min(1, (envelopeRatio / envelopeRatioThreshold) ); // if ratio meets threshold =>1
+    // sensitivity slider: lower slider value => more sensitive => slightly boost final score
+    const sens = parseFloat(sensitivity.value) || 0.10;
+    const sensBoost = 1 + ((0.15 - sens) / 0.15) * 0.25; // up to +25% boost at extreme sensitivity
+    // final raw confidence
+    let rawConf = snrFactor * proportion * 100 * envelopeFactor * sensBoost;
+    // apply gating: only give any confidence if both proportion & envelope exceed minimal thresholds
+    const minimalProportion = Math.max(0.01, (0.02 * (1 - (sens - 0.05)/0.1))); // slightly depend on sensitivity
+    const minimalEnvelope = 1.15; // small energy bump required
+    if(!(proportion >= minimalProportion && envelopeRatio >= minimalEnvelope && avgTopSNR >= (snrThresholdDb - 1))) {
+      rawConf = 0;
     }
 
-    // -------------------------
-    // CSV snapshot export
-    // -------------------------
-    function saveSnapshotCSV() {
-      if (!snapshotBuffer || snapshotBuffer.length === 0) {
-        alert('No snapshot data yet — start analysis and wait a few seconds.');
-        return;
-      }
-      // create CSV with header
-      const header = ['timestamp_ms', 'freq_hz', 'peak_db', 'confidence_percent'];
-      const rows = [header.join(',')].concat(snapshotBuffer.slice(-1000).map(r => r.join(',')));
-      const csv = rows.join('\n');
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'drum_spectrum_snapshot.csv';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+    // smoothing
+    displayedConf = (displayedConf * 0.7) + (rawConf * 0.3);
+    const confPercent = Math.max(0, Math.min(100, Math.round(displayedConf)));
+
+    // refine fundamental using parabolic interpolation on adjusted mags (mags - floor*margin)
+    const adjusted = new Float32Array(binCount);
+    let adjustedMax = 0, bestBin = minBin, bestVal = 0;
+    for(let i=minBin;i<=maxBin;i++){
+      adjusted[i] = Math.max(0, mags[i] - noiseFloor[i]*noiseMargin);
+      if(adjusted[i] > adjustedMax){ adjustedMax = adjusted[i]; bestBin = i; bestVal = adjusted[i]; }
     }
 
-    // -------------------------
-    // Small safety: stop audio on page unload
-    // -------------------------
-    window.addEventListener('beforeunload', () => {
-      if (mediaStream) {
-        try { mediaStream.getTracks().forEach(t => t.stop()); } catch (e) {}
-      }
-    });
+    let refinedFreq = 0;
+    if(bestVal > 0 && bestBin > 1 && bestBin < binCount-1){
+      const left = adjusted[bestBin-1], center = adjusted[bestBin], right = adjusted[bestBin+1];
+      const denom = (left - 2*center + right);
+      let delta = 0;
+      if(Math.abs(denom) > 1e-12) delta = 0.5 * (left - right) / denom;
+      refinedFreq = (bestBin + delta) * freqRes;
+    } else {
+      refinedFreq = bestVal>0 ? bestBin * freqRes : 0;
+    }
 
-    // -------------------------
-    // Init / hookup UI controls and defaults
-    // -------------------------
-    resizeCanvas();
-    document.getElementById('sensitivity').addEventListener('input', (e) => {
-      const v = parseFloat(e.target.value);
-      sensitivityDisplay.textContent = v.toFixed(3);
-      document.getElementById('sensLabel').textContent = v.toFixed(3);
-    });
+    // peak db for UI (from floatFreq)
+    const peakDb = (bestVal>0 && floatFreq[bestBin]!==undefined)? floatFreq[bestBin] : -140;
 
-    // update fft label if changed
-    fftSelect.addEventListener('change', () => {
-      fftSizeLabel.textContent = fftSelect.value;
-      // if running, restart to apply new FFT size gracefully
-      if (isRecording) {
-        // quick restart sequence: stop then start
-        stopAnalysis();
-        setTimeout(() => {
-          startAnalysis();
-        }, 220);
-      }
-    });
+    // Update UI
+    fundEl.textContent = refinedFreq>0? refinedFreq.toFixed(2)+' Hz' : '-- Hz';
+    peakEl.textContent = peakDb > -120 ? Math.round(peakDb)+' dB' : '-- dB';
+    confBar.style.width = confPercent + '%';
+    confLabel.textContent = confPercent + '%';
+    for(let i=1;i<=4;i++){ hEls[i].textContent = refinedFreq>0 ? (refinedFreq * i).toFixed(1) + ' Hz' : '-- Hz'; }
 
-    lowpassSelect.addEventListener('change', () => {
-      // purely display-level lowpass for now (we can add BiquadFilterNode later)
-      // kept for parity with original UI; no-op in core analysis
-    });
+    // store snapshot
+    snapshot.push([Date.now(), refinedFreq.toFixed(2), peakDb.toFixed(1), confPercent]);
 
-    // back button optional (keeps original)
-    document.getElementById('backBtn').addEventListener('click', () => {
-      // cosmetic: you can implement navigation here
-      alert('Back button pressed — implement navigation if needed.');
-    });
+    // draw bars & canvas
+    drawBars(floatFreq, refinedFreq);
+    drawCanvas(floatFreq);
+  }
 
-    // expose debug API for console control
-    window.DrumAnalyzer = {
-      start: startAnalysis,
-      stop: stopAnalysis,
-      calibrate: calibrateNoise,
-      getState: () => ({
-        isRecording,
-        fftSize: analyser ? analyser.fftSize : null,
-        sampleRate: audioContext ? audioContext.sampleRate : null,
-        noiseCalibrated
-      }),
-      setSensitivity: (v) => { sensitivitySlider.value = v; sensitivityDisplay.textContent = parseFloat(v).toFixed(3); }
-    };
+  function drawBars(floatDbArray, refinedFreq){
+    const bars = document.querySelectorAll('.spectrum-bar');
+    const sampleRate = audioCtx? audioCtx.sampleRate : 44100;
+    const freqRes = analyser ? (sampleRate / analyser.fftSize) : 1;
+    const maxDraw = Math.min(floatDbArray.length, 1024);
+    for(let i=0;i<bars.length;i++){
+      const bin = Math.floor(Math.pow(i / bars.length, 2) * maxDraw);
+      const db = floatDbArray[bin] || -140;
+      const lin = Math.pow(10, db/20);
+      const height = Math.max(3, Math.min(120, lin * 300));
+      bars[i].style.height = height + 'px';
+      const fundBin = refinedFreq ? Math.floor(refinedFreq / freqRes) : -999;
+      bars[i].style.background = (Math.abs(bin - fundBin) <= 1 && refinedFreq>0) ? 'linear-gradient(to top,#4caf50,#8bc34a)' : 'linear-gradient(to top,#ff7e5f,#feb47b)';
+    }
+  }
 
-    // End of IIFE
-  })();
-  </script>
+  function drawCanvas(floatDbArray){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.width / dpr, h = canvas.height / dpr;
+    const bins = Math.min(floatDbArray.length, 1024);
+    const step = Math.max(1, Math.floor(bins / Math.min(512, bins)));
+    const barW = w / (bins / step);
+    let x = 0;
+    for(let i=0;i<bins;i+=step){
+      const db = floatDbArray[i] || -140;
+      const lin = Math.pow(10, db/20);
+      const height = Math.max(1, Math.min(h, lin * h * 1.2));
+      const isLow = i < bins/8;
+      ctx.fillStyle = isLow ? `rgba(255,126,95,${Math.min(0.95, lin*4)})` : `rgba(254,180,123,${Math.min(0.95, lin*2)})`;
+      ctx.fillRect(x, h - height, barW - 1, height);
+      x += barW;
+    }
+  }
+
+  // save CSV
+  function saveCSV(){
+    if(!snapshot.length){ alert('No data yet'); return; }
+    const header = ['timestamp_ms','freq_hz','peak_db','confidence'];
+    const rows = [header.join(',')].concat(snapshot.slice(-1000).map(r=>r.join(',')));
+    const blob = new Blob([rows.join('\n')], {type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download='snapshot.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  }
+
+  // simple safety
+  window.addEventListener('beforeunload', ()=>{ if(stream) stream.getTracks().forEach(t=>t.stop()); });
+
+  // expose debug API
+  window._drumFix = { start, stop, calibrateNoise, getState: ()=>({ running: !!isRunning, fft: analyser?analyser.fftSize:null }) };
+
+  // init
+  resizeCanvas();
+})(); // IIFE
+</script>
 </body>
 </html>
