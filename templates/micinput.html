@@ -619,6 +619,7 @@ document.addEventListener('DOMContentLoaded', () => {
     [h1, h2, h3, h4].forEach(el => el.textContent = '-- Hz');
     persistentDisplay.textContent = 'Last detection: --';
     lastDetectionTimeEl.textContent = '--';
+    deactivatePads();
   }
   
   // Calibrate noise floor
@@ -689,15 +690,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   
-  // Find dominant frequency with precision
-  function findDominantFrequency(mags, freqRes) {
-    const minBin = Math.max(0, Math.floor(MIN_FREQ_DETECT / freqRes));
-    const maxBin = Math.min(mags.length - 1, Math.floor(MAX_FREQ_DETECT / freqRes));
+  function findDominantFrequency(mags, sampleRate, fftSize) {
+    const binSize = sampleRate / fftSize;
+    const minBin = Math.floor(MIN_FREQ_DETECT / binSize);
+    const maxBin = Math.min(Math.floor(MAX_FREQ_DETECT / binSize), mags.length - 1);
     
     let maxMag = 0;
     let maxBinIdx = minBin;
     
-    // Find the bin with the highest magnitude in our frequency range
     for (let i = minBin; i <= maxBin; i++) {
       if (mags[i] > maxMag) {
         maxMag = mags[i];
@@ -705,7 +705,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
     
-    // Quadratic interpolation for precise frequency estimation
+    // Quadratic interpolation for precise frequency
     let deltaFreq = 0;
     if (maxMag > 0 && maxBinIdx > 0 && maxBinIdx < mags.length - 1) {
       const alpha = mags[maxBinIdx - 1];
@@ -718,10 +718,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
     
-    const freq = (maxBinIdx + deltaFreq) * freqRes;
-    
     return {
-      freq: freq,
+      freq: (maxBinIdx + deltaFreq) * binSize,
       bin: maxBinIdx,
       mag: maxMag
     };
@@ -797,12 +795,13 @@ document.addEventListener('DOMContentLoaded', () => {
     rafId = requestAnimationFrame(visualize);
     
     analyser.getFloatFrequencyData(floatFreq);
+    analyser.getFloatTimeDomainData(timeData);
     drawWaveform();
     
     const N = floatFreq.length;
-    const sampleRate = audioCtx ? audioCtx.sampleRate : 44100;
-    const freqRes = sampleRate / analyser.fftSize;
-    
+    const sr = audioCtx ? audioCtx.sampleRate : 44100;
+    const freqRes = sr / analyser.fftSize;
+
     // Convert dB to magnitude
     const mags = new Float32Array(N);
     let maxDbFrame = -Infinity;
@@ -818,6 +817,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Only update UI if we're not in persistence period
       if (Date.now() - lastDetectionTime > PERSISTENCE_TIME) {
         fundEl.textContent = '-- Hz';
+        peakEl.textContent = '-- dB';
         confBar.style.width = '0%';
         confLbl.textContent = '0%';
         [h1, h2, h3, h4].forEach(el => el.textContent = '-- Hz');
@@ -828,7 +828,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Find dominant frequency
-    const { freq, bin, mag } = findDominantFrequency(mags, freqRes);
+    const { freq, bin, mag } = findDominantFrequency(mags, sr, analyser.fftSize);
     const confidence = Math.min(1, Math.max(0, mag * parseFloat(sensEl.value) * 10));
     
     // Update detection if confidence is above threshold
