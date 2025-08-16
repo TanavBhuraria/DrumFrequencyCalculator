@@ -68,7 +68,6 @@ input[type=range] { width: 100%; }
 
 <div class="stats">
 <div class="stat-card"><h2>Fundamental</h2><div class="stat-value" id="fund">-- Hz</div></div>
-<div class="stat-card"><h2>Peak Amp</h2><div class="stat-value" id="peak">-- dB</div></div>
 <div class="stat-card">
 <h2>Signal Confidence</h2>
 <div style="margin-top:10px;background:rgba(255,255,255,0.08);border-radius:6px;height:10px;overflow:hidden">
@@ -113,11 +112,11 @@ input[type=range] { width: 100%; }
   const confBar = document.getElementById('confBar');
   const confLbl = document.getElementById('confLabel');
   const fundEl = document.getElementById('fund');
-  const peakEl = document.getElementById('peak');
   const h1 = document.getElementById('h1');
   const h2 = document.getElementById('h2');
   const h3 = document.getElementById('h3');
   const h4 = document.getElementById('h4');
+  const statusEl = document.getElementById('status');
 
   // Prepare spectrum bars
   const BAR_COUNT = 64;
@@ -156,6 +155,8 @@ input[type=range] { width: 100%; }
   const CONFIDENCE_THRESHOLD = 0.2; // Confidence to activate pads
   const NOISE_SILENCE_DB = -80; // Ignore frames below this dB
   const ABS_MAG_THRESHOLD = 1e-6;
+  const MAX_FREQ_DETECT = 300; // Hz
+  const MIN_FREQ_DETECT = 20; // Hz
 
   // Helpers
   function resizeCanvas() {
@@ -185,6 +186,7 @@ input[type=range] { width: 100%; }
 
   async function start() {
     if (isRunning) return;
+    statusEl.textContent = 'Starting...';
     try {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -200,21 +202,18 @@ input[type=range] { width: 100%; }
       source.connect(analyser);
 
       floatFreq = new Float32Array(analyser.frequencyBinCount);
-      noiseFloor = new Float32Array(analyser.frequencyBinCount);
-      for (let i=0; i<noiseFloor.length; i++) {
-        noiseFloor[i]=1e-12;
-      }
+      noiseFloor = new Float32Array(analyser.frequencyBinCount).fill(1e-12);
 
       isRunning=true;
-      document.getElementById('status').textContent='Running';
-      document.getElementById('startBtn').disabled=true;
-      document.getElementById('stopBtn').disabled=false;
+      statusEl.textContent='Running';
+      startBtn.disabled=true;
+      stopBtn.disabled=false;
 
       await calibrateNoise(1.2);
       visualize();
     } catch(e) {
       console.error(e);
-      alert('Mic access failed');
+      alert('Mic access failed: ' + e.message);
       stop();
     }
   }
@@ -228,24 +227,24 @@ input[type=range] { width: 100%; }
       stream.getTracks().forEach(t => t.stop());
       stream = null;
     }
-    if(source) source.disconnect(); source=null;
-    if(analyser) analyser.disconnect(); analyser=null;
+    if(source) source.disconnect(); 
+    if(analyser) analyser.disconnect(); 
     if(audioCtx) {
       audioCtx.close().catch(()=>{}).then(()=>audioCtx=null);
     }
-    document.getElementById('status').textContent='Stopped';
+    statusEl.textContent='Stopped';
     // Reset UI
     fundEl.textContent='-- Hz';
-    peakEl.textContent='-- dB';
     confBar.style.width='0%';
     confLbl.textContent='0%';
     [h1,h2,h3,h4].forEach(e => e.textContent='-- Hz');
+    deactivatePads();
   }
 
   async function calibrateNoise(duration=1.2) {
     if (!analyser) return;
-    document.getElementById('status').textContent='Calibrating...';
-    const acc = new Float32Array(analyser.frequencyBinCount);
+    statusEl.textContent='Calibrating...';
+    const acc = new Float32Array(analyser.frequencyBinCount).fill(0);
     let frames=0;
     const startT=performance.now();
     while (performance.now()-startT<duration*1000){
@@ -260,7 +259,7 @@ input[type=range] { width: 100%; }
     if(frames>0){
       for(let i=0;i<acc.length;i++) noiseFloor[i]=acc[i]/frames + 1e-12;
     }
-    document.getElementById('status').textContent='Calibrated';
+    statusEl.textContent='Calibrated';
   }
 
   function saveCSV() {
@@ -268,7 +267,7 @@ input[type=range] { width: 100%; }
       alert('No data collected yet.');
       return;
     }
-    const header= ['timestamp_ms','freq_hz','peak_db','confidence'];
+    const header= ['timestamp_ms','freq_hz','confidence'];
     const rows= [header.join(',')].concat(snapshot.map(r=>r.join(',')));
     const blob= new Blob([rows.join('\n')], {type:'text/csv'});
     const url= URL.createObjectURL(blob);
@@ -295,6 +294,81 @@ input[type=range] { width: 100%; }
     });
   }
 
+  function findDominantFrequency(mags, freqRes) {
+    const minBin = Math.max(0, Math.floor(MIN_FREQ_DETECT / freqRes));
+    const maxBin = Math.min(mags.length-1, Math.floor(MAX_FREQ_DETECT / freqRes));
+    
+    let maxMag = 0;
+    let maxBinIdx = minBin;
+    
+    for (let i=minBin; i<=maxBin; i++) {
+      if (mags[i] > maxMag) {
+        maxMag = mags[i];
+        maxBinIdx = i;
+      }
+    }
+    
+    // Quadratic interpolation for precise frequency
+    let deltaFreq = 0;
+    if (maxMag > 0 && maxBinIdx > 0 && maxBinIdx < mags.length-1) {
+      const alpha = mags[maxBinIdx-1];
+      const beta = mags[maxBinIdx];
+      const gamma = mags[maxBinIdx+1];
+      const denom = alpha - 2*beta + gamma;
+      if (Math.abs(denom) > 1e-12) {
+        deltaFreq = 0.5 * (alpha - gamma) / denom;
+      }
+    }
+    
+    return {
+      freq: (maxBinIdx + deltaFreq) * freqRes,
+      bin: maxBinIdx,
+      mag: maxMag
+    };
+  }
+
+  function drawBars(mags, highlightBin = -1) {
+    const bars = document.querySelectorAll('.spectrum-bar');
+    const maxDisplayBins = Math.min(mags.length, BAR_COUNT);
+    for (let i=0; i<bars.length; i++) {
+      const index = Math.floor(i * mags.length / bars.length);
+      const mag = mags[index] || 0;
+      const heightPx = Math.max(3, Math.min(120, mag * 300));
+      bars[i].style.height=heightPx+'px';
+
+      // Highlight detected frequency bin
+      if (highlightBin >=0 && Math.abs(index - highlightBin) <= 2) {
+        bars[i].style.background='linear-gradient(to top, #4caf50, #8bc34a)';
+      } else {
+        bars[i].style.background='linear-gradient(to top, #ff7e5f, #feb47b)';
+      }
+    }
+  }
+
+  function drawCanvas(mags, highlightBin = -1) {
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    const h = canvas.height;
+    const w = canvas.width;
+    const len = Math.min(mags.length, 1024);
+    const step = Math.max(1, Math.floor(len/Math.min(512, len)));
+    const barW = w / (len/step);
+    
+    let x=0;
+    for (let i=0; i<len; i+=step) {
+      const mag = mags[i] || 0;
+      const heightPx = Math.max(1, mag*300);
+      
+      if (highlightBin >=0 && Math.abs(i - highlightBin) <= 2) {
+        ctx.fillStyle = 'rgba(76,175,80,0.7)';
+      } else {
+        ctx.fillStyle = 'rgba(254,180,123,0.7)';
+      }
+      
+      ctx.fillRect(x, h - heightPx, barW-1, heightPx);
+      x+=barW;
+    }
+  }
+
   async function visualize() {
     if (!isRunning || !analyser) return;
     rafId = requestAnimationFrame(visualize);
@@ -306,72 +380,37 @@ input[type=range] { width: 100%; }
 
     // Convert dB to magnitude
     const mags = new Float32Array(N);
+    let maxDbFrame = -Infinity;
+    
     for (let i=0; i<N; i++) {
       const mag = Math.pow(10, floatFreq[i]/20);
-      // Ignore very low mag (static)
       mags[i] = mag < ABS_MAG_THRESHOLD ? 0 : mag;
+      if (floatFreq[i] > maxDbFrame) maxDbFrame = floatFreq[i];
     }
-
-    // Find peak in 20-300Hz range
-    const minBin = Math.max(2, Math.floor(20 / freqRes));
-    const maxBin = Math.min(N-2, Math.floor(300 / freqRes));
-
-    let maxMag = 0;
-    let maxBinIdx = minBin;
-
-    for (let i=minBin; i<=maxBin; i++) {
-      if (mags[i]>maxMag) {
-        maxMag = mags[i];
-        maxBinIdx = i;
-      }
-    }
-
-    // Quadratic interpolation around maxBinIdx
-    let deltaFreq = 0;
-    if (maxMag > 0 && maxBinIdx > 0 && maxBinIdx < N-1) {
-      const alpha = mags[maxBinIdx -1];
-      const beta = mags[maxBinIdx];
-      const gamma = mags[maxBinIdx +1];
-      const denom = alpha - 2*beta + gamma;
-      if (Math.abs(denom) > 1e-12) {
-        deltaFreq = 0.5 * (alpha - gamma) / denom;
-      }
-    }
-
-    const freqEstimate = (maxBinIdx + deltaFreq) * freqRes;
-
-    // Peak dB
-    const peakDb = floatFreq[maxBinIdx] !== undefined ? floatFreq[maxBinIdx] : -120;
 
     // Static noise gating: ignore low energy frames
-    const maxDbFrame = Math.max(...floatFreq);
     if (maxDbFrame < NOISE_SILENCE_DB) {
-      // decay noise floor
-      // (optional: implement decay)
-      // For simplicity, just skip detection
-      // Reset UI
       fundEl.textContent='-- Hz';
-      peakEl.textContent='-- dB';
       confBar.style.width='0%';
       confLbl.textContent='0%';
+      [h1,h2,h3,h4].forEach(e => e.textContent='-- Hz');
       deactivatePads();
-      drawBars(mags, freqEstimate);
+      drawBars(mags);
       drawCanvas(mags);
       return;
     }
 
-    // Find the maximum magnitude in the band (already done)
-    // Calculate confidence based on magnitude
-    const magConfidence = maxMag; // Could normalize
+    // Find dominant frequency
+    const { freq, bin, mag } = findDominantFrequency(mags, freqRes);
+    const confidence = Math.min(1, Math.max(0, mag * parseFloat(sensEl.value) * 10));
 
-    // Only activate pads if confidence is above threshold
-    if (maxMag > 0 && magConfidence >= CONFIDENCE_THRESHOLD) {
-      // Map frequency to drum
-      if (freqEstimate >= 50 && freqEstimate <= 100) {
+    // Activate drum pads based on frequency ranges
+    if (confidence > CONFIDENCE_THRESHOLD) {
+      if (freq >= 50 && freq <= 100) {
         activatePad('Kick');
-      } else if (freqEstimate > 100 && freqEstimate <= 200) {
+      } else if (freq > 100 && freq <= 200) {
         activatePad('Snare');
-      } else if (freqEstimate > 200 && freqEstimate <= 300) {
+      } else if (freq > 200 && freq <= 300) {
         activatePad('Hi-Hat');
       } else {
         deactivatePads();
@@ -381,65 +420,26 @@ input[type=range] { width: 100%; }
     }
 
     // Update UI
-    fundEl.textContent= (freqEstimate>0) ? freqEstimate.toFixed(2)+' Hz' : '-- Hz';
-    confBar.style.width= (maxMag >= CONFIDENCE_THRESHOLD ? Math.min(100, (maxMag / 0.05) * 100) : 0)+'%';
-    confLbl.textContent= (maxMag >= CONFIDENCE_THRESHOLD ? (Math.min(100, (maxMag/0.05)*100).toFixed(0)+'%') : '0%');
-
-    // Update peak dB
-    const peakDisplayDb = floatFreq[maxBinIdx] !== undefined ? floatFreq[maxBinIdx].toFixed(1) : '--';
-    peakEl.textContent= peakDisplayDb+' dB';
+    fundEl.textContent= freq > 0 ? freq.toFixed(2)+' Hz' : '-- Hz';
+    confBar.style.width= (confidence * 100)+'%';
+    confLbl.textContent= (confidence * 100).toFixed(0)+'%';
 
     // Update harmonic info
     [h1,h2,h3,h4].forEach((el,i) => {
-      if (freqEstimate > 0) {
-        el.textContent = (freqEstimate*(i+1)).toFixed(1)+' Hz';
+      if (freq > 0) {
+        el.textContent = (freq*(i+1)).toFixed(1)+' Hz';
       } else {
         el.textContent='-- Hz';
       }
     });
 
     // Save snapshot
-    snapshot.push([Date.now(), freqEstimate.toFixed(2), peakDisplayDb, maxMag.toFixed(4)]);
+    snapshot.push([Date.now(), freq.toFixed(2), confidence.toFixed(4)]);
     if (snapshot.length > 2000) snapshot.shift();
 
-    // Draw spectrum bars
-    drawBars(mags, freqEstimate);
-    drawCanvas(mags);
-  }
-
-  function drawBars(mags, freqEstimate) {
-    const bars = document.querySelectorAll('.spectrum-bar');
-    const maxDisplayBins = Math.min(mags.length, 1024);
-    for (let i=0; i<bars.length; i++) {
-      const index = Math.floor(i / bars.length * maxDisplayBins);
-      const mag = mags[index] || 0;
-      const heightPx = Math.max(3, Math.min(120, mag*300));
-      bars[i].style.height=heightPx+'px';
-
-      // Optional: highlight the bar close to detected freq
-      if (freqEstimate > 0 && Math.abs(index - maxBinIdx) <= 1) {
-        bars[i].style.background='linear-gradient(to top, #4caf50, #8bc34a)';
-      } else {
-        bars[i].style.background='linear-gradient(to top, #ff7e5f, #feb47b)';
-      }
-    }
-  }
-
-  function drawCanvas(mags) {
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    const h = canvas.height;
-    const w = canvas.width;
-    const len = Math.min(mags.length, 1024);
-    const step = Math.max(1, Math.floor(len/Math.min(512, len)));
-    const barW = w / (len/step);
-    let x=0;
-    for (let i=0; i<len; i+=step) {
-      const mag = mags[i] || 0;
-      const heightPx = Math.max(1, mag*300);
-      ctx.fillStyle= (Math.abs(i - maxBinIdx) <=1) ? 'rgba(76,175,80,0.7)' : 'rgba(254,180,123,0.7)';
-      ctx.fillRect(x, h - heightPx, barW-1, heightPx);
-      x+=barW;
-    }
+    // Draw visualizations
+    drawBars(mags, bin);
+    drawCanvas(mags, bin);
   }
 
 })();
