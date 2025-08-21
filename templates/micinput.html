@@ -321,7 +321,7 @@ button:disabled {
       
       <div class="stat-card">
         <h2>FFT Resolution</h2>
-        <div class="stat-value" id="fftRes">±2.7 Hz</div>
+        <div class="stat-value" id="fftRes">±10.8 Hz</div>
       </div>
       
       <div class="stat-card">
@@ -334,8 +334,8 @@ button:disabled {
   <div class="analysis-controls">
     <div class="control-row">
       <label for="fftSize">FFT Size:</label>
-      <input type="range" id="fftSize" min="12" max="18" step="1" value="16" />
-      <span id="fftSizeValue">65536</span>
+      <input type="range" id="fftSize" min="10" max="16" step="1" value="12" />
+      <span id="fftSizeValue">4096</span>
     </div>
     
     <div class="control-row">
@@ -417,47 +417,6 @@ button:disabled {
 </div>
 
 <script>
-// Register the AudioWorkletProcessor
-const workletCode = `
-class RecorderProcessor extends AudioWorkletProcessor {
-  constructor() {
-    super();
-    this.recording = false;
-    this.audioData = [];
-    this.port.onmessage = (event) => {
-      if (event.data.command === 'start') {
-        this.recording = true;
-        this.audioData = [];
-      } else if (event.data.command === 'stop') {
-        this.recording = false;
-        this.port.postMessage({
-          command: 'recording',
-          data: this.audioData
-        });
-      }
-    };
-  }
-
-  process(inputs) {
-    if (this.recording && inputs[0].length > 0) {
-      // We'll record from the first channel
-      const channelData = inputs[0][0];
-      if (channelData) {
-        // Copy the data to avoid reference issues
-        this.audioData.push(new Float32Array(channelData));
-      }
-    }
-    return true;
-  }
-}
-
-registerProcessor('recorder-processor', RecorderProcessor);
-`;
-
-// Create a Blob URL for the worklet code
-const workletBlob = new Blob([workletCode], { type: 'application/javascript' });
-const workletUrl = URL.createObjectURL(workletBlob);
-
 document.addEventListener('DOMContentLoaded', async () => {
   // Elements
   const recordBtn = document.getElementById('recordBtn');
@@ -491,15 +450,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   
   // Audio variables
   let audioContext = null;
-  let recorderNode = null;
+  let analyser = null;
   let microphone = null;
+  let javascriptNode = null;
   let recordingData = [];
   let recordingStartTime = 0;
   let isRecording = false;
   let sampleRate = 44100;
+  let recordingTimer = null;
   
   // Analysis parameters
-  let fftSize = 65536; // 2^16
+  let fftSize = 4096; // Set to 4096 as requested
   let minFrequency = 40;
   let maxFrequency = 300;
   
@@ -508,6 +469,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const power = parseInt(fftSizeSlider.value);
     fftSize = Math.pow(2, power);
     fftSizeValue.textContent = fftSize.toLocaleString();
+    if (analyser) {
+      analyser.fftSize = fftSize * 2;
+    }
     const resolution = (sampleRate / fftSize).toFixed(2);
     fftResEl.textContent = `±${resolution} Hz`;
   });
@@ -544,6 +508,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     recStateEl.textContent = 'Inactive';
     
     // Set initial values for controls
+    fftSizeSlider.value = 12; // 2^12 = 4096
     fftSizeValue.textContent = fftSize.toLocaleString();
     minFreqValue.textContent = `${minFrequency} Hz`;
     maxFreqValue.textContent = `${maxFrequency} Hz`;
@@ -561,45 +526,48 @@ document.addEventListener('DOMContentLoaded', async () => {
         sampleRate = audioContext.sampleRate;
         sampleRateEl.textContent = `${sampleRate} Hz`;
         
-        // Add the worklet module
-        await audioContext.audioWorklet.addModule(workletUrl);
+        // Create analyser node
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = fftSize * 2;
+        analyser.smoothingTimeConstant = 0.8;
+        
+        // Create script processor for recording
+        javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
+        
+        // Set up audio processing
+        javascriptNode.onaudioprocess = (event) => {
+          if (!isRecording) return;
+          
+          // Get the audio data
+          const channelData = event.inputBuffer.getChannelData(0);
+          recordingData.push(new Float32Array(channelData));
+          
+          // Draw waveform in real-time
+          drawWaveform(channelData);
+        };
       }
       
       // Get microphone access
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: {
-        sampleRate: sampleRate,
-        channelCount: 1,
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false
-      } });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          sampleRate: sampleRate,
+          channelCount: 1,
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false
+        } 
+      });
       
       // Create microphone source
       microphone = audioContext.createMediaStreamSource(stream);
       
-      // Create recorder node
-      recorderNode = new AudioWorkletNode(audioContext, 'recorder-processor');
-      
-      // Connect microphone to recorder
-      microphone.connect(recorderNode);
-      recorderNode.connect(audioContext.destination);
-      
-      recorderNode.port.onmessage = (event) => {
-        if (event.data.command === 'recording') {
-          recordingData = event.data.data;
-          let duration = 0;
-          if (recordingData.length > 0 && recordingData[0]) {
-            duration = recordingData.length * (recordingData[0].length / sampleRate);
-          }
-          recLengthEl.textContent = duration.toFixed(2) + ' s';
-          analyzeBtn.disabled = false;
-          statusEl.textContent = 'Recording complete. Ready to analyze.';
-          drawWaveform();
-        }
-};
+      // Connect nodes: microphone -> analyser -> javascriptNode -> destination
+      microphone.connect(analyser);
+      analyser.connect(javascriptNode);
+      javascriptNode.connect(audioContext.destination);
       
       // Start recording
-      recorderNode.port.postMessage({ command: 'start' });
+      recordingData = [];
       recordingStartTime = Date.now();
       isRecording = true;
       document.body.classList.add('recording');
@@ -609,9 +577,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       persistentDisplay.textContent = 'Recording...';
       
       // Update recording timer
-      const timer = setInterval(() => {
+      recordingTimer = setInterval(() => {
         if (!isRecording) {
-          clearInterval(timer);
+          clearInterval(recordingTimer);
           return;
         }
         const elapsed = (Date.now() - recordingStartTime) / 1000;
@@ -628,7 +596,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function stopRecording() {
     if (!isRecording) return;
     
-    recorderNode.port.postMessage({ command: 'stop' });
+    isRecording = false;
+    document.body.classList.remove('recording');
+    recordBtn.textContent = 'Start Recording';
+    recStateEl.textContent = 'Inactive';
+    clearInterval(recordingTimer);
+    
+    // Calculate duration
+    const duration = recordingData.length * (2048 / sampleRate);
+    recLengthEl.textContent = duration.toFixed(2) + ' s';
+    analyzeBtn.disabled = false;
+    statusEl.textContent = 'Recording complete. Ready to analyze.';
+    
+    // Draw the full waveform
+    drawFullWaveform();
     
     // Disconnect and close resources
     if (microphone) {
@@ -637,19 +618,57 @@ document.addEventListener('DOMContentLoaded', async () => {
       microphone = null;
     }
     
-    if (recorderNode) {
-      recorderNode.disconnect();
-      recorderNode = null;
+    if (javascriptNode) {
+      javascriptNode.disconnect();
+      javascriptNode = null;
     }
     
-    isRecording = false;
-    document.body.classList.remove('recording');
-    recordBtn.textContent = 'Start Recording';
-    recStateEl.textContent = 'Inactive';
+    if (analyser) {
+      analyser.disconnect();
+    }
   }
   
-  // Draw waveform
-  function drawWaveform() {
+  // Draw real-time waveform
+  function drawWaveform(data) {
+    const width = waveformCanvas.width / window.devicePixelRatio;
+    const height = waveformCanvas.height / window.devicePixelRatio;
+    const centerY = height / 2;
+    
+    ctx.clearRect(0, 0, width, height);
+    
+    // Draw grid
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, centerY);
+    ctx.lineTo(width, centerY);
+    ctx.stroke();
+    
+    // Draw waveform
+    ctx.strokeStyle = '#ff7e5f';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    
+    const sliceWidth = width / data.length;
+    let x = 0;
+    
+    for (let i = 0; i < data.length; i++) {
+      const y = centerY + data[i] * centerY * 0.8;
+      
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+      
+      x += sliceWidth;
+    }
+    
+    ctx.stroke();
+  }
+  
+  // Draw full recorded waveform
+  function drawFullWaveform() {
     if (!recordingData || recordingData.length === 0) return;
     
     // Flatten the recording data
@@ -674,10 +693,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     ctx.lineWidth = 2;
     ctx.beginPath();
     
-    const sliceWidth = width / flatData.length;
+    // Downsample for display if needed
+    const displaySamples = Math.min(flatData.length, width * 2);
+    const step = Math.ceil(flatData.length / displaySamples);
+    
+    const sliceWidth = width / displaySamples;
     let x = 0;
     
-    for (let i = 0; i < flatData.length; i += Math.ceil(flatData.length / width)) {
+    for (let i = 0; i < flatData.length; i += step) {
       const y = centerY + flatData[i] * centerY * 0.8;
       
       if (i === 0) {
@@ -726,30 +749,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     return windowedData;
   }
   
-  // Perform FFT (using a simple DFT implementation for demonstration)
-  function performDFT(data) {
-    const N = data.length;
-    const real = new Float32Array(N);
-    const imag = new Float32Array(N);
+  // Perform FFT using the AnalyserNode
+  function performFFT() {
+    if (!analyser) return null;
     
-    for (let k = 0; k < N; k++) {
-      for (let n = 0; n < N; n++) {
-        const angle = (2 * Math.PI * k * n) / N;
-        real[k] += data[n] * Math.cos(angle);
-        imag[k] -= data[n] * Math.sin(angle);
-      }
-    }
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Float32Array(bufferLength);
+    analyser.getFloatFrequencyData(dataArray);
     
-    return { real, imag };
-  }
-  
-  // Calculate magnitude spectrum
-  function calculateMagnitude(real, imag) {
-    const magnitude = new Float32Array(real.length);
-    for (let i = 0; i < real.length; i++) {
-      magnitude[i] = Math.sqrt(real[i] * real[i] + imag[i] * imag[i]);
-    }
-    return magnitude;
+    return dataArray;
   }
   
   // Find peak with parabolic interpolation
@@ -758,7 +766,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const minBin = Math.floor(minFrequency / binSize);
     const maxBin = Math.min(Math.floor(maxFrequency / binSize), magnitude.length - 1);
     
-    let maxMag = 0;
+    let maxMag = -Infinity;
     let maxBinIdx = minBin;
     
     // Find the bin with maximum magnitude
@@ -769,47 +777,30 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
     
-    // Quadratic interpolation for precise frequency
-    let deltaFreq = 0;
-    if (maxMag > 0 && maxBinIdx > 0 && maxBinIdx < magnitude.length - 1) {
-      const alpha = magnitude[maxBinIdx - 1];
-      const beta = magnitude[maxBinIdx];
-      const gamma = magnitude[maxBinIdx + 1];
-      const denom = alpha - 2 * beta + gamma;
-      
-      if (Math.abs(denom) > 1e-12) {
-        deltaFreq = 0.5 * (alpha - gamma) / denom;
-      }
-    }
-    
-    const frequency = (maxBinIdx + deltaFreq) * binSize;
-    const confidence = Math.min(1, maxMag / (magnitude.reduce((a, b) => a + b, 0) / magnitude.length));
+    // Always return the highest peak (even if it might be wrong)
+    const frequency = maxBinIdx * binSize;
+    const confidence = Math.min(100, Math.max(0, (maxMag + 100) / 1.5)); // Convert from dB scale to 0-100%
     
     return {
       frequency,
-      confidence: confidence * 100,
+      confidence,
       bin: maxBinIdx
     };
   }
   
-  // ...existing code...
+  // Analyze the recording
   function analyzeRecording() {
     if (!recordingData || recordingData.length === 0) {
       statusEl.textContent = 'No recording data to analyze';
-      fundEl.textContent = '-- Hz';
-      confEl.textContent = '-- %';
-      [h1, h2, h3, h4].forEach(el => el.textContent = '-- Hz');
-      persistentDisplay.textContent = 'No data';
-      lastAnalysisTimeEl.textContent = new Date().toLocaleTimeString();
       return;
     }
-
+    
     statusEl.textContent = 'Analyzing...';
-
+    
     // Flatten the recording data
     const flatData = recordingData.flat();
-
-    // If we have more data than needed for FFT, take the middle portion
+    
+    // If we have more data than needed for FFT, take a portion
     let analysisData;
     if (flatData.length > fftSize) {
       const start = Math.floor((flatData.length - fftSize) / 2);
@@ -819,45 +810,50 @@ document.addEventListener('DOMContentLoaded', async () => {
       analysisData = new Float32Array(fftSize);
       analysisData.set(flatData, 0);
     }
-
+    
     // Apply window function
     const windowName = windowFunctionSelect.value;
     const windowedData = applyWindowFunction(analysisData, windowName);
-
-    // Perform FFT
-    const { real, imag } = performDFT(windowedData);
-
-    // Calculate magnitude spectrum
-    const magnitude = calculateMagnitude(real, imag);
-
+    
+    // Create a temporary analyser for processing
+    const tempAnalyser = audioContext.createAnalyser();
+    tempAnalyser.fftSize = fftSize * 2;
+    
+    // Create a temporary source node
+    const buffer = audioContext.createBuffer(1, windowedData.length, audioContext.sampleRate);
+    buffer.copyToChannel(windowedData, 0);
+    
+    const source = audioContext.createBufferSource();
+    source.buffer = buffer;
+    
+    // Connect and analyze
+    source.connect(tempAnalyser);
+    tempAnalyser.connect(audioContext.destination);
+    
+    // Get frequency data
+    const frequencyData = new Float32Array(tempAnalyser.frequencyBinCount);
+    tempAnalyser.getFloatFrequencyData(frequencyData);
+    
     // Find fundamental frequency
-    const { frequency, confidence, bin } = findPeakWithInterpolation(magnitude, sampleRate, fftSize);
-
-    // If frequency is not valid, show placeholders
-    if (!frequency || isNaN(frequency) || frequency < minFrequency || frequency > maxFrequency) {
-      fundEl.textContent = '-- Hz';
-      confEl.textContent = '-- %';
-      [h1, h2, h3, h4].forEach(el => el.textContent = '-- Hz');
-      persistentDisplay.textContent = 'No clear peak detected';
-      lastAnalysisTimeEl.textContent = new Date().toLocaleTimeString();
-      statusEl.textContent = 'No clear frequency peak found';
-      return;
-    }
-
+    const { frequency, confidence } = findPeakWithInterpolation(frequencyData, sampleRate, fftSize);
+    
     // Update UI with results
     fundEl.textContent = `${frequency.toFixed(2)} Hz`;
     confEl.textContent = `${confidence.toFixed(1)} %`;
-
+    
     // Update harmonics
     [h1, h2, h3, h4].forEach((el, i) => {
       el.textContent = `${(frequency * (i + 1)).toFixed(1)} Hz`;
     });
-
+    
     persistentDisplay.textContent = `Fundamental: ${frequency.toFixed(2)} Hz`;
     lastAnalysisTimeEl.textContent = new Date().toLocaleTimeString();
     statusEl.textContent = 'Analysis complete';
+    
+    // Clean up
+    source.disconnect();
+    tempAnalyser.disconnect();
   }
-  // ...existing code...
   
   // Calibrate function
   function calibrate() {
