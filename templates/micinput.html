@@ -584,17 +584,19 @@ document.addEventListener('DOMContentLoaded', async () => {
       microphone.connect(recorderNode);
       recorderNode.connect(audioContext.destination);
       
-      // Set up message handling
       recorderNode.port.onmessage = (event) => {
         if (event.data.command === 'recording') {
           recordingData = event.data.data;
-          const duration = recordingData.length * (recordingData[0].length / sampleRate);
+          let duration = 0;
+          if (recordingData.length > 0 && recordingData[0]) {
+            duration = recordingData.length * (recordingData[0].length / sampleRate);
+          }
           recLengthEl.textContent = duration.toFixed(2) + ' s';
           analyzeBtn.disabled = false;
           statusEl.textContent = 'Recording complete. Ready to analyze.';
           drawWaveform();
         }
-      };
+};
       
       // Start recording
       recorderNode.port.postMessage({ command: 'start' });
@@ -790,18 +792,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
   }
   
-  // Analyze the recording
+  // ...existing code...
   function analyzeRecording() {
     if (!recordingData || recordingData.length === 0) {
       statusEl.textContent = 'No recording data to analyze';
+      fundEl.textContent = '-- Hz';
+      confEl.textContent = '-- %';
+      [h1, h2, h3, h4].forEach(el => el.textContent = '-- Hz');
+      persistentDisplay.textContent = 'No data';
+      lastAnalysisTimeEl.textContent = new Date().toLocaleTimeString();
       return;
     }
-    
+
     statusEl.textContent = 'Analyzing...';
-    
+
     // Flatten the recording data
     const flatData = recordingData.flat();
-    
+
     // If we have more data than needed for FFT, take the middle portion
     let analysisData;
     if (flatData.length > fftSize) {
@@ -812,33 +819,45 @@ document.addEventListener('DOMContentLoaded', async () => {
       analysisData = new Float32Array(fftSize);
       analysisData.set(flatData, 0);
     }
-    
+
     // Apply window function
     const windowName = windowFunctionSelect.value;
     const windowedData = applyWindowFunction(analysisData, windowName);
-    
+
     // Perform FFT
     const { real, imag } = performDFT(windowedData);
-    
+
     // Calculate magnitude spectrum
     const magnitude = calculateMagnitude(real, imag);
-    
+
     // Find fundamental frequency
     const { frequency, confidence, bin } = findPeakWithInterpolation(magnitude, sampleRate, fftSize);
-    
+
+    // If frequency is not valid, show placeholders
+    if (!frequency || isNaN(frequency) || frequency < minFrequency || frequency > maxFrequency) {
+      fundEl.textContent = '-- Hz';
+      confEl.textContent = '-- %';
+      [h1, h2, h3, h4].forEach(el => el.textContent = '-- Hz');
+      persistentDisplay.textContent = 'No clear peak detected';
+      lastAnalysisTimeEl.textContent = new Date().toLocaleTimeString();
+      statusEl.textContent = 'No clear frequency peak found';
+      return;
+    }
+
     // Update UI with results
     fundEl.textContent = `${frequency.toFixed(2)} Hz`;
     confEl.textContent = `${confidence.toFixed(1)} %`;
-    
+
     // Update harmonics
     [h1, h2, h3, h4].forEach((el, i) => {
       el.textContent = `${(frequency * (i + 1)).toFixed(1)} Hz`;
     });
-    
+
     persistentDisplay.textContent = `Fundamental: ${frequency.toFixed(2)} Hz`;
     lastAnalysisTimeEl.textContent = new Date().toLocaleTimeString();
     statusEl.textContent = 'Analysis complete';
   }
+  // ...existing code...
   
   // Calibrate function
   function calibrate() {
