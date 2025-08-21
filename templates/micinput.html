@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Professional Drum Frequency Analyzer</title>
+<title>Precision Drum Frequency Analyzer</title>
 <style>
 * {
   box-sizing: border-box;
@@ -63,41 +63,6 @@ h1 {
   display: block;
 }
 
-.drum-display {
-  position: absolute;
-  bottom: 0;
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  gap: 15px;
-  padding: 20px;
-  pointer-events: none;
-}
-
-.drum-pad {
-  pointer-events: none;
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.85);
-  font-weight: bold;
-  transition: all 300ms ease;
-  font-size: 1rem;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-}
-
-.drum-pad.active {
-  transform: scale(1.18);
-  background: linear-gradient(135deg, #ff7e5f, #feb47b);
-  box-shadow: 0 0 25px rgba(255, 126, 95, 0.7);
-  color: #fff;
-  z-index: 10;
-}
-
 .controls {
   display: flex;
   gap: 15px;
@@ -132,6 +97,28 @@ button:disabled {
   box-shadow: none;
 }
 
+.record-indicator {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: #f44336;
+  margin-right: 8px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.recording .record-indicator {
+  opacity: 1;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.4; }
+  100% { opacity: 1; }
+}
+
 .stats-container {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -163,56 +150,47 @@ button:disabled {
   -webkit-text-fill-color: transparent;
 }
 
-.confidence-bar {
-  margin-top: 15px;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
-  height: 12px;
-  overflow: hidden;
-}
-
-.confidence-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #f44336, #4caf50);
-  transition: width 0.5s ease;
-}
-
-.confidence-labels {
+.persistent-display {
   display: flex;
-  justify-content: space-between;
-  margin-top: 8px;
-  color: #a0a0d0;
-  font-size: 0.9rem;
-}
-
-.spectrum-container {
-  background: rgba(0, 0, 0, 0.15);
+  justify-content: center;
+  align-items: center;
+  height: 80px;
+  background: rgba(0, 0, 0, 0.2);
   border-radius: 8px;
-  padding: 15px;
+  margin-top: 15px;
+  font-size: 1.4rem;
+  color: #feb47b;
+  font-weight: bold;
+}
+
+.analysis-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
   margin-top: 20px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
 }
 
-.spectrum-display {
+.control-row {
   display: flex;
-  gap: 3px;
-  align-items: flex-end;
-  height: 150px;
-  margin-bottom: 10px;
+  align-items: center;
+  gap: 15px;
 }
 
-.spectrum-bar {
-  flex: 1;
-  min-width: 4px;
-  border-radius: 4px 4px 0 0;
-  background: linear-gradient(to top, #ff7e5f, #feb47b);
-  transition: height 0.1s ease;
-}
-
-.frequency-range {
-  display: flex;
-  justify-content: space-between;
+.control-row label {
+  min-width: 120px;
   color: #a0a0d0;
-  font-size: 0.9rem;
+}
+
+.control-row input[type="range"] {
+  flex: 1;
+}
+
+.control-row span {
+  min-width: 60px;
+  text-align: right;
 }
 
 .harmonics {
@@ -276,28 +254,9 @@ button:disabled {
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.persistent-display {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 80px;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 8px;
-  margin-top: 15px;
-  font-size: 1.4rem;
-  color: #feb47b;
-  font-weight: bold;
-}
-
 @media (max-width: 768px) {
   .stats-container {
     grid-template-columns: 1fr;
-  }
-  
-  .drum-pad {
-    width: 65px;
-    height: 65px;
-    font-size: 0.9rem;
   }
   
   .controls {
@@ -309,33 +268,32 @@ button:disabled {
     width: 100%;
     max-width: 300px;
   }
+  
+  .harmonic-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 </style>
 </head>
 <body>
 <div class="container">
   <header>
-    <h1>Professional Drum Frequency Analyzer</h1>
-    <p class="subtitle">Audacity-level precision with 3-second persistence</p>
+    <h1>Precision Drum Frequency Analyzer</h1>
+    <p class="subtitle">Audacity-level accuracy with advanced signal processing</p>
   </header>
   
   <div class="visualization">
     <canvas id="waveformCanvas"></canvas>
-    <div class="drum-display" id="drumDisplay">
-      <div class="drum-pad">Kick</div>
-      <div class="drum-pad">Snare</div>
-      <div class="drum-pad">Hi-Hat</div>
-      <div class="drum-pad">Tom 1</div>
-      <div class="drum-pad">Tom 2</div>
-      <div class="drum-pad">Floor</div>
-    </div>
   </div>
   
   <div class="controls">
-    <button id="startBtn">Start Analysis</button>
-    <button id="stopBtn" disabled>Stop</button>
-    <button id="calBtn">Calibrate</button>
-    <button id="snapBtn">Save Data</button>
+    <button id="recordBtn">
+      <span class="record-indicator"></span>
+      Start Recording
+    </button>
+    <button id="analyzeBtn" disabled>Analyze Recording</button>
+    <button id="calibrateBtn">Calibrate</button>
+    <button id="exportBtn">Export Data</button>
   </div>
   
   <div class="stats-container">
@@ -346,50 +304,60 @@ button:disabled {
       </div>
       
       <div class="persistent-display" id="persistentDisplay">
-        Last detection: --
+        Ready to record
       </div>
       
       <div class="stat-card">
-        <h2>Signal Confidence</h2>
-        <div class="confidence-bar">
-          <div class="confidence-fill" id="confBar"></div>
-        </div>
-        <div class="confidence-labels">
-          <span>Low</span>
-          <span id="confLabel">0%</span>
-          <span>High</span>
-        </div>
+        <h2>Analysis Confidence</h2>
+        <div class="stat-value" id="confidence">-- %</div>
       </div>
     </div>
     
     <div class="stats">
       <div class="stat-card">
-        <h2>Peak Amplitude</h2>
-        <div class="stat-value" id="peakDb">-- dB</div>
+        <h2>Recording Length</h2>
+        <div class="stat-value" id="recLength">0.0 s</div>
       </div>
       
       <div class="stat-card">
         <h2>FFT Resolution</h2>
-        <div class="stat-value" id="fftRes">±5 Hz</div>
+        <div class="stat-value" id="fftRes">±2.7 Hz</div>
       </div>
       
       <div class="stat-card">
-        <h2>Sensitivity</h2>
-        <input id="sensitivity" type="range" min="0.05" max="0.2" step="0.005" value="0.12" />
-        <div style="text-align: center; margin-top: 8px;">
-          <span id="sensValue">0.120</span>
-        </div>
+        <h2>Sample Rate</h2>
+        <div class="stat-value" id="sampleRate">-- Hz</div>
       </div>
     </div>
   </div>
   
-  <div class="spectrum-container">
-    <div class="spectrum-display" id="bars"></div>
-    <div class="frequency-range">
-      <span>20 Hz</span>
-      <span>200 Hz</span>
-      <span>2 kHz</span>
-      <span>20 kHz</span>
+  <div class="analysis-controls">
+    <div class="control-row">
+      <label for="fftSize">FFT Size:</label>
+      <input type="range" id="fftSize" min="12" max="18" step="1" value="16" />
+      <span id="fftSizeValue">65536</span>
+    </div>
+    
+    <div class="control-row">
+      <label for="windowFunction">Window Function:</label>
+      <select id="windowFunction">
+        <option value="blackman">Blackman</option>
+        <option value="blackmanHarris">Blackman-Harris</option>
+        <option value="hann">Hann</option>
+        <option value="hamming">Hamming</option>
+      </select>
+    </div>
+    
+    <div class="control-row">
+      <label for="minFreq">Min Frequency:</label>
+      <input type="range" id="minFreq" min="20" max="200" step="5" value="40" />
+      <span id="minFreqValue">40 Hz</span>
+    </div>
+    
+    <div class="control-row">
+      <label for="maxFreq">Max Frequency:</label>
+      <input type="range" id="maxFreq" min="100" max="500" step="10" value="300" />
+      <span id="maxFreqValue">300 Hz</span>
     </div>
   </div>
   
@@ -419,9 +387,13 @@ button:disabled {
   </div>
   
   <div class="info-box">
-    <strong>Calibration Tip:</strong> Perform calibration in a quiet environment. For best results, 
-    position your microphone 1-2 feet from the drum kit. Adjust sensitivity after calibration 
-    to reduce false triggers.
+    <strong>Usage Instructions:</strong> 
+    <ol>
+      <li>Click "Start Recording" to capture audio (3-5 seconds recommended)</li>
+      <li>Click "Analyze Recording" to process the audio</li>
+      <li>Adjust FFT size and window function for optimal results</li>
+      <li>Export data for further analysis if needed</li>
+    </ol>
   </div>
   
   <div class="debug-panel">
@@ -430,84 +402,126 @@ button:disabled {
       <div id="status">Ready to start</div>
     </div>
     <div class="debug-row">
-      <div>FFT Size:</div>
-      <div id="fftSize">8192 samples</div>
+      <div>Recording State:</div>
+      <div id="recState">Inactive</div>
     </div>
     <div class="debug-row">
-      <div>Sample Rate:</div>
-      <div id="sampleRate">-- Hz</div>
+      <div>Peak Detection Method:</div>
+      <div id="peakMethod">Parabolic Interpolation</div>
     </div>
     <div class="debug-row">
-      <div>Last Detection:</div>
-      <div id="lastDetectionTime">--</div>
+      <div>Last Analysis Time:</div>
+      <div id="lastAnalysisTime">--</div>
     </div>
   </div>
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', () => {
+// Register the AudioWorkletProcessor
+const workletCode = `
+class RecorderProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.recording = false;
+    this.audioData = [];
+    this.port.onmessage = (event) => {
+      if (event.data.command === 'start') {
+        this.recording = true;
+        this.audioData = [];
+      } else if (event.data.command === 'stop') {
+        this.recording = false;
+        this.port.postMessage({
+          command: 'recording',
+          data: this.audioData
+        });
+      }
+    };
+  }
+
+  process(inputs) {
+    if (this.recording && inputs[0].length > 0) {
+      // We'll record from the first channel
+      const channelData = inputs[0][0];
+      if (channelData) {
+        // Copy the data to avoid reference issues
+        this.audioData.push(new Float32Array(channelData));
+      }
+    }
+    return true;
+  }
+}
+
+registerProcessor('recorder-processor', RecorderProcessor);
+`;
+
+// Create a Blob URL for the worklet code
+const workletBlob = new Blob([workletCode], { type: 'application/javascript' });
+const workletUrl = URL.createObjectURL(workletBlob);
+
+document.addEventListener('DOMContentLoaded', async () => {
   // Elements
-  const startBtn = document.getElementById('startBtn');
-  const stopBtn = document.getElementById('stopBtn');
-  const calBtn = document.getElementById('calBtn');
-  const snapBtn = document.getElementById('snapBtn');
+  const recordBtn = document.getElementById('recordBtn');
+  const analyzeBtn = document.getElementById('analyzeBtn');
+  const calibrateBtn = document.getElementById('calibrateBtn');
+  const exportBtn = document.getElementById('exportBtn');
   const waveformCanvas = document.getElementById('waveformCanvas');
   const ctx = waveformCanvas.getContext('2d');
-  const barsContainer = document.getElementById('bars');
-  const sensEl = document.getElementById('sensitivity');
-  const sensVal = document.getElementById('sensValue');
-  const confBar = document.getElementById('confBar');
-  const confLbl = document.getElementById('confLabel');
   const fundEl = document.getElementById('fundamental');
-  const peakEl = document.getElementById('peakDb');
+  const confEl = document.getElementById('confidence');
+  const recLengthEl = document.getElementById('recLength');
+  const fftResEl = document.getElementById('fftRes');
+  const sampleRateEl = document.getElementById('sampleRate');
   const h1 = document.getElementById('h1');
   const h2 = document.getElementById('h2');
   const h3 = document.getElementById('h3');
   const h4 = document.getElementById('h4');
   const statusEl = document.getElementById('status');
-  const sampleRateEl = document.getElementById('sampleRate');
+  const recStateEl = document.getElementById('recState');
+  const lastAnalysisTimeEl = document.getElementById('lastAnalysisTime');
   const persistentDisplay = document.getElementById('persistentDisplay');
-  const lastDetectionTimeEl = document.getElementById('lastDetectionTime');
-  const fftResEl = document.getElementById('fftRes');
   
-  // Prepare spectrum bars
-  const BAR_COUNT = 128;
-  function makeBars() {
-    barsContainer.innerHTML = '';
-    for (let i = 0; i < BAR_COUNT; i++) {
-      const bar = document.createElement('div');
-      bar.className = 'spectrum-bar';
-      bar.style.height = '4px';
-      barsContainer.appendChild(bar);
-    }
-  }
-  makeBars();
+  // Configuration controls
+  const fftSizeSlider = document.getElementById('fftSize');
+  const fftSizeValue = document.getElementById('fftSizeValue');
+  const windowFunctionSelect = document.getElementById('windowFunction');
+  const minFreqSlider = document.getElementById('minFreq');
+  const minFreqValue = document.getElementById('minFreqValue');
+  const maxFreqSlider = document.getElementById('maxFreq');
+  const maxFreqValue = document.getElementById('maxFreqValue');
   
   // Audio variables
-  let audioCtx = null;
-  let analyser = null;
-  let source = null;
-  let stream = null;
-  let floatFreq = null;
-  let timeData = null;
-  let noiseFloor = null;
-  let isRunning = false;
-  let rafId = null;
+  let audioContext = null;
+  let recorderNode = null;
+  let microphone = null;
+  let recordingData = [];
+  let recordingStartTime = 0;
+  let isRecording = false;
+  let sampleRate = 44100;
   
-  // Detection state
-  let lastDetectedFrequency = null;
-  let lastDetectionTime = 0;
-  const PERSISTENCE_TIME = 3000; // 3 seconds
-  let snapshot = [];
+  // Analysis parameters
+  let fftSize = 65536; // 2^16
+  let minFrequency = 40;
+  let maxFrequency = 300;
   
-  // Thresholds and configs
-  const SNR_THRESHOLD = 8; // dB
-  const CONFIDENCE_THRESHOLD = 0.2;
-  const NOISE_SILENCE_DB = -80;
-  const ABS_MAG_THRESHOLD = 1e-6;
-  const MAX_FREQ_DETECT = 300; // Hz
-  const MIN_FREQ_DETECT = 20; // Hz
-  const FFT_SIZE = 16384; // Better resolution (±2.7Hz at 44.1kHz)
+  // Update FFT size display
+  fftSizeSlider.addEventListener('input', () => {
+    const power = parseInt(fftSizeSlider.value);
+    fftSize = Math.pow(2, power);
+    fftSizeValue.textContent = fftSize.toLocaleString();
+    const resolution = (sampleRate / fftSize).toFixed(2);
+    fftResEl.textContent = `±${resolution} Hz`;
+  });
+  
+  // Update frequency range displays
+  minFreqSlider.addEventListener('input', () => {
+    minFrequency = parseInt(minFreqSlider.value);
+    minFreqValue.textContent = `${minFrequency} Hz`;
+  });
+  
+  maxFreqSlider.addEventListener('input', () => {
+    maxFrequency = parseInt(maxFreqSlider.value);
+    maxFreqValue.textContent = `${maxFrequency} Hz`;
+  });
   
   // Resize canvas for waveform display
   function resizeCanvas() {
@@ -522,236 +536,123 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('resize', resizeCanvas);
   resizeCanvas();
   
-  // Sensitivity control
-  sensVal.textContent = parseFloat(sensEl.value).toFixed(3);
-  sensEl.addEventListener('input', () => {
-    sensVal.textContent = parseFloat(sensEl.value).toFixed(3);
-  });
-  
-  // Button event listeners
-  startBtn.addEventListener('click', start);
-  stopBtn.addEventListener('click', stop);
-  calBtn.addEventListener('click', () => {
-    if (analyser) calibrateNoise(1.5);
-  });
-  snapBtn.addEventListener('click', saveCSV);
-  
   // Initialize application
   function init() {
-    statusEl.textContent = 'Ready to start';
+    statusEl.textContent = 'Initializing...';
     sampleRateEl.textContent = '-- Hz';
-    lastDetectionTimeEl.textContent = '--';
-    fftResEl.textContent = `±${(44100 / FFT_SIZE).toFixed(2)} Hz`;
+    lastAnalysisTimeEl.textContent = '--';
+    recStateEl.textContent = 'Inactive';
+    
+    // Set initial values for controls
+    fftSizeValue.textContent = fftSize.toLocaleString();
+    minFreqValue.textContent = `${minFrequency} Hz`;
+    maxFreqValue.textContent = `${maxFrequency} Hz`;
+    
+    statusEl.textContent = 'Ready to record';
   }
   
-  // Start audio analysis
-  async function start() {
-    if (isRunning) return;
-    statusEl.textContent = 'Starting...';
+  // Start recording
+  async function startRecording() {
+    if (isRecording) return;
     
     try {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      sampleRateEl.textContent = `${audioCtx.sampleRate} Hz`;
-      
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      source = audioCtx.createMediaStreamSource(stream);
-      
-      analyser = audioCtx.createAnalyser();
-      analyser.smoothingTimeConstant = 0.5;
-      analyser.minDecibels = -120;
-      analyser.maxDecibels = -10;
-      analyser.fftSize = FFT_SIZE;
-      
-      source.connect(analyser);
-      
-      floatFreq = new Float32Array(analyser.frequencyBinCount);
-      timeData = new Float32Array(analyser.fftSize);
-      noiseFloor = new Float32Array(analyser.frequencyBinCount).fill(1e-12);
-      
-      isRunning = true;
-      statusEl.textContent = 'Running - calibrating...';
-      startBtn.disabled = true;
-      stopBtn.disabled = false;
-      
-      await calibrateNoise(1.5);
-      visualize();
-    } catch (e) {
-      console.error('Audio setup failed:', e);
-      statusEl.textContent = `Error: ${e.message}`;
-      alert(`Microphone access failed: ${e.message}`);
-      stop();
-    }
-  }
-  
-  // Stop audio analysis
-  function stop() {
-    if (!isRunning) return;
-    isRunning = false;
-    
-    if (rafId) {
-      cancelAnimationFrame(rafId);
-      rafId = null;
-    }
-    
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      stream = null;
-    }
-    
-    if (source) source.disconnect();
-    if (analyser) analyser.disconnect();
-    
-    if (audioCtx) {
-      audioCtx.close().catch(() => {})
-        .then(() => {
-          audioCtx = null;
-          statusEl.textContent = 'Stopped';
-          startBtn.disabled = false;
-          stopBtn.disabled = true;
-        });
-    }
-    
-    // Reset UI
-    fundEl.textContent = '-- Hz';
-    peakEl.textContent = '-- dB';
-    confBar.style.width = '0%';
-    confLbl.textContent = '0%';
-    [h1, h2, h3, h4].forEach(el => el.textContent = '-- Hz');
-    persistentDisplay.textContent = 'Last detection: --';
-    lastDetectionTimeEl.textContent = '--';
-    deactivatePads();
-  }
-  
-  // Calibrate noise floor
-  async function calibrateNoise(duration = 1.5) {
-    if (!analyser) return;
-    statusEl.textContent = 'Calibrating noise floor...';
-    
-    const acc = new Float32Array(analyser.frequencyBinCount).fill(0);
-    let frames = 0;
-    const startTime = performance.now();
-    
-    while (performance.now() - startTime < duration * 1000) {
-      analyser.getFloatFrequencyData(floatFreq);
-      
-      for (let i = 0; i < floatFreq.length; i++) {
-        // Convert dB to linear magnitude
-        acc[i] += Math.pow(10, floatFreq[i] / 20);
+      if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        sampleRate = audioContext.sampleRate;
+        sampleRateEl.textContent = `${sampleRate} Hz`;
+        
+        // Add the worklet module
+        await audioContext.audioWorklet.addModule(workletUrl);
       }
       
-      frames++;
-      await new Promise(resolve => setTimeout(resolve, 40));
-    }
-    
-    if (frames > 0) {
-      for (let i = 0; i < acc.length; i++) {
-        noiseFloor[i] = acc[i] / frames + 1e-12;
-      }
-    }
-    
-    statusEl.textContent = 'Calibration complete';
-  }
-  
-  // Save data to CSV
-  function saveCSV() {
-    if (!snapshot || snapshot.length === 0) {
-      alert('No data collected yet. Start analysis and detect some drum hits first.');
-      return;
-    }
-    
-    const header = ['timestamp_ms', 'freq_hz', 'peak_db', 'confidence'];
-    const rows = [header.join(',')].concat(snapshot.map(row => row.join(',')));
-    const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'drum_frequencies.csv';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  }
-  
-  // Activate drum pad
-  function activatePad(name) {
-    document.querySelectorAll('.drum-pad').forEach(pad => {
-      if (pad.textContent === name) {
-        pad.classList.add('active');
-      } else {
-        pad.classList.remove('active');
-      }
-    });
-  }
-  
-  // Deactivate all drum pads
-  function deactivatePads() {
-    document.querySelectorAll('.drum-pad').forEach(pad => {
-      pad.classList.remove('active');
-    });
-  }
-  
-  function findDominantFrequency(mags, sampleRate, fftSize) {
-    const binSize = sampleRate / fftSize;
-    const minBin = Math.floor(MIN_FREQ_DETECT / binSize);
-    const maxBin = Math.min(Math.floor(MAX_FREQ_DETECT / binSize), mags.length - 1);
-    
-    let maxMag = 0;
-    let maxBinIdx = minBin;
-    
-    for (let i = minBin; i <= maxBin; i++) {
-      if (mags[i] > maxMag) {
-        maxMag = mags[i];
-        maxBinIdx = i;
-      }
-    }
-    
-    // Quadratic interpolation for precise frequency
-    let deltaFreq = 0;
-    if (maxMag > 0 && maxBinIdx > 0 && maxBinIdx < mags.length - 1) {
-      const alpha = mags[maxBinIdx - 1];
-      const beta = mags[maxBinIdx];
-      const gamma = mags[maxBinIdx + 1];
-      const denom = alpha - 2 * beta + gamma;
+      // Get microphone access
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: {
+        sampleRate: sampleRate,
+        channelCount: 1,
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false
+      } });
       
-      if (Math.abs(denom) > 1e-12) {
-        deltaFreq = 0.5 * (alpha - gamma) / denom;
-      }
+      // Create microphone source
+      microphone = audioContext.createMediaStreamSource(stream);
+      
+      // Create recorder node
+      recorderNode = new AudioWorkletNode(audioContext, 'recorder-processor');
+      
+      // Connect microphone to recorder
+      microphone.connect(recorderNode);
+      recorderNode.connect(audioContext.destination);
+      
+      // Set up message handling
+      recorderNode.port.onmessage = (event) => {
+        if (event.data.command === 'recording') {
+          recordingData = event.data.data;
+          const duration = recordingData.length * (recordingData[0].length / sampleRate);
+          recLengthEl.textContent = duration.toFixed(2) + ' s';
+          analyzeBtn.disabled = false;
+          statusEl.textContent = 'Recording complete. Ready to analyze.';
+          drawWaveform();
+        }
+      };
+      
+      // Start recording
+      recorderNode.port.postMessage({ command: 'start' });
+      recordingStartTime = Date.now();
+      isRecording = true;
+      document.body.classList.add('recording');
+      recordBtn.textContent = 'Stop Recording';
+      statusEl.textContent = 'Recording...';
+      recStateEl.textContent = 'Active';
+      persistentDisplay.textContent = 'Recording...';
+      
+      // Update recording timer
+      const timer = setInterval(() => {
+        if (!isRecording) {
+          clearInterval(timer);
+          return;
+        }
+        const elapsed = (Date.now() - recordingStartTime) / 1000;
+        persistentDisplay.textContent = `Recording: ${elapsed.toFixed(1)}s`;
+      }, 100);
+      
+    } catch (error) {
+      console.error('Recording error:', error);
+      statusEl.textContent = `Error: ${error.message}`;
     }
-    
-    return {
-      freq: (maxBinIdx + deltaFreq) * binSize,
-      bin: maxBinIdx,
-      mag: maxMag
-    };
   }
   
-  // Draw spectrum bars
-  function drawBars(mags, highlightBin = -1) {
-    const bars = document.querySelectorAll('.spectrum-bar');
-    const binStep = Math.floor(mags.length / bars.length);
+  // Stop recording
+  async function stopRecording() {
+    if (!isRecording) return;
     
-    for (let i = 0; i < bars.length; i++) {
-      const binIndex = Math.min(Math.floor(i * binStep), mags.length - 1);
-      const mag = mags[binIndex] || 0;
-      
-      // Scale magnitude for display
-      const heightPx = Math.max(4, Math.min(150, mag * 500));
-      bars[i].style.height = `${heightPx}px`;
-      
-      // Highlight detected frequency bin
-      if (highlightBin >= 0 && Math.abs(binIndex - highlightBin) <= 3) {
-        bars[i].style.background = 'linear-gradient(to top, #4caf50, #8bc34a)';
-      } else {
-        bars[i].style.background = 'linear-gradient(to top, #ff7e5f, #feb47b)';
-      }
+    recorderNode.port.postMessage({ command: 'stop' });
+    
+    // Disconnect and close resources
+    if (microphone) {
+      microphone.disconnect();
+      microphone.mediaStream.getTracks().forEach(track => track.stop());
+      microphone = null;
     }
+    
+    if (recorderNode) {
+      recorderNode.disconnect();
+      recorderNode = null;
+    }
+    
+    isRecording = false;
+    document.body.classList.remove('recording');
+    recordBtn.textContent = 'Start Recording';
+    recStateEl.textContent = 'Inactive';
   }
   
   // Draw waveform
   function drawWaveform() {
-    if (!analyser || !timeData) return;
+    if (!recordingData || recordingData.length === 0) return;
     
-    analyser.getFloatTimeDomainData(timeData);
+    // Flatten the recording data
+    const flatData = recordingData.flat();
+    
     const width = waveformCanvas.width / window.devicePixelRatio;
     const height = waveformCanvas.height / window.devicePixelRatio;
     const centerY = height / 2;
@@ -771,11 +672,11 @@ document.addEventListener('DOMContentLoaded', () => {
     ctx.lineWidth = 2;
     ctx.beginPath();
     
-    const sliceWidth = width / timeData.length;
+    const sliceWidth = width / flatData.length;
     let x = 0;
     
-    for (let i = 0; i < timeData.length; i++) {
-      const y = centerY + timeData[i] * centerY * 0.8;
+    for (let i = 0; i < flatData.length; i += Math.ceil(flatData.length / width)) {
+      const y = centerY + flatData[i] * centerY * 0.8;
       
       if (i === 0) {
         ctx.moveTo(x, y);
@@ -789,94 +690,178 @@ document.addEventListener('DOMContentLoaded', () => {
     ctx.stroke();
   }
   
-  // Main visualization loop
-  function visualize() {
-    if (!isRunning || !analyser) return;
-    rafId = requestAnimationFrame(visualize);
+  // Window functions
+  const windowFunctions = {
+    blackman: (n, N) => {
+      const alpha = 0.16;
+      const a0 = (1 - alpha) / 2;
+      const a1 = 0.5;
+      const a2 = alpha / 2;
+      return a0 - a1 * Math.cos(2 * Math.PI * n / (N - 1)) + a2 * Math.cos(4 * Math.PI * n / (N - 1));
+    },
+    blackmanHarris: (n, N) => {
+      return 0.35875 - 0.48829 * Math.cos(2 * Math.PI * n / (N - 1)) + 
+             0.14128 * Math.cos(4 * Math.PI * n / (N - 1)) - 
+             0.01168 * Math.cos(6 * Math.PI * n / (N - 1));
+    },
+    hann: (n, N) => {
+      return 0.5 * (1 - Math.cos(2 * Math.PI * n / (N - 1)));
+    },
+    hamming: (n, N) => {
+      return 0.54 - 0.46 * Math.cos(2 * Math.PI * n / (N - 1));
+    }
+  };
+  
+  // Apply window function to data
+  function applyWindowFunction(data, windowName) {
+    const windowFunc = windowFunctions[windowName] || windowFunctions.blackman;
+    const windowedData = new Float32Array(data.length);
     
-    analyser.getFloatFrequencyData(floatFreq);
-    analyser.getFloatTimeDomainData(timeData);
-    drawWaveform();
-    
-    const N = floatFreq.length;
-    const sr = audioCtx ? audioCtx.sampleRate : 44100;
-    const freqRes = sr / analyser.fftSize;
-
-    // Convert dB to magnitude
-    const mags = new Float32Array(N);
-    let maxDbFrame = -Infinity;
-    
-    for (let i = 0; i < N; i++) {
-      const mag = Math.pow(10, floatFreq[i] / 20);
-      mags[i] = mag < ABS_MAG_THRESHOLD ? 0 : mag;
-      if (floatFreq[i] > maxDbFrame) maxDbFrame = floatFreq[i];
+    for (let i = 0; i < data.length; i++) {
+      windowedData[i] = data[i] * windowFunc(i, data.length);
     }
     
-    // Static noise gating: ignore low energy frames
-    if (maxDbFrame < NOISE_SILENCE_DB) {
-      // Only update UI if we're not in persistence period
-      if (Date.now() - lastDetectionTime > PERSISTENCE_TIME) {
-        fundEl.textContent = '-- Hz';
-        peakEl.textContent = '-- dB';
-        confBar.style.width = '0%';
-        confLbl.textContent = '0%';
-        [h1, h2, h3, h4].forEach(el => el.textContent = '-- Hz');
-        deactivatePads();
+    return windowedData;
+  }
+  
+  // Perform FFT (using a simple DFT implementation for demonstration)
+  function performDFT(data) {
+    const N = data.length;
+    const real = new Float32Array(N);
+    const imag = new Float32Array(N);
+    
+    for (let k = 0; k < N; k++) {
+      for (let n = 0; n < N; n++) {
+        const angle = (2 * Math.PI * k * n) / N;
+        real[k] += data[n] * Math.cos(angle);
+        imag[k] -= data[n] * Math.sin(angle);
       }
-      drawBars(mags);
+    }
+    
+    return { real, imag };
+  }
+  
+  // Calculate magnitude spectrum
+  function calculateMagnitude(real, imag) {
+    const magnitude = new Float32Array(real.length);
+    for (let i = 0; i < real.length; i++) {
+      magnitude[i] = Math.sqrt(real[i] * real[i] + imag[i] * imag[i]);
+    }
+    return magnitude;
+  }
+  
+  // Find peak with parabolic interpolation
+  function findPeakWithInterpolation(magnitude, sampleRate, fftSize) {
+    const binSize = sampleRate / fftSize;
+    const minBin = Math.floor(minFrequency / binSize);
+    const maxBin = Math.min(Math.floor(maxFrequency / binSize), magnitude.length - 1);
+    
+    let maxMag = 0;
+    let maxBinIdx = minBin;
+    
+    // Find the bin with maximum magnitude
+    for (let i = minBin; i <= maxBin; i++) {
+      if (magnitude[i] > maxMag) {
+        maxMag = magnitude[i];
+        maxBinIdx = i;
+      }
+    }
+    
+    // Quadratic interpolation for precise frequency
+    let deltaFreq = 0;
+    if (maxMag > 0 && maxBinIdx > 0 && maxBinIdx < magnitude.length - 1) {
+      const alpha = magnitude[maxBinIdx - 1];
+      const beta = magnitude[maxBinIdx];
+      const gamma = magnitude[maxBinIdx + 1];
+      const denom = alpha - 2 * beta + gamma;
+      
+      if (Math.abs(denom) > 1e-12) {
+        deltaFreq = 0.5 * (alpha - gamma) / denom;
+      }
+    }
+    
+    const frequency = (maxBinIdx + deltaFreq) * binSize;
+    const confidence = Math.min(1, maxMag / (magnitude.reduce((a, b) => a + b, 0) / magnitude.length));
+    
+    return {
+      frequency,
+      confidence: confidence * 100,
+      bin: maxBinIdx
+    };
+  }
+  
+  // Analyze the recording
+  function analyzeRecording() {
+    if (!recordingData || recordingData.length === 0) {
+      statusEl.textContent = 'No recording data to analyze';
       return;
     }
     
-    // Find dominant frequency
-    const { freq, bin, mag } = findDominantFrequency(mags, sr, analyser.fftSize);
-    const confidence = Math.min(1, Math.max(0, mag * parseFloat(sensEl.value) * 10));
+    statusEl.textContent = 'Analyzing...';
     
-    // Update detection if confidence is above threshold
-    if (confidence > CONFIDENCE_THRESHOLD) {
-      lastDetectedFrequency = freq;
-      lastDetectionTime = Date.now();
-      lastDetectionTimeEl.textContent = new Date(lastDetectionTime).toLocaleTimeString();
-      
-      // Map frequency to drum type
-      if (freq >= 40 && freq <= 90) {
-        activatePad('Kick');
-      } else if (freq > 90 && freq <= 180) {
-        activatePad('Snare');
-      } else if (freq > 180 && freq <= 250) {
-        activatePad('Hi-Hat');
-      } else if (freq > 250 && freq <= 300) {
-        activatePad('Tom 1');
-      } else {
-        deactivatePads();
-      }
-      
-      // Update UI
-      fundEl.textContent = `${freq.toFixed(1)} Hz`;
-      peakEl.textContent = `${maxDbFrame.toFixed(1)} dB`;
-      confBar.style.width = `${confidence * 100}%`;
-      confLbl.textContent = `${(confidence * 100).toFixed(0)}%`;
-      
-      // Update harmonic info
-      [h1, h2, h3, h4].forEach((el, i) => {
-        el.textContent = `${(freq * (i + 1)).toFixed(1)} Hz`;
-      });
-      
-      // Save snapshot
-      snapshot.push([Date.now(), freq.toFixed(1), maxDbFrame.toFixed(1), confidence.toFixed(2)]);
-      if (snapshot.length > 2000) snapshot.shift();
+    // Flatten the recording data
+    const flatData = recordingData.flat();
+    
+    // If we have more data than needed for FFT, take the middle portion
+    let analysisData;
+    if (flatData.length > fftSize) {
+      const start = Math.floor((flatData.length - fftSize) / 2);
+      analysisData = flatData.slice(start, start + fftSize);
+    } else {
+      // Zero-padding if we don't have enough data
+      analysisData = new Float32Array(fftSize);
+      analysisData.set(flatData, 0);
     }
     
-    // Update persistent display
-    if (lastDetectedFrequency && Date.now() - lastDetectionTime <= PERSISTENCE_TIME) {
-      persistentDisplay.textContent = `Last detection: ${lastDetectedFrequency.toFixed(1)} Hz`;
-    } else if (Date.now() - lastDetectionTime > PERSISTENCE_TIME) {
-      persistentDisplay.textContent = 'Last detection: --';
-      deactivatePads();
-    }
+    // Apply window function
+    const windowName = windowFunctionSelect.value;
+    const windowedData = applyWindowFunction(analysisData, windowName);
     
-    // Draw spectrum
-    drawBars(mags, bin);
+    // Perform FFT
+    const { real, imag } = performDFT(windowedData);
+    
+    // Calculate magnitude spectrum
+    const magnitude = calculateMagnitude(real, imag);
+    
+    // Find fundamental frequency
+    const { frequency, confidence, bin } = findPeakWithInterpolation(magnitude, sampleRate, fftSize);
+    
+    // Update UI with results
+    fundEl.textContent = `${frequency.toFixed(2)} Hz`;
+    confEl.textContent = `${confidence.toFixed(1)} %`;
+    
+    // Update harmonics
+    [h1, h2, h3, h4].forEach((el, i) => {
+      el.textContent = `${(frequency * (i + 1)).toFixed(1)} Hz`;
+    });
+    
+    persistentDisplay.textContent = `Fundamental: ${frequency.toFixed(2)} Hz`;
+    lastAnalysisTimeEl.textContent = new Date().toLocaleTimeString();
+    statusEl.textContent = 'Analysis complete';
   }
+  
+  // Calibrate function
+  function calibrate() {
+    statusEl.textContent = 'Calibration not implemented in this demo';
+  }
+  
+  // Export data function
+  function exportData() {
+    statusEl.textContent = 'Export not implemented in this demo';
+  }
+  
+  // Event listeners
+  recordBtn.addEventListener('click', () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  });
+  
+  analyzeBtn.addEventListener('click', analyzeRecording);
+  calibrateBtn.addEventListener('click', calibrate);
+  exportBtn.addEventListener('click', exportData);
   
   // Initialize the app
   init();
