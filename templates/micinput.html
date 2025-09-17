@@ -3,30 +3,33 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Drum Frequency Analyzer — Stable</title>
+<title>Drum Frequency Analyzer — Harmonic-corrected</title>
 <style>
   body{background:#16213e;color:#fff;font-family:Segoe UI, Tahoma, Geneva, Verdana, sans-serif;
     display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;text-align:center}
-  h1{color:#feb47b;margin-bottom:18px}
-  .record-btn{background:linear-gradient(135deg,#ff7e5f,#feb47b);color:#fff;border:none;padding:18px 36px;border-radius:50px;cursor:pointer;font-weight:700;font-size:1.05rem;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+  h1{color:#feb47b;margin-bottom:14px}
+  .record-btn{background:linear-gradient(135deg,#ff7e5f,#feb47b);color:#fff;border:none;padding:16px 34px;border-radius:50px;cursor:pointer;font-weight:700;font-size:1.05rem;box-shadow:0 6px 18px rgba(0,0,0,.25)}
   .record-btn.recording{background:linear-gradient(135deg,#f44336,#ff7e5f)}
   .result{font-size:2.6rem;font-weight:800;margin:18px 0;color:#feb47b;min-height:56px}
   .status{color:#a0a0d0;margin-top:12px;font-size:.95rem}
-  .small{font-size:.9rem;color:#bfbfdc}
+  .small{font-size:.88rem;color:#bfbfdc;margin-top:6px}
+  .debug {font-size:.8rem;color:#bfbfdc;margin-top:10px;opacity:.9}
 </style>
 </head>
 <body>
-  <h1>Drum Frequency Analyzer — Stable (v1)</h1>
+  <h1>Drum Frequency Analyzer — Harmonic-corrected</h1>
   <button id="recordBtn" class="record-btn">Click to Record</button>
   <div class="result" id="result">-- Hz</div>
   <div class="status" id="status">Ready. Open console for debug logs.</div>
-  <div class="small">Tip: test close to the mic. Use Chrome/Edge. Localhost/HTTPS required for mic.</div>
+  <div class="small">Tip: test close to the mic. Use Chrome/Edge. Localhost/HTTPS recommended.</div>
+  <div class="debug" id="debug"></div>
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const recordBtn = document.getElementById('recordBtn');
   const resultEl = document.getElementById('result');
   const statusEl = document.getElementById('status');
+  const debugEl = document.getElementById('debug');
 
   let audioContext = null;
   let analyser = null;
@@ -34,17 +37,25 @@ document.addEventListener('DOMContentLoaded', () => {
   let scriptNode = null;
   let isRecording = false;
 
-  // Analysis params
-  const FFT_SIZE = 4096;                // better low-frequency resolution for drums
-  const SMOOTH_WINDOW = 6;             // median window size for smoothing
-  const HOLD_MS = 260;                 // hold last displayed value for this long (ms)
-  const MIN_VOLUME = 0.0015;           // absolute minimum RMS to consider (very low)
-  let noiseFloor = 0.001;              // adaptive noise floor via EMA
+  // Params
+  const FFT_SIZE = 8192;             // large for good low-freq resolution
+  const PROCESSOR_SIZE = 2048;       // script processor buffer
+  const SMOOTH_WINDOW = 7;           // median smoothing window
+  const HOLD_MS = 260;               // hold display after last good read
+  const MIN_VOLUME = 0.0006;         // absolute minimum RMS to consider
+  let noiseFloor = 0.002;            // adaptive noise floor (EMA)
 
-  // smoothing buffer and state
+  // Drum expected band (we'll attempt to pull f0 into this)
+  const DRUM_MIN = 40;    // floor toms, low drums
+  const DRUM_MAX = 250;   // snares/toms typical upper bound for fundamentals
+
+  // smoothing & state
   let freqBuffer = [];
   let lastDisplayTime = 0;
   let lastShownFreq = null;
+
+  // debug toggles
+  const LOG = false;
 
   recordBtn.addEventListener('click', async () => {
     if (isRecording) {
@@ -70,9 +81,9 @@ document.addEventListener('DOMContentLoaded', () => {
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
     analyser = audioContext.createAnalyser();
     analyser.fftSize = FFT_SIZE;
-    analyser.smoothingTimeConstant = 0.0; // we handle smoothing ourselves
+    analyser.smoothingTimeConstant = 0.0;
 
-    scriptNode = audioContext.createScriptProcessor(2048, 1, 1);
+    scriptNode = audioContext.createScriptProcessor(PROCESSOR_SIZE, 1, 1);
     scriptNode.onaudioprocess = () => {
       if (!isRecording) return;
       processFrame();
@@ -93,7 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
     scriptNode.connect(audioContext.destination);
 
     isRecording = true;
-    console.log('Started recording — sampleRate:', audioContext.sampleRate);
+    console.log('Started — sampleRate:', audioContext.sampleRate, 'fftSize:', analyser.fftSize);
   }
 
   function stop() {
@@ -102,12 +113,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     try {
       if (micSource) {
-        // stop mic tracks
         micSource.mediaStream.getTracks().forEach(t => t.stop());
         micSource.disconnect();
       }
     } catch(e){/*ignore*/}
-
     if (scriptNode) { scriptNode.disconnect(); scriptNode = null; }
     if (analyser) { analyser.disconnect(); analyser = null; }
     if (audioContext) { audioContext.close(); audioContext = null; }
@@ -116,6 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
     lastShownFreq = null;
     lastDisplayTime = 0;
     resultEl.textContent = '-- Hz';
+    debugEl.textContent = '';
     console.log('Stopped recording');
   }
 
@@ -134,20 +144,29 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const meanAbs = sumAbs / bufferLen;
 
-    // update noise floor (EMA) — adapts slowly to ambient
-    const alpha = 0.02; // small alpha = slow adaptation
+    // update noise floor (slow EMA)
+    const alpha = 0.02;
     noiseFloor = noiseFloor * (1 - alpha) + meanAbs * alpha;
-
-    // dynamic threshold: a few multiples of noise floor but never below MIN_VOLUME
-    const triggerThreshold = Math.max(MIN_VOLUME, noiseFloor * 2.5);
+    const triggerThreshold = Math.max(MIN_VOLUME, noiseFloor * 2.2);
 
     if (meanAbs < triggerThreshold) {
-      // not a real hit - optionally clear soon if no hits for a while
-      // Hold display for HOLD_MS so it doesn't flicker to -- between frames
       const now = performance.now();
       if (lastShownFreq && (now - lastDisplayTime) < HOLD_MS) {
-        // keep showing last value
-        // do nothing
+        // hold value
+      } else {
+        resultEl.textContent = '-- Hz';
+        lastShownFreq = null;
+      }
+      if (LOG) debugEl.textContent = `meanAbs:${meanAbs.toFixed(4)} thr:${triggerThreshold.toFixed(4)} nf:${noiseFloor.toFixed(4)}`;
+      return;
+    }
+
+    // we have a hit candidate — estimate fundamental via autocorrelation
+    const rawFreq = autoCorrelate(floatBuf, audioContext.sampleRate);
+    if (rawFreq === -1) {
+      const now = performance.now();
+      if (lastShownFreq && (now - lastDisplayTime) < HOLD_MS) {
+        // hold
       } else {
         resultEl.textContent = '-- Hz';
         lastShownFreq = null;
@@ -155,49 +174,81 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // We have a candidate loud frame — estimate fundamental via autocorrelation
-    const frequency = autoCorrelate(floatBuf, audioContext.sampleRate);
+    // harmonic correction: try dividing down to fit in DRUM_MIN..DRUM_MAX
+    const corrected = harmonicCorrect(rawFreq, DRUM_MIN, DRUM_MAX);
 
-    if (frequency !== -1 && frequency > 20 && frequency < 3000) {
-      pushAndShowFrequency(frequency);
+    if (corrected && corrected >= 20 && corrected <= 4000) {
+      pushAndShowFrequency(corrected);
+      if (LOG) debugEl.textContent = `raw:${rawFreq.toFixed(1)} corrected:${corrected.toFixed(1)} meanAbs:${meanAbs.toFixed(4)}`;
     } else {
-      // no valid pitch in this frame
-      // keep previous shown value for HOLD_MS
-      const now = performance.now();
-      if (lastShownFreq && (now - lastDisplayTime) < HOLD_MS) {
-        // keep showing
-      } else {
-        resultEl.textContent = '-- Hz';
-        lastShownFreq = null;
-      }
+      // fallback
+      pushAndShowFrequency(rawFreq);
+      if (LOG) debugEl.textContent = `raw:${rawFreq.toFixed(1)} (no correct) meanAbs:${meanAbs.toFixed(4)}`;
     }
   }
 
-  // keep a small rolling buffer and show the median (robust) + small EMA to avoid flicker
+  // smoothing: median + small EMA
   function pushAndShowFrequency(freq) {
-    // clamp unrealistic spikes
-    if (!isFinite(freq) || freq <= 0 || freq > 8000) return;
+    if (!isFinite(freq) || freq <= 0 || freq > 20000) return;
 
     freqBuffer.push(freq);
     if (freqBuffer.length > SMOOTH_WINDOW) freqBuffer.shift();
 
-    // median smoothing reduces outlier jumps
     const sorted = freqBuffer.slice().sort((a,b)=>a-b);
     const median = sorted[Math.floor(sorted.length/2)];
 
-    // small EMA between displayed and median to smooth further visually
     const displayed = lastShownFreq || median;
-    const smooth = displayed * 0.6 + median * 0.4;
+    const smooth = displayed * 0.55 + median * 0.45;
 
-    // update display and timestamp
-    resultEl.textContent = Math.round(smooth) + ' Hz';
-    lastShownFreq = smooth;
+    // clamp weird spikes: jump limiter (avoid >2x jumps)
+    let final = smooth;
+    if (lastShownFreq && smooth > lastShownFreq * 2.5) final = lastShownFreq; // ignore huge jump
+    if (lastShownFreq && smooth < lastShownFreq * 0.35) final = lastShownFreq;  // ignore huge drop
+
+    resultEl.textContent = Math.round(final) + ' Hz';
+    lastShownFreq = final;
     lastDisplayTime = performance.now();
   }
 
-  // Battle-tested autocorrelation function (adapted)
+  // harmonic correction by integer divisors + small tolerance for inharmonicity
+  function harmonicCorrect(freq, minTarget, maxTarget) {
+    if (freq <= 0 || !isFinite(freq)) return null;
+    // First, if freq already in range, keep it
+    if (freq >= minTarget && freq <= maxTarget) return freq;
+
+    // try dividing by integer divisors 2..12 (higher divisors for kicks)
+    for (let d = 2; d <= 12; d++) {
+      const cand = freq / d;
+      if (cand >= minTarget && cand <= maxTarget) {
+        // sanity check: prefer smaller d (lower harmonic)
+        return cand;
+      }
+    }
+
+    // if none found, attempt tolerance-based match: divisors with ~10% wiggle for inharmonicity
+    const TOLERANCE = 0.12; // 12%
+    for (let d = 2; d <= 12; d++) {
+      const cand = freq / d;
+      // if cand is close to the band (within tolerance)
+      if (cand >= minTarget*(1 - TOLERANCE) && cand <= maxTarget*(1 + TOLERANCE)) {
+        // clamp into band
+        return Math.min(Math.max(cand, minTarget), maxTarget);
+      }
+    }
+
+    // fallback: try to bias toward lower region — repeatedly divide until under maxTarget
+    let f = freq;
+    while (f > maxTarget && f > 20) {
+      f = f / 2;
+      if (f >= minTarget && f <= maxTarget) return f;
+    }
+
+    // give up — return original
+    return freq;
+  }
+
+  // robust autocorrelation adapted for larger windows
   function autoCorrelate(buf, sampleRate) {
-    // buf is Float32Array with values in -1..1
     const SIZE = buf.length;
     let rms = 0;
     for (let i = 0; i < SIZE; i++) {
@@ -205,11 +256,11 @@ document.addEventListener('DOMContentLoaded', () => {
       rms += val * val;
     }
     rms = Math.sqrt(rms / SIZE);
-    if (rms < 0.002) return -1; // too quiet
+    if (rms < 0.0018) return -1; // too quiet
 
-    // Trim edges below a small threshold to focus on main transient
+    // trim quiet edges
     let r1 = 0, r2 = SIZE - 1;
-    const th = 0.02;
+    const th = Math.max(0.01, rms * 0.25);
     for (let i = 0; i < SIZE/2; i++) {
       if (Math.abs(buf[i]) < th) { r1 = i; break; }
     }
@@ -218,9 +269,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const trimmed = buf.subarray(r1, r2);
     const N = trimmed.length;
-    if (N < 64) return -1;
+    if (N < 128) return -1;
 
-    // compute autocorrelation (fast-ish)
+    // autocorrelation
     const ac = new Float32Array(N);
     for (let lag = 0; lag < N; lag++) {
       let sum = 0;
@@ -230,35 +281,33 @@ document.addEventListener('DOMContentLoaded', () => {
       ac[lag] = sum;
     }
 
-    // find peak in autocorrelation (skip lag 0)
-    let bestLag = -1;
-    let bestVal = -Infinity;
-    // search range: 20Hz..1000Hz roughly -> convert to lag range
-    const minFreq = 30; // lower freq bound for drums we care about
-    const maxFreq = 2000;
+    // search best lag in reasonable range (for drums we allow 20Hz..3000Hz)
+    const minFreq = 20;
+    const maxFreq = 4000;
     const minLag = Math.floor(sampleRate / maxFreq);
-    const maxLag = Math.min(N - 1, Math.floor(sampleRate / minFreq));
+    const maxLag = Math.min(N - 2, Math.floor(sampleRate / minFreq));
 
+    let best = -1, bestVal = -Infinity;
     for (let lag = Math.max(2, minLag); lag <= maxLag; lag++) {
       if (ac[lag] > bestVal) {
         bestVal = ac[lag];
-        bestLag = lag;
+        best = lag;
       }
     }
 
-    if (bestLag === -1 || bestVal <= 0) return -1;
+    if (best <= 0 || bestVal <= 0) return -1;
 
-    // refine lag using parabolic interpolation for sub-sample accuracy
-    const y0 = ac[bestLag - 1] || 0;
-    const y1 = ac[bestLag];
-    const y2 = ac[bestLag + 1] || 0;
+    // parabolic interpolation around best for sub-sample accuracy
+    const y0 = ac[best - 1] || 0;
+    const y1 = ac[best];
+    const y2 = ac[best + 1] || 0;
     const denom = (y0 - 2*y1 + y2);
     let shift = 0;
     if (denom !== 0) shift = (y0 - y2) / (2 * denom);
-    const refinedLag = bestLag + shift;
+    const refinedLag = best + shift;
+    if (refinedLag <= 0) return -1;
 
     const frequency = sampleRate / refinedLag;
-    // basic sanity: if freq is very high and near a harmonic, it's OK for now
     return frequency;
   }
 
