@@ -1,27 +1,27 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Drum Frequency Analyzer — Harmonic-corrected</title>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Drum Frequency Analyzer — Spectrum+Harmonic Check</title>
 <style>
   body{background:#16213e;color:#fff;font-family:Segoe UI, Tahoma, Geneva, Verdana, sans-serif;
     display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;text-align:center}
-  h1{color:#feb47b;margin-bottom:14px}
-  .record-btn{background:linear-gradient(135deg,#ff7e5f,#feb47b);color:#fff;border:none;padding:16px 34px;border-radius:50px;cursor:pointer;font-weight:700;font-size:1.05rem;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+  h1{color:#feb47b;margin-bottom:12px}
+  .record-btn{background:linear-gradient(135deg,#ff7e5f,#feb47b);color:#fff;border:none;padding:14px 30px;border-radius:40px;cursor:pointer;font-weight:700}
   .record-btn.recording{background:linear-gradient(135deg,#f44336,#ff7e5f)}
-  .result{font-size:2.6rem;font-weight:800;margin:18px 0;color:#feb47b;min-height:56px}
-  .status{color:#a0a0d0;margin-top:12px;font-size:.95rem}
-  .small{font-size:.88rem;color:#bfbfdc;margin-top:6px}
-  .debug {font-size:.8rem;color:#bfbfdc;margin-top:10px;opacity:.9}
+  .result{font-size:2.4rem;font-weight:800;margin:16px 0;color:#feb47b;min-height:56px}
+  .status{color:#a0a0d0;margin-top:8px}
+  .small{font-size:.85rem;color:#bfbfdc;margin-top:6px}
+  .debug{font-size:.78rem;color:#bfbfdc;margin-top:8px;opacity:.9;white-space:pre-wrap}
 </style>
 </head>
 <body>
-  <h1>Drum Frequency Analyzer — Harmonic-corrected</h1>
+  <h1>Drum Frequency Analyzer — Spectrum + Harmonic Check</h1>
   <button id="recordBtn" class="record-btn">Click to Record</button>
   <div class="result" id="result">-- Hz</div>
-  <div class="status" id="status">Ready. Open console for debug logs.</div>
-  <div class="small">Tip: test close to the mic. Use Chrome/Edge. Localhost/HTTPS recommended.</div>
+  <div class="status" id="status">Ready — use Chrome/Edge. Localhost/HTTPS recommended.</div>
+  <div class="small">Tip: mic 5–15 cm from drum. One hit per test.</div>
   <div class="debug" id="debug"></div>
 
 <script>
@@ -37,24 +37,24 @@ document.addEventListener('DOMContentLoaded', () => {
   let scriptNode = null;
   let isRecording = false;
 
-  // Params
-  const FFT_SIZE = 8192;             // large for good low-freq resolution
-  const PROCESSOR_SIZE = 2048;       // script processor buffer
-  const SMOOTH_WINDOW = 7;           // median smoothing window
-  const HOLD_MS = 260;               // hold display after last good read
-  const MIN_VOLUME = 0.0006;         // absolute minimum RMS to consider
-  let noiseFloor = 0.002;            // adaptive noise floor (EMA)
+  // PARAMETERS
+  const FFT_SIZE = 8192;           // resolution for low drums
+  const PROCESSOR_SIZE = 2048;
+  const SMOOTH_WINDOW = 6;
+  const HOLD_MS = 260;
+  const MIN_VOLUME = 0.0006;
+  let noiseFloor = 0.002;
 
-  // Drum expected band (we'll attempt to pull f0 into this)
-  const DRUM_MIN = 40;    // floor toms, low drums
-  const DRUM_MAX = 250;   // snares/toms typical upper bound for fundamentals
+  // Drum fundamental target band (we prefer fundamentals in this)
+  const DRUM_MIN = 40;
+  const DRUM_MAX = 300;
 
   // smoothing & state
   let freqBuffer = [];
   let lastDisplayTime = 0;
   let lastShownFreq = null;
 
-  // debug toggles
+  // debug
   const LOG = false;
 
   recordBtn.addEventListener('click', async () => {
@@ -104,7 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
     scriptNode.connect(audioContext.destination);
 
     isRecording = true;
-    console.log('Started — sampleRate:', audioContext.sampleRate, 'fftSize:', analyser.fftSize);
+    console.log('Started. sampleRate:', audioContext.sampleRate, 'fftSize:', analyser.fftSize);
   }
 
   function stop() {
@@ -116,7 +116,8 @@ document.addEventListener('DOMContentLoaded', () => {
         micSource.mediaStream.getTracks().forEach(t => t.stop());
         micSource.disconnect();
       }
-    } catch(e){/*ignore*/}
+    } catch (e) { /* ignore */ }
+
     if (scriptNode) { scriptNode.disconnect(); scriptNode = null; }
     if (analyser) { analyser.disconnect(); analyser = null; }
     if (audioContext) { audioContext.close(); audioContext = null; }
@@ -126,20 +127,21 @@ document.addEventListener('DOMContentLoaded', () => {
     lastDisplayTime = 0;
     resultEl.textContent = '-- Hz';
     debugEl.textContent = '';
-    console.log('Stopped recording');
+    console.log('Stopped');
   }
 
   function processFrame() {
     const bufferLen = analyser.fftSize;
-    const byteBuf = new Uint8Array(bufferLen);
-    analyser.getByteTimeDomainData(byteBuf);
+    // time-domain for volume gating
+    const timeByte = new Uint8Array(bufferLen);
+    analyser.getByteTimeDomainData(timeByte);
 
-    // convert 0..255 -> -1..1
-    const floatBuf = new Float32Array(bufferLen);
+    // convert to float and compute mean absolute
+    const floatTime = new Float32Array(bufferLen);
     let sumAbs = 0;
     for (let i = 0; i < bufferLen; i++) {
-      const v = (byteBuf[i] - 128) / 128;
-      floatBuf[i] = v;
+      const v = (timeByte[i] - 128) / 128;
+      floatTime[i] = v;
       sumAbs += Math.abs(v);
     }
     const meanAbs = sumAbs / bufferLen;
@@ -152,42 +154,128 @@ document.addEventListener('DOMContentLoaded', () => {
     if (meanAbs < triggerThreshold) {
       const now = performance.now();
       if (lastShownFreq && (now - lastDisplayTime) < HOLD_MS) {
-        // hold value
+        // hold last shown
       } else {
         resultEl.textContent = '-- Hz';
         lastShownFreq = null;
       }
-      if (LOG) debugEl.textContent = `meanAbs:${meanAbs.toFixed(4)} thr:${triggerThreshold.toFixed(4)} nf:${noiseFloor.toFixed(4)}`;
+      if (LOG) debugEl.textContent = `quiet meanAbs:${meanAbs.toFixed(4)} thr:${triggerThreshold.toFixed(4)} nf:${noiseFloor.toFixed(4)}`;
       return;
     }
 
-    // we have a hit candidate — estimate fundamental via autocorrelation
-    const rawFreq = autoCorrelate(floatBuf, audioContext.sampleRate);
-    if (rawFreq === -1) {
-      const now = performance.now();
-      if (lastShownFreq && (now - lastDisplayTime) < HOLD_MS) {
-        // hold
-      } else {
-        resultEl.textContent = '-- Hz';
-        lastShownFreq = null;
+    // get frequency spectrum (byte)
+    const freqByte = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(freqByte); // 0..255 magnitude-like
+    // convert to float magnitudes
+    const mags = new Float32Array(freqByte.length);
+    let maxMag = 0, sumMag = 0;
+    for (let i = 0; i < freqByte.length; i++) {
+      const m = freqByte[i];
+      mags[i] = m;
+      if (m > maxMag) maxMag = m;
+      sumMag += m;
+    }
+    const meanMag = sumMag / mags.length;
+    const sampleRate = audioContext.sampleRate;
+    const binSize = sampleRate / analyser.fftSize;
+
+    // find peaks (local maxima) within a reasonable range
+    const minBin = Math.max(2, Math.floor( (DRUM_MIN/2) / binSize )); // start a bit lower to detect low energy
+    const maxBin = Math.min(mags.length - 2, Math.floor(8000 / binSize)); // ignore ultra-high
+    const peakThresholdAbs = Math.max(maxMag * 0.12, meanMag * 3, 6); // tuned thresholds (bytes 0..255)
+    const peaks = [];
+    for (let i = minBin; i <= maxBin; i++) {
+      if (mags[i] > mags[i-1] && mags[i] >= mags[i+1] && mags[i] >= peakThresholdAbs) {
+        peaks.push({bin: i, freq: i * binSize, mag: mags[i]});
       }
+    }
+
+    if (peaks.length === 0) {
+      // fallback: if no peaks (maybe very low frequency), try autocorrelation time-domain (optional)
+      const acFreq = autoCorrelate(floatTime, sampleRate);
+      if (acFreq > 0) pushAndShowFrequency(acFreq);
+      else {
+        const now = performance.now();
+        if (!(lastShownFreq && (now - lastDisplayTime) < HOLD_MS)) {
+          resultEl.textContent = '-- Hz';
+          lastShownFreq = null;
+        }
+      }
+      if (LOG) debugEl.textContent = `no peaks. maxMag:${maxMag.toFixed(1)} meanMag:${meanMag.toFixed(2)} thr:${peakThresholdAbs.toFixed(1)}`;
       return;
     }
 
-    // harmonic correction: try dividing down to fit in DRUM_MIN..DRUM_MAX
-    const corrected = harmonicCorrect(rawFreq, DRUM_MIN, DRUM_MAX);
+    // sort peaks by frequency ascending (prefer lower fundamentals)
+    peaks.sort((a,b) => a.freq - b.freq);
 
-    if (corrected && corrected >= 20 && corrected <= 4000) {
-      pushAndShowFrequency(corrected);
-      if (LOG) debugEl.textContent = `raw:${rawFreq.toFixed(1)} corrected:${corrected.toFixed(1)} meanAbs:${meanAbs.toFixed(4)}`;
+    // candidate selection:
+    // - if there's a low peak inside DRUM_MIN..DRUM_MAX, choose the strongest among them
+    const inBandPeaks = peaks.filter(p => p.freq >= DRUM_MIN && p.freq <= DRUM_MAX);
+    if (inBandPeaks.length > 0) {
+      // choose peak with highest magnitude among inBand
+      inBandPeaks.sort((a,b)=>b.mag - a.mag);
+      pushAndShowFrequency(inBandPeaks[0].freq);
+      if (LOG) debugEl.textContent = `picked in-band peak ${inBandPeaks[0].freq.toFixed(1)}Hz mag:${inBandPeaks[0].mag.toFixed(1)}`;
+      return;
+    }
+
+    // no in-band peaks: examine peaks (ascending freq). For each peak, check for subharmonic energy.
+    // take the first peak where subharmonic energy is present (lowest plausible fundamental)
+    let chosenFreq = null;
+
+    for (let p = 0; p < peaks.length; p++) {
+      const peak = peaks[p];
+      // if peak freq is not too high, consider it as-is
+      if (peak.freq <= DRUM_MAX * 1.15 && peak.freq >= DRUM_MIN) {
+        chosenFreq = peak.freq;
+        break;
+      }
+      // search divisors for subharmonic energy
+      const limitDiv = 12;
+      let found = false;
+      for (let d = 2; d <= limitDiv; d++) {
+        const candFreq = peak.freq / d;
+        if (candFreq < DRUM_MIN - 5) break; // no need to go lower
+        const candBin = Math.round(candFreq / binSize);
+        if (candBin <= 1 || candBin >= mags.length - 1) continue;
+        const subMag = mags[candBin];
+        // acceptance criteria:
+        // subMag must be a non-trivial fraction of the peak mag OR above a fraction of global max
+        if (subMag >= peak.mag * 0.20 || subMag >= maxMag * 0.08 || subMag >= meanMag * 3) {
+          // accept this subharmonic as the fundamental
+          chosenFreq = candFreq;
+          found = true;
+          if (LOG) console.log(`subharmonic found: ${peak.freq.toFixed(1)} / ${d} -> ${candFreq.toFixed(1)} (subMag:${subMag.toFixed(1)} peakMag:${peak.mag.toFixed(1)})`);
+          break;
+        }
+      }
+      if (found) break;
+    }
+
+    if (!chosenFreq) {
+      // fallback: choose strongest peak (lowest freq among strongest)
+      peaks.sort((a,b)=>b.mag - a.mag);
+      const strongest = peaks[0];
+      chosenFreq = strongest.freq;
+      if (LOG) debugEl.textContent = `fallback strongest ${chosenFreq.toFixed(1)}Hz mag:${strongest.mag.toFixed(1)}`;
     } else {
-      // fallback
-      pushAndShowFrequency(rawFreq);
-      if (LOG) debugEl.textContent = `raw:${rawFreq.toFixed(1)} (no correct) meanAbs:${meanAbs.toFixed(4)}`;
+      if (LOG) debugEl.textContent = `chosen ${chosenFreq.toFixed(1)}Hz`;
     }
+
+    // final sanity clamp: ensure within physically reasonable range
+    if (chosenFreq < 15 || chosenFreq > 8000) {
+      const now = performance.now();
+      if (!(lastShownFreq && (now - lastDisplayTime) < HOLD_MS)) {
+        resultEl.textContent = '-- Hz';
+        lastShownFreq = null;
+      }
+      return;
+    }
+
+    pushAndShowFrequency(chosenFreq);
   }
 
-  // smoothing: median + small EMA
+  // smoothing: median + small EMA + spike clamp
   function pushAndShowFrequency(freq) {
     if (!isFinite(freq) || freq <= 0 || freq > 20000) return;
 
@@ -198,117 +286,62 @@ document.addEventListener('DOMContentLoaded', () => {
     const median = sorted[Math.floor(sorted.length/2)];
 
     const displayed = lastShownFreq || median;
-    const smooth = displayed * 0.55 + median * 0.45;
+    const smooth = displayed * 0.58 + median * 0.42;
 
-    // clamp weird spikes: jump limiter (avoid >2x jumps)
+    // clamp weird spikes: avoid >2.5x jumps
     let final = smooth;
-    if (lastShownFreq && smooth > lastShownFreq * 2.5) final = lastShownFreq; // ignore huge jump
-    if (lastShownFreq && smooth < lastShownFreq * 0.35) final = lastShownFreq;  // ignore huge drop
+    if (lastShownFreq && smooth > lastShownFreq * 2.5) final = lastShownFreq;
+    if (lastShownFreq && smooth < lastShownFreq * 0.35) final = lastShownFreq;
 
     resultEl.textContent = Math.round(final) + ' Hz';
     lastShownFreq = final;
     lastDisplayTime = performance.now();
   }
 
-  // harmonic correction by integer divisors + small tolerance for inharmonicity
-  function harmonicCorrect(freq, minTarget, maxTarget) {
-    if (freq <= 0 || !isFinite(freq)) return null;
-    // First, if freq already in range, keep it
-    if (freq >= minTarget && freq <= maxTarget) return freq;
-
-    // try dividing by integer divisors 2..12 (higher divisors for kicks)
-    for (let d = 2; d <= 12; d++) {
-      const cand = freq / d;
-      if (cand >= minTarget && cand <= maxTarget) {
-        // sanity check: prefer smaller d (lower harmonic)
-        return cand;
-      }
-    }
-
-    // if none found, attempt tolerance-based match: divisors with ~10% wiggle for inharmonicity
-    const TOLERANCE = 0.12; // 12%
-    for (let d = 2; d <= 12; d++) {
-      const cand = freq / d;
-      // if cand is close to the band (within tolerance)
-      if (cand >= minTarget*(1 - TOLERANCE) && cand <= maxTarget*(1 + TOLERANCE)) {
-        // clamp into band
-        return Math.min(Math.max(cand, minTarget), maxTarget);
-      }
-    }
-
-    // fallback: try to bias toward lower region — repeatedly divide until under maxTarget
-    let f = freq;
-    while (f > maxTarget && f > 20) {
-      f = f / 2;
-      if (f >= minTarget && f <= maxTarget) return f;
-    }
-
-    // give up — return original
-    return freq;
-  }
-
-  // robust autocorrelation adapted for larger windows
+  // fallback autocorrelation (time-domain) used only if no clear peaks found
   function autoCorrelate(buf, sampleRate) {
     const SIZE = buf.length;
     let rms = 0;
     for (let i = 0; i < SIZE; i++) {
-      const val = buf[i];
-      rms += val * val;
+      const v = buf[i];
+      rms += v*v;
     }
     rms = Math.sqrt(rms / SIZE);
-    if (rms < 0.0018) return -1; // too quiet
+    if (rms < 0.0018) return -1;
 
     // trim quiet edges
-    let r1 = 0, r2 = SIZE - 1;
+    let r1 = 0, r2 = SIZE-1;
     const th = Math.max(0.01, rms * 0.25);
-    for (let i = 0; i < SIZE/2; i++) {
-      if (Math.abs(buf[i]) < th) { r1 = i; break; }
-    }
-    for (let i = 1; i < SIZE/2; i++) {
-      if (Math.abs(buf[SIZE - i]) < th) { r2 = SIZE - i; break; }
-    }
+    for (let i=0;i<SIZE/2;i++){ if (Math.abs(buf[i])<th) { r1=i; break; } }
+    for (let i=1;i<SIZE/2;i++){ if (Math.abs(buf[SIZE-i])<th) { r2=SIZE-i; break; } }
     const trimmed = buf.subarray(r1, r2);
     const N = trimmed.length;
     if (N < 128) return -1;
 
-    // autocorrelation
     const ac = new Float32Array(N);
-    for (let lag = 0; lag < N; lag++) {
-      let sum = 0;
-      for (let i = 0; i < N - lag; i++) {
-        sum += trimmed[i] * trimmed[i + lag];
-      }
-      ac[lag] = sum;
+    for (let lag=0; lag<N; lag++){
+      let s=0;
+      for (let i=0; i<N-lag; i++) s += trimmed[i]*trimmed[i+lag];
+      ac[lag] = s;
     }
-
-    // search best lag in reasonable range (for drums we allow 20Hz..3000Hz)
-    const minFreq = 20;
-    const maxFreq = 4000;
+    const minFreq=20, maxFreq=4000;
     const minLag = Math.floor(sampleRate / maxFreq);
-    const maxLag = Math.min(N - 2, Math.floor(sampleRate / minFreq));
-
-    let best = -1, bestVal = -Infinity;
-    for (let lag = Math.max(2, minLag); lag <= maxLag; lag++) {
-      if (ac[lag] > bestVal) {
-        bestVal = ac[lag];
-        best = lag;
-      }
+    const maxLag = Math.min(N-2, Math.floor(sampleRate / minFreq));
+    let best=-1, bestVal=-Infinity;
+    for (let lag=Math.max(2,minLag); lag<=maxLag; lag++){
+      if (ac[lag] > bestVal){ bestVal = ac[lag]; best = lag; }
     }
-
     if (best <= 0 || bestVal <= 0) return -1;
 
-    // parabolic interpolation around best for sub-sample accuracy
-    const y0 = ac[best - 1] || 0;
+    const y0 = ac[best-1] || 0;
     const y1 = ac[best];
-    const y2 = ac[best + 1] || 0;
+    const y2 = ac[best+1] || 0;
     const denom = (y0 - 2*y1 + y2);
     let shift = 0;
-    if (denom !== 0) shift = (y0 - y2) / (2 * denom);
-    const refinedLag = best + shift;
-    if (refinedLag <= 0) return -1;
-
-    const frequency = sampleRate / refinedLag;
-    return frequency;
+    if (denom !== 0) shift = (y0 - y2) / (2*denom);
+    const refined = best + shift;
+    if (refined <= 0) return -1;
+    return sampleRate / refined;
   }
 
 });
