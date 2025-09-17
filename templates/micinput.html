@@ -1,402 +1,209 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Drum Frequency Analyzer</title>
-    <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Drum Frequency Analyzer</title>
+<style>
+body {
+  background: #16213e;
+  color: #fff;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  text-align: center;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  margin: 0;
+}
 
-        body {
-            background: linear-gradient(135deg, #1a1a2e, #16213e);
-            color: #fff;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            padding: 20px;
-            text-align: center;
-        }
+h1 {
+  color: #feb47b;
+  margin-bottom: 30px;
+}
 
-        .container {
-            max-width: 600px;
-            width: 100%;
-            padding: 20px;
-        }
+.record-btn {
+  background: linear-gradient(135deg, #ff7e5f, #feb47b);
+  color: #fff;
+  border: none;
+  padding: 20px 40px;
+  border-radius: 50px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 1.2rem;
+  margin: 20px 0;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(255, 126, 95, 0.4);
+}
 
-        h1 {
-            font-size: 2.5rem;
-            background: linear-gradient(90deg, #ff7e5f, #feb47b);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 10px;
-        }
+.record-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255, 126, 95, 0.6);
+}
 
-        .subtitle {
-            color: #a0a0d0;
-            font-size: 1.1rem;
-            margin-bottom: 30px;
-        }
+.recording {
+  background: linear-gradient(135deg, #f44336, #ff7e5f);
+}
 
-        .visualization {
-            background: rgba(0, 0, 0, 0.28);
-            border-radius: 12px;
-            margin-bottom: 20px;
-            position: relative;
-            overflow: hidden;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
-            height: 200px;
-            width: 100%;
-        }
+.result {
+  font-size: 2.5rem;
+  font-weight: bold;
+  margin: 20px 0;
+  color: #feb47b;
+  min-height: 60px;
+}
 
-        #waveformCanvas {
-            width: 100%;
-            height: 100%;
-            display: block;
-        }
-
-        .record-btn {
-            background: linear-gradient(135deg, #ff7e5f, #feb47b);
-            color: #fff;
-            border: none;
-            padding: 18px 30px;
-            border-radius: 50px;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 1.2rem;
-            margin: 20px 0;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(255, 126, 95, 0.4);
-            width: 100%;
-            max-width: 300px;
-        }
-
-        .record-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(255, 126, 95, 0.6);
-        }
-
-        .recording {
-            background: linear-gradient(135deg, #f44336, #ff7e5f);
-        }
-
-        .result {
-            font-size: 3rem;
-            font-weight: bold;
-            margin: 20px 0;
-            color: #feb47b;
-            min-height: 70px;
-        }
-
-        .status {
-            color: #a0a0d0;
-            margin-top: 20px;
-            font-size: 1.1rem;
-        }
-
-        .record-indicator {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background-color: #f44336;
-            margin-right: 8px;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-
-        .recording .record-indicator {
-            opacity: 1;
-            animation: pulse 1.5s infinite;
-        }
-
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.4; }
-            100% { opacity: 1; }
-        }
-
-        .info {
-            background: rgba(255, 126, 95, 0.08);
-            padding: 15px;
-            border-radius: 8px;
-            margin-top: 30px;
-            font-size: 0.95rem;
-            line-height: 1.5;
-            text-align: left;
-        }
-    </style>
+.status {
+  color: #a0a0d0;
+  margin-top: 20px;
+}
+</style>
 </head>
 <body>
-    <div class="container">
-        <h1>Drum Frequency Analyzer</h1>
-        <p class="subtitle">Hit the button, hit your drum, get the frequency</p>
-        
-        <div class="visualization">
-            <canvas id="waveformCanvas"></canvas>
-        </div>
-        
-        <button id="recordBtn" class="record-btn">
-            <span class="record-indicator"></span>
-            Start Recording
-        </button>
-        
-        <div class="result" id="result">-- Hz</div>
-        
-        <div class="status" id="status">Ready to record. Click the button and hit your drum.</div>
-        
-        <div class="info">
-            <strong>How to use:</strong> 
-            <ol>
-                <li>Click the button to start recording</li>
-                <li>Hit your drum - the frequency will be displayed automatically</li>
-                <li>Click the button again to stop recording</li>
-            </ol>
-        </div>
-    </div>
+<h1>Drum Frequency Analyzer</h1>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const recordBtn = document.getElementById('recordBtn');
-            const resultEl = document.getElementById('result');
-            const statusEl = document.getElementById('status');
-            const waveformCanvas = document.getElementById('waveformCanvas');
-            const ctx = waveformCanvas.getContext('2d');
-            
-            let audioContext = null;
-            let analyser = null;
-            let microphone = null;
-            let javascriptNode = null;
-            let isRecording = false;
-            let sampleRate = 44100;
-            
-            // Analysis parameters
-            const fftSize = 4096;
-            const minFrequency = 40;
-            const maxFrequency = 300;
-            const threshold = -60; // dB threshold for noise filtering
-            
-            // Resize canvas for waveform display
-            function resizeCanvas() {
-                const dpr = window.devicePixelRatio || 1;
-                const w = waveformCanvas.clientWidth;
-                const h = waveformCanvas.clientHeight;
-                waveformCanvas.width = Math.max(1, Math.floor(w * dpr));
-                waveformCanvas.height = Math.max(1, Math.floor(h * dpr));
-                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-            }
-            
-            window.addEventListener('resize', resizeCanvas);
-            resizeCanvas();
-            
-            // Start/stop recording
-            recordBtn.addEventListener('click', async () => {
-                if (isRecording) {
-                    stopRecording();
-                    recordBtn.classList.remove('recording');
-                    recordBtn.innerHTML = '<span class="record-indicator"></span>Start Recording';
-                    statusEl.textContent = 'Recording stopped. Ready to record again.';
-                } else {
-                    try {
-                        await startRecording();
-                        recordBtn.classList.add('recording');
-                        recordBtn.innerHTML = '<span class="record-indicator"></span>Stop Recording';
-                        statusEl.textContent = 'Recording... hit your drum now';
-                    } catch (error) {
-                        console.error('Error accessing microphone:', error);
-                        statusEl.textContent = 'Error: ' + error.message;
-                    }
-                }
-            });
-            
-            // Start recording
-            async function startRecording() {
-                if (isRecording) return;
-                
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                sampleRate = audioContext.sampleRate;
-                
-                // Create analyser node
-                analyser = audioContext.createAnalyser();
-                analyser.fftSize = fftSize * 2;
-                analyser.smoothingTimeConstant = 0.8;
-                
-                // Create script processor for recording
-                javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
-                
-                // Set up audio processing
-                javascriptNode.onaudioprocess = (event) => {
-                    if (!isRecording) return;
-                    
-                    // Get the audio data
-                    const channelData = event.inputBuffer.getChannelData(0);
-                    
-                    // Draw waveform in real-time
-                    drawWaveform(channelData);
-                    
-                    // Analyze in real-time
-                    analyzeAudio(channelData);
-                };
-                
-                // Get microphone access
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    audio: {
-                        sampleRate: sampleRate,
-                        channelCount: 1,
-                        echoCancellation: false,
-                        noiseSuppression: false,
-                        autoGainControl: false
-                    } 
-                });
-                
-                // Create microphone source and connect nodes
-                microphone = audioContext.createMediaStreamSource(stream);
-                microphone.connect(analyser);
-                analyser.connect(javascriptNode);
-                javascriptNode.connect(audioContext.destination);
-                
-                isRecording = true;
-            }
-            
-            // Stop recording
-            function stopRecording() {
-                if (!isRecording) return;
-                
-                isRecording = false;
-                
-                // Disconnect and close resources
-                if (microphone) {
-                    microphone.disconnect();
-                    microphone.mediaStream.getTracks().forEach(track => track.stop());
-                    microphone = null;
-                }
-                
-                if (javascriptNode) {
-                    javascriptNode.disconnect();
-                    javascriptNode = null;
-                }
-                
-                if (analyser) {
-                    analyser.disconnect();
-                }
-                
-                if (audioContext) {
-                    audioContext.close();
-                    audioContext = null;
-                }
-            }
-            
-            // Draw real-time waveform
-            function drawWaveform(data) {
-                const width = waveformCanvas.width / (window.devicePixelRatio || 1);
-                const height = waveformCanvas.height / (window.devicePixelRatio || 1);
-                const centerY = height / 2;
-                
-                ctx.clearRect(0, 0, width, height);
-                
-                // Draw grid
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-                ctx.lineWidth = 1;
-                ctx.beginPath();
-                ctx.moveTo(0, centerY);
-                ctx.lineTo(width, centerY);
-                ctx.stroke();
-                
-                // Draw waveform
-                ctx.strokeStyle = '#ff7e5f';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                
-                const sliceWidth = width / data.length;
-                let x = 0;
-                
-                for (let i = 0; i < data.length; i++) {
-                    const y = centerY + data[i] * centerY * 0.8;
-                    
-                    if (i === 0) {
-                        ctx.moveTo(x, y);
-                    } else {
-                        ctx.lineTo(x, y);
-                    }
-                    
-                    x += sliceWidth;
-                }
-                
-                ctx.stroke();
-            }
-            
-            // Apply window function to data
-            function applyWindowFunction(data) {
-                const windowedData = new Float32Array(data.length);
-                
-                // Simple Blackman window
-                for (let i = 0; i < data.length; i++) {
-                    const blackman = 0.42 - 0.5 * Math.cos(2 * Math.PI * i / (data.length - 1)) + 
-                                    0.08 * Math.cos(4 * Math.PI * i / (data.length - 1));
-                    
-                    windowedData[i] = data[i] * blackman;
-                }
-                
-                return windowedData;
-            }
-            
-            // Analyze audio to find fundamental frequency
-            function analyzeAudio(data) {
-                // Apply window function
-                const windowedData = applyWindowFunction(data);
-                
-                // Create a temporary analyser for processing
-                const tempAnalyser = audioContext.createAnalyser();
-                tempAnalyser.fftSize = fftSize * 2;
-                
-                // Create a temporary source node
-                const buffer = audioContext.createBuffer(1, windowedData.length, audioContext.sampleRate);
-                buffer.copyToChannel(windowedData, 0);
-                
-                const source = audioContext.createBufferSource();
-                source.buffer = buffer;
-                
-                // Connect and analyze
-                source.connect(tempAnalyser);
-                tempAnalyser.connect(audioContext.destination);
-                
-                // Get frequency data
-                const frequencyData = new Float32Array(tempAnalyser.frequencyBinCount);
-                tempAnalyser.getFloatFrequencyData(frequencyData);
-                
-                // Find fundamental frequency
-                const binSize = sampleRate / fftSize;
-                const minBin = Math.floor(minFrequency / binSize);
-                const maxBin = Math.min(Math.floor(maxFrequency / binSize), frequencyData.length - 1);
-                
-                // Find the bin with maximum magnitude above threshold
-                let maxMag = -Infinity;
-                let maxBinIdx = minBin;
-                
-                for (let i = minBin; i <= maxBin; i++) {
-                    if (frequencyData[i] > maxMag && frequencyData[i] > threshold) {
-                        maxMag = frequencyData[i];
-                        maxBinIdx = i;
-                    }
-                }
-                
-                // If we found a valid frequency, display it
-                if (maxMag > threshold) {
-                    const frequency = maxBinIdx * binSize;
-                    resultEl.textContent = Math.round(frequency) + ' Hz';
-                }
-                
-                // Clean up
-                source.disconnect();
-                tempAnalyser.disconnect();
-            }
-        });
-    </script>
+<button id="recordBtn" class="record-btn">Click to Record</button>
+
+<div class="result" id="result">-- Hz</div>
+
+<div class="status" id="status">Ready to record</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const recordBtn = document.getElementById('recordBtn');
+  const resultEl = document.getElementById('result');
+  const statusEl = document.getElementById('status');
+
+  let audioContext = null;
+  let analyser = null;
+  let microphone = null;
+  let javascriptNode = null;
+  let isRecording = false;
+
+  recordBtn.addEventListener('click', async () => {
+    if (isRecording) {
+      stopRecording();
+      recordBtn.classList.remove('recording');
+      recordBtn.textContent = 'Click to Record';
+      statusEl.textContent = 'Ready to record';
+    } else {
+      try {
+        await startRecording();
+        recordBtn.classList.add('recording');
+        recordBtn.textContent = 'Recording... Click to Stop';
+        statusEl.textContent = 'Recording... hit your drum now';
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = 'Error: ' + err.message;
+      }
+    }
+  });
+
+  async function startRecording() {
+    if (isRecording) return;
+
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 2048;
+
+    javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
+    javascriptNode.onaudioprocess = () => {
+      if (!isRecording) return;
+      analyzeAudio();
+    };
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        channelCount: 1,
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false
+      }
+    });
+
+    microphone = audioContext.createMediaStreamSource(stream);
+    microphone.connect(analyser);
+    analyser.connect(javascriptNode);
+    javascriptNode.connect(audioContext.destination);
+
+    isRecording = true;
+  }
+
+  function stopRecording() {
+    if (!isRecording) return;
+
+    isRecording = false;
+
+    if (microphone) {
+      microphone.disconnect();
+      microphone.mediaStream.getTracks().forEach(track => track.stop());
+      microphone = null;
+    }
+
+    if (javascriptNode) {
+      javascriptNode.disconnect();
+      javascriptNode = null;
+    }
+
+    if (analyser) {
+      analyser.disconnect();
+      analyser = null;
+    }
+
+    if (audioContext) {
+      audioContext.close();
+      audioContext = null;
+    }
+
+    resultEl.textContent = '-- Hz';
+  }
+
+  function analyzeAudio() {
+    const bufferLength = analyser.fftSize;
+    const timeData = new Float32Array(bufferLength);
+    analyser.getFloatTimeDomainData(timeData);
+
+    const frequency = autoCorrelate(timeData, audioContext.sampleRate);
+
+    if (frequency !== -1) {
+      resultEl.textContent = Math.round(frequency) + ' Hz';
+    } else {
+      resultEl.textContent = '-- Hz';
+    }
+  }
+
+  function autoCorrelate(buffer, sampleRate) {
+    const SIZE = buffer.length;
+    let rms = 0;
+
+    for (let i = 0; i < SIZE; i++) rms += buffer[i] * buffer[i];
+    rms = Math.sqrt(rms / SIZE);
+    if (rms < 0.01) return -1; // too quiet
+
+    let maxShift = SIZE / 2;
+    let bestOffset = -1;
+    let bestCorrelation = 0;
+
+    for (let offset = 20; offset < maxShift; offset++) {
+      let correlation = 0;
+      for (let i = 0; i < maxShift; i++) {
+        correlation += buffer[i] * buffer[i + offset];
+      }
+      correlation /= maxShift;
+
+      if (correlation > bestCorrelation) {
+        bestCorrelation = correlation;
+        bestOffset = offset;
+      }
+    }
+
+    if (bestCorrelation > 0.01) return sampleRate / bestOffset;
+    return -1;
+  }
+});
+</script>
 </body>
 </html>
