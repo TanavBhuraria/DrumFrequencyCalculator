@@ -3,613 +3,163 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Precision Drum Frequency Analyzer</title>
+<title>Drum Frequency Analyzer</title>
 <style>
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
 body {
-  background: linear-gradient(135deg, #1a1a2e, #16213e);
+  background: #16213e;
   color: #fff;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  text-align: center;
   padding: 20px;
   display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
   min-height: 100vh;
-}
-
-.container {
-  max-width: 1000px;
-  width: 100%;
-  padding: 20px;
-}
-
-header {
-  text-align: center;
-  margin-bottom: 25px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 0;
 }
 
 h1 {
-  font-size: 2.5rem;
-  background: linear-gradient(90deg, #ff7e5f, #feb47b);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  margin-bottom: 10px;
+  color: #feb47b;
+  margin-bottom: 30px;
 }
 
-.subtitle {
-  color: #a0a0d0;
-  font-size: 1.1rem;
-}
-
-.visualization {
-  background: rgba(0, 0, 0, 0.28);
-  border-radius: 12px;
-  margin-bottom: 20px;
-  position: relative;
-  overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
-  height: 300px;
-}
-
-#waveformCanvas {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
-.controls {
-  display: flex;
-  gap: 15px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-button {
+.record-btn {
   background: linear-gradient(135deg, #ff7e5f, #feb47b);
   color: #fff;
   border: none;
-  padding: 14px 22px;
+  padding: 20px 40px;
   border-radius: 50px;
   cursor: pointer;
   font-weight: 600;
-  font-size: 1rem;
-  min-width: 120px;
+  font-size: 1.2rem;
+  margin: 20px 0;
   transition: all 0.3s ease;
   box-shadow: 0 4px 15px rgba(255, 126, 95, 0.4);
 }
 
-button:hover {
+.record-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 20px rgba(255, 126, 95, 0.6);
 }
 
-button:disabled {
-  background: #555;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
+.recording {
+  background: linear-gradient(135deg, #f44336, #ff7e5f);
 }
 
-.record-indicator {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background-color: #f44336;
-  margin-right: 8px;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.recording .record-indicator {
-  opacity: 1;
-  animation: pulse 1.5s infinite;
-}
-
-@keyframes pulse {
-  0% { opacity: 1; }
-  50% { opacity: 0.4; }
-  100% { opacity: 1; }
-}
-
-.stats-container {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  margin-bottom: 20px;
-}
-
-.stats {
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 12px;
-  padding: 20px;
-}
-
-.stat-card {
-  margin-bottom: 15px;
-}
-
-.stat-card h2 {
-  font-size: 1.1rem;
-  margin-bottom: 8px;
-  color: #a0a0d0;
-}
-
-.stat-value {
-  font-size: 2.4rem;
-  font-weight: 700;
-  background: linear-gradient(90deg, #ff7e5f, #feb47b);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.persistent-display {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 80px;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 8px;
-  margin-top: 15px;
-  font-size: 1.4rem;
-  color: #feb47b;
+.result {
+  font-size: 2.5rem;
   font-weight: bold;
-}
-
-.analysis-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-  margin-top: 20px;
-  padding: 20px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 12px;
-}
-
-.control-row {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-}
-
-.control-row label {
-  min-width: 120px;
-  color: #a0a0d0;
-}
-
-.control-row input[type="range"] {
-  flex: 1;
-}
-
-.control-row span {
-  min-width: 60px;
-  text-align: right;
-}
-
-.harmonics {
-  background: rgba(0, 0, 0, 0.12);
-  border-radius: 8px;
-  padding: 20px;
-  margin-top: 20px;
-}
-
-.harmonics-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
-}
-
-.harmonic-list {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 15px;
-}
-
-.harmonic-item {
-  background: rgba(255, 255, 255, 0.03);
-  padding: 15px;
-  border-radius: 8px;
-  text-align: center;
-}
-
-.harmonic-value {
-  font-size: 1.4rem;
-  font-weight: bold;
-  margin-top: 8px;
+  margin: 20px 0;
   color: #feb47b;
+  min-height: 60px;
 }
 
-.info-box {
-  background: rgba(255, 126, 95, 0.08);
-  padding: 15px;
-  border-radius: 8px;
+.status {
+  color: #a0a0d0;
   margin-top: 20px;
-  font-size: 0.95rem;
-  line-height: 1.5;
-}
-
-.debug-panel {
-  background: rgba(0, 0, 0, 0.7);
-  color: #fff;
-  padding: 15px;
-  border-radius: 8px;
-  margin-top: 20px;
-  font-family: monospace;
-  font-size: 0.95rem;
-}
-
-.debug-row {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 10px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-@media (max-width: 768px) {
-  .stats-container {
-    grid-template-columns: 1fr;
-  }
-  
-  .controls {
-    flex-direction: column;
-    align-items: center;
-  }
-  
-  button {
-    width: 100%;
-    max-width: 300px;
-  }
-  
-  .harmonic-list {
-    grid-template-columns: repeat(2, 1fr);
-  }
 }
 </style>
 </head>
 <body>
-<div class="container">
-  <header>
-    <h1>Precision Drum Frequency Analyzer</h1>
-    <p class="subtitle">Audacity-level accuracy with advanced signal processing</p>
-  </header>
-  
-  <div class="visualization">
-    <canvas id="waveformCanvas"></canvas>
-  </div>
-  
-  <div class="controls">
-    <button id="recordBtn">
-      <span class="record-indicator"></span>
-      Start Recording
-    </button>
-    <button id="analyzeBtn" disabled>Analyze Recording</button>
-    <button id="calibrateBtn">Calibrate</button>
-    <button id="exportBtn">Export Data</button>
-  </div>
-  
-  <div class="stats-container">
-    <div class="stats">
-      <div class="stat-card">
-        <h2>Fundamental Frequency</h2>
-        <div class="stat-value" id="fundamental">-- Hz</div>
-      </div>
-      
-      <div class="persistent-display" id="persistentDisplay">
-        Ready to record
-      </div>
-      
-      <div class="stat-card">
-        <h2>Analysis Confidence</h2>
-        <div class="stat-value" id="confidence">-- %</div>
-      </div>
-    </div>
-    
-    <div class="stats">
-      <div class="stat-card">
-        <h2>Recording Length</h2>
-        <div class="stat-value" id="recLength">0.0 s</div>
-      </div>
-      
-      <div class="stat-card">
-        <h2>FFT Resolution</h2>
-        <div class="stat-value" id="fftRes">±10.8 Hz</div>
-      </div>
-      
-      <div class="stat-card">
-        <h2>Sample Rate</h2>
-        <div class="stat-value" id="sampleRate">-- Hz</div>
-      </div>
-    </div>
-  </div>
-  
-  <div class="analysis-controls">
-    <div class="control-row">
-      <label for="fftSize">FFT Size:</label>
-      <input type="range" id="fftSize" min="10" max="16" step="1" value="12" />
-      <span id="fftSizeValue">4096</span>
-    </div>
-    
-    <div class="control-row">
-      <label for="windowFunction">Window Function:</label>
-      <select id="windowFunction">
-        <option value="blackman">Blackman</option>
-        <option value="blackmanHarris">Blackman-Harris</option>
-        <option value="hann">Hann</option>
-        <option value="hamming">Hamming</option>
-      </select>
-    </div>
-    
-    <div class="control-row">
-      <label for="minFreq">Min Frequency:</label>
-      <input type="range" id="minFreq" min="20" max="200" step="5" value="40" />
-      <span id="minFreqValue">40 Hz</span>
-    </div>
-    
-    <div class="control-row">
-      <label for="maxFreq">Max Frequency:</label>
-      <input type="range" id="maxFreq" min="100" max="500" step="10" value="300" />
-      <span id="maxFreqValue">300 Hz</span>
-    </div>
-  </div>
-  
-  <div class="harmonics">
-    <div class="harmonics-header">
-      <strong>Harmonics Analysis</strong>
-      <span style="color:#a0a0d0">Multiples of Fundamental</span>
-    </div>
-    <div class="harmonic-list">
-      <div class="harmonic-item">
-        <div>1× Fundamental</div>
-        <div class="harmonic-value" id="h1">-- Hz</div>
-      </div>
-      <div class="harmonic-item">
-        <div>2× Harmonic</div>
-        <div class="harmonic-value" id="h2">-- Hz</div>
-      </div>
-      <div class="harmonic-item">
-        <div>3× Harmonic</div>
-        <div class="harmonic-value" id="h3">-- Hz</div>
-      </div>
-      <div class="harmonic-item">
-        <div>4× Harmonic</div>
-        <div class="harmonic-value" id="h4">-- Hz</div>
-      </div>
-    </div>
-  </div>
-  
-  <div class="info-box">
-    <strong>Usage Instructions:</strong> 
-    <ol>
-      <li>Click "Start Recording" to capture audio (3-5 seconds recommended)</li>
-      <li>Click "Analyze Recording" to process the audio</li>
-      <li>Adjust FFT size and window function for optimal results</li>
-      <li>Export data for further analysis if needed</li>
-    </ol>
-  </div>
-  
-  <div class="debug-panel">
-    <div class="debug-row">
-      <div>Status:</div>
-      <div id="status">Ready to start</div>
-    </div>
-    <div class="debug-row">
-      <div>Recording State:</div>
-      <div id="recState">Inactive</div>
-    </div>
-    <div class="debug-row">
-      <div>Peak Detection Method:</div>
-      <div id="peakMethod">Parabolic Interpolation</div>
-    </div>
-    <div class="debug-row">
-      <div>Last Analysis Time:</div>
-      <div id="lastAnalysisTime">--</div>
-    </div>
-  </div>
-</div>
+<h1>Drum Frequency Analyzer</h1>
+
+<button id="recordBtn" class="record-btn">Click to Record</button>
+
+<div class="result" id="result">-- Hz</div>
+
+<div class="status" id="status">Ready to record</div>
 
 <script>
-document.addEventListener('DOMContentLoaded', async () => {
-  // Elements
+document.addEventListener('DOMContentLoaded', () => {
   const recordBtn = document.getElementById('recordBtn');
-  const analyzeBtn = document.getElementById('analyzeBtn');
-  const calibrateBtn = document.getElementById('calibrateBtn');
-  const exportBtn = document.getElementById('exportBtn');
-  const waveformCanvas = document.getElementById('waveformCanvas');
-  const ctx = waveformCanvas.getContext('2d');
-  const fundEl = document.getElementById('fundamental');
-  const confEl = document.getElementById('confidence');
-  const recLengthEl = document.getElementById('recLength');
-  const fftResEl = document.getElementById('fftRes');
-  const sampleRateEl = document.getElementById('sampleRate');
-  const h1 = document.getElementById('h1');
-  const h2 = document.getElementById('h2');
-  const h3 = document.getElementById('h3');
-  const h4 = document.getElementById('h4');
+  const resultEl = document.getElementById('result');
   const statusEl = document.getElementById('status');
-  const recStateEl = document.getElementById('recState');
-  const lastAnalysisTimeEl = document.getElementById('lastAnalysisTime');
-  const persistentDisplay = document.getElementById('persistentDisplay');
   
-  // Configuration controls
-  const fftSizeSlider = document.getElementById('fftSize');
-  const fftSizeValue = document.getElementById('fftSizeValue');
-  const windowFunctionSelect = document.getElementById('windowFunction');
-  const minFreqSlider = document.getElementById('minFreq');
-  const minFreqValue = document.getElementById('minFreqValue');
-  const maxFreqSlider = document.getElementById('maxFreq');
-  const maxFreqValue = document.getElementById('maxFreqValue');
-  
-  // Audio variables
   let audioContext = null;
   let analyser = null;
   let microphone = null;
   let javascriptNode = null;
-  let recordingData = [];
-  let recordingStartTime = 0;
   let isRecording = false;
   let sampleRate = 44100;
-  let recordingTimer = null;
   
-  // Analysis parameters
-  let fftSize = 4096; // Set to 4096 as requested
-  let minFrequency = 40;
-  let maxFrequency = 300;
+  // Fixed analysis parameters (simplified from original)
+  const fftSize = 4096;
+  const minFrequency = 40;
+  const maxFrequency = 300;
+  const threshold = -70; // dB threshold for noise filtering
   
-  // Update FFT size display
-  fftSizeSlider.addEventListener('input', () => {
-    const power = parseInt(fftSizeSlider.value);
-    fftSize = Math.pow(2, power);
-    fftSizeValue.textContent = fftSize.toLocaleString();
-    if (analyser) {
-      analyser.fftSize = fftSize * 2;
+  // Start/stop recording
+  recordBtn.addEventListener('click', async () => {
+    if (isRecording) {
+      stopRecording();
+      recordBtn.classList.remove('recording');
+      recordBtn.textContent = 'Click to Record';
+      statusEl.textContent = 'Ready to record';
+    } else {
+      try {
+        await startRecording();
+        recordBtn.classList.add('recording');
+        recordBtn.textContent = 'Recording... Click to Stop';
+        statusEl.textContent = 'Recording... hit your drum now';
+      } catch (error) {
+        console.error('Error accessing microphone:', error);
+        statusEl.textContent = 'Error: ' + error.message;
+      }
     }
-    const resolution = (sampleRate / fftSize).toFixed(2);
-    fftResEl.textContent = `±${resolution} Hz`;
   });
-  
-  // Update frequency range displays
-  minFreqSlider.addEventListener('input', () => {
-    minFrequency = parseInt(minFreqSlider.value);
-    minFreqValue.textContent = `${minFrequency} Hz`;
-  });
-  
-  maxFreqSlider.addEventListener('input', () => {
-    maxFrequency = parseInt(maxFreqSlider.value);
-    maxFreqValue.textContent = `${maxFrequency} Hz`;
-  });
-  
-  // Resize canvas for waveform display
-  function resizeCanvas() {
-    const dpr = window.devicePixelRatio || 1;
-    const w = waveformCanvas.clientWidth;
-    const h = waveformCanvas.clientHeight;
-    waveformCanvas.width = Math.max(1, Math.floor(w * dpr));
-    waveformCanvas.height = Math.max(1, Math.floor(h * dpr));
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  }
-  
-  window.addEventListener('resize', resizeCanvas);
-  resizeCanvas();
-  
-  // Initialize application
-  function init() {
-    statusEl.textContent = 'Initializing...';
-    sampleRateEl.textContent = '-- Hz';
-    lastAnalysisTimeEl.textContent = '--';
-    recStateEl.textContent = 'Inactive';
-    
-    // Set initial values for controls
-    fftSizeSlider.value = 12; // 2^12 = 4096
-    fftSizeValue.textContent = fftSize.toLocaleString();
-    minFreqValue.textContent = `${minFrequency} Hz`;
-    maxFreqValue.textContent = `${maxFrequency} Hz`;
-    
-    statusEl.textContent = 'Ready to record';
-  }
   
   // Start recording
   async function startRecording() {
     if (isRecording) return;
     
-    try {
-      if (!audioContext) {
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        sampleRate = audioContext.sampleRate;
-        sampleRateEl.textContent = `${sampleRate} Hz`;
-        
-        // Create analyser node
-        analyser = audioContext.createAnalyser();
-        analyser.fftSize = fftSize * 2;
-        analyser.smoothingTimeConstant = 0.8;
-        
-        // Create script processor for recording
-        javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
-        
-        // Set up audio processing
-        javascriptNode.onaudioprocess = (event) => {
-          if (!isRecording) return;
-          
-          // Get the audio data
-          const channelData = event.inputBuffer.getChannelData(0);
-          recordingData.push(new Float32Array(channelData));
-          
-          // Draw waveform in real-time
-          drawWaveform(channelData);
-        };
-      }
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    sampleRate = audioContext.sampleRate;
+    
+    // Create analyser node
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = fftSize * 2;
+    analyser.smoothingTimeConstant = 0.8;
+    
+    // Create script processor for recording
+    javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
+    
+    // Set up audio processing
+    javascriptNode.onaudioprocess = (event) => {
+      if (!isRecording) return;
       
-      // Get microphone access
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          sampleRate: sampleRate,
-          channelCount: 1,
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false
-        } 
-      });
+      // Get the audio data
+      const channelData = event.inputBuffer.getChannelData(0);
       
-      // Create microphone source
-      microphone = audioContext.createMediaStreamSource(stream);
-      
-      // Connect nodes: microphone -> analyser -> javascriptNode -> destination
-      microphone.connect(analyser);
-      analyser.connect(javascriptNode);
-      javascriptNode.connect(audioContext.destination);
-      
-      // Start recording
-      recordingData = [];
-      recordingStartTime = Date.now();
-      isRecording = true;
-      document.body.classList.add('recording');
-      recordBtn.textContent = 'Stop Recording';
-      statusEl.textContent = 'Recording...';
-      recStateEl.textContent = 'Active';
-      persistentDisplay.textContent = 'Recording...';
-      
-      // Update recording timer
-      recordingTimer = setInterval(() => {
-        if (!isRecording) {
-          clearInterval(recordingTimer);
-          return;
-        }
-        const elapsed = (Date.now() - recordingStartTime) / 1000;
-        persistentDisplay.textContent = `Recording: ${elapsed.toFixed(1)}s`;
-      }, 100);
-      
-    } catch (error) {
-      console.error('Recording error:', error);
-      statusEl.textContent = `Error: ${error.message}`;
-    }
+      // Analyze in real-time
+      analyzeAudio(channelData);
+    };
+    
+    // Get microphone access
+    const stream = await navigator.mediaDevices.getUserMedia({ 
+      audio: {
+        sampleRate: sampleRate,
+        channelCount: 1,
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false
+      } 
+    });
+    
+    // Create microphone source and connect nodes
+    microphone = audioContext.createMediaStreamSource(stream);
+    microphone.connect(analyser);
+    analyser.connect(javascriptNode);
+    javascriptNode.connect(audioContext.destination);
+    
+    isRecording = true;
   }
   
   // Stop recording
-  async function stopRecording() {
+  function stopRecording() {
     if (!isRecording) return;
     
     isRecording = false;
-    document.body.classList.remove('recording');
-    recordBtn.textContent = 'Start Recording';
-    recStateEl.textContent = 'Inactive';
-    clearInterval(recordingTimer);
-    
-    // Calculate duration
-    const duration = recordingData.length * (2048 / sampleRate);
-    recLengthEl.textContent = duration.toFixed(2) + ' s';
-    analyzeBtn.disabled = false;
-    statusEl.textContent = 'Recording complete. Ready to analyze.';
-    
-    // Draw the full waveform
-    drawFullWaveform();
     
     // Disconnect and close resources
     if (microphone) {
@@ -626,275 +176,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (analyser) {
       analyser.disconnect();
     }
+    
+    if (audioContext) {
+      audioContext.close();
+      audioContext = null;
+    }
   }
   
-  // Draw real-time waveform
-  function drawWaveform(data) {
-    const width = waveformCanvas.width / window.devicePixelRatio;
-    const height = waveformCanvas.height / window.devicePixelRatio;
-    const centerY = height / 2;
-    
-    ctx.clearRect(0, 0, width, height);
-    
-    // Draw grid
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, centerY);
-    ctx.lineTo(width, centerY);
-    ctx.stroke();
-    
-    // Draw waveform
-    ctx.strokeStyle = '#ff7e5f';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    
-    const sliceWidth = width / data.length;
-    let x = 0;
-    
-    for (let i = 0; i < data.length; i++) {
-      const y = centerY + data[i] * centerY * 0.8;
-      
-      if (i === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-      
-      x += sliceWidth;
-    }
-    
-    ctx.stroke();
-  }
-  
-  // Draw full recorded waveform
-  function drawFullWaveform() {
-    if (!recordingData || recordingData.length === 0) return;
-    
-    // Flatten the recording data
-    const flatData = recordingData.flat();
-    
-    const width = waveformCanvas.width / window.devicePixelRatio;
-    const height = waveformCanvas.height / window.devicePixelRatio;
-    const centerY = height / 2;
-    
-    ctx.clearRect(0, 0, width, height);
-    
-    // Draw grid
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, centerY);
-    ctx.lineTo(width, centerY);
-    ctx.stroke();
-    
-    // Draw waveform
-    ctx.strokeStyle = '#ff7e5f';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    
-    // Downsample for display if needed
-    const displaySamples = Math.min(flatData.length, width * 2);
-    const step = Math.ceil(flatData.length / displaySamples);
-    
-    const sliceWidth = width / displaySamples;
-    let x = 0;
-    
-    for (let i = 0; i < flatData.length; i += step) {
-      const y = centerY + flatData[i] * centerY * 0.8;
-      
-      if (i === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-      
-      x += sliceWidth;
-    }
-    
-    ctx.stroke();
-  }
-  
-  // Window functions
-  const windowFunctions = {
-    blackman: (n, N) => {
-      const alpha = 0.16;
-      const a0 = (1 - alpha) / 2;
-      const a1 = 0.5;
-      const a2 = alpha / 2;
-      return a0 - a1 * Math.cos(2 * Math.PI * n / (N - 1)) + a2 * Math.cos(4 * Math.PI * n / (N - 1));
-    },
-    blackmanHarris: (n, N) => {
-      return 0.35875 - 0.48829 * Math.cos(2 * Math.PI * n / (N - 1)) + 
-             0.14128 * Math.cos(4 * Math.PI * n / (N - 1)) - 
-             0.01168 * Math.cos(6 * Math.PI * n / (N - 1));
-    },
-    hann: (n, N) => {
-      return 0.5 * (1 - Math.cos(2 * Math.PI * n / (N - 1)));
-    },
-    hamming: (n, N) => {
-      return 0.54 - 0.46 * Math.cos(2 * Math.PI * n / (N - 1));
-    }
-  };
-  
-  // Apply window function to data
-  function applyWindowFunction(data, windowName) {
-    const windowFunc = windowFunctions[windowName] || windowFunctions.blackman;
-    const windowedData = new Float32Array(data.length);
-    
-    for (let i = 0; i < data.length; i++) {
-      windowedData[i] = data[i] * windowFunc(i, data.length);
-    }
-    
-    return windowedData;
-  }
-  
-  // Perform FFT using the AnalyserNode
-  function performFFT() {
-    if (!analyser) return null;
-    
-    const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Float32Array(bufferLength);
-    analyser.getFloatFrequencyData(dataArray);
-    
-    return dataArray;
-  }
-  
-  // Find peak with parabolic interpolation (ACTUALLY IMPLEMENTED)
-  function findPeakWithInterpolation(magnitude, sampleRate, fftSize) {
-    const binSize = sampleRate / fftSize;
-    const minBin = Math.floor(minFrequency / binSize);
-    const maxBin = Math.min(Math.floor(maxFrequency / binSize), magnitude.length - 1);
-    
-    // Find the bin with maximum magnitude
-    let maxMag = -Infinity;
-    let maxBinIdx = minBin;
-    
-    for (let i = minBin; i <= maxBin; i++) {
-      if (magnitude[i] > maxMag) {
-        maxMag = magnitude[i];
-        maxBinIdx = i;
-      }
-    }
-    
-    // If the signal is too quiet, return no frequency
-    if (maxMag < -90) {
-      return { frequency: 0, confidence: 0, bin: maxBinIdx };
-    }
-    
-    // If at the edges, can't interpolate
-    if (maxBinIdx <= minBin || maxBinIdx >= maxBin) {
-      const frequency = maxBinIdx * binSize;
-      const confidence = Math.min(100, Math.max(0, (maxMag + 100) / 1.5));
-      return { frequency, confidence, bin: maxBinIdx };
-    }
-    
-    // Get magnitudes for interpolation
-    const leftMag = magnitude[maxBinIdx - 1];
-    const centerMag = magnitude[maxBinIdx];
-    const rightMag = magnitude[maxBinIdx + 1];
-    
-    // Parabolic interpolation formula
-    const delta = (leftMag - rightMag) / (2 * (leftMag - 2 * centerMag + rightMag));
-    const interpolatedBin = maxBinIdx + delta;
-    const frequency = interpolatedBin * binSize;
-    
-    // Calculate confidence based on peak prominence
-    const confidence = Math.min(100, Math.max(0, (centerMag + 100) / 1.5));
-    
-    return {
-      frequency,
-      confidence,
-      bin: maxBinIdx
-    };
-  }
-  
-  // Find fundamental frequency by checking for harmonic relationships
-  function findFundamentalFrequency(magnitude, sampleRate, fftSize) {
-    const binSize = sampleRate / fftSize;
-    const minBin = Math.floor(minFrequency / binSize);
-    const maxBin = Math.min(Math.floor(maxFrequency / binSize), magnitude.length - 1);
-    
-    // Find all peaks above threshold
-    const peaks = [];
-    const threshold = -80; // dB threshold
-    
-    for (let i = minBin; i <= maxBin; i++) {
-      if (magnitude[i] > threshold && 
-          magnitude[i] > magnitude[i-1] && 
-          magnitude[i] > magnitude[i+1]) {
-        peaks.push({
-          bin: i,
-          magnitude: magnitude[i],
-          frequency: i * binSize
-        });
-      }
-    }
-    
-    // Sort peaks by magnitude (highest first)
-    peaks.sort((a, b) => b.magnitude - a.magnitude);
-    
-    // Try to find fundamental by checking harmonic relationships
-    for (let i = 0; i < Math.min(peaks.length, 5); i++) {
-      const candidate = peaks[i];
-      let harmonicCount = 0;
-      
-      // Check for harmonics (2x, 3x, 4x)
-      for (let multiple = 2; multiple <= 4; multiple++) {
-        const harmonicFreq = candidate.frequency * multiple;
-        const harmonicBin = Math.round(harmonicFreq / binSize);
-        
-        if (harmonicBin < magnitude.length && magnitude[harmonicBin] > threshold) {
-          harmonicCount++;
-        }
-      }
-      
-      // If we found at least one harmonic, this is likely the fundamental
-      if (harmonicCount >= 1) {
-        return candidate;
-      }
-    }
-    
-    // If no fundamental found, return the strongest peak
-    return peaks.length > 0 ? peaks[0] : { frequency: 0, magnitude: -100, bin: 0 };
-  }
-  
-  // Analyze the recording
-  function analyzeRecording() {
-    if (!recordingData || recordingData.length === 0) {
-      statusEl.textContent = 'No recording data to analyze';
-      return;
-    }
-    
-    statusEl.textContent = 'Analyzing...';
-    
-    // Flatten the recording data
-    const flatData = recordingData.flat();
-    
-    // Find the segment with the highest energy (where the hit occurred)
-    let maxEnergy = 0;
-    let maxEnergyIndex = 0;
-    
-    // Calculate energy in sliding window
-    const windowSize = fftSize;
-    for (let i = 0; i <= flatData.length - windowSize; i += Math.floor(windowSize/2)) {
-      let energy = 0;
-      for (let j = 0; j < windowSize; j++) {
-        energy += Math.abs(flatData[i + j]);
-      }
-      
-      if (energy > maxEnergy) {
-        maxEnergy = energy;
-        maxEnergyIndex = i;
-      }
-    }
-    
-    // Take the segment with highest energy
-    const analysisData = flatData.slice(maxEnergyIndex, maxEnergyIndex + windowSize);
-    
-    // Apply window function
-    const windowName = windowFunctionSelect.value;
-    const windowedData = applyWindowFunction(analysisData, windowName);
+  // Analyze audio to find fundamental frequency
+  function analyzeAudio(data) {
+    // Apply Blackman window function (simplified from original)
+    const windowedData = applyWindowFunction(data, 'blackman');
     
     // Create a temporary analyser for processing
     const tempAnalyser = audioContext.createAnalyser();
@@ -915,67 +207,47 @@ document.addEventListener('DOMContentLoaded', async () => {
     const frequencyData = new Float32Array(tempAnalyser.frequencyBinCount);
     tempAnalyser.getFloatFrequencyData(frequencyData);
     
-    // Find fundamental frequency using improved method
-    const fundamental = findFundamentalFrequency(frequencyData, sampleRate, fftSize);
+    // Find fundamental frequency
+    const binSize = sampleRate / fftSize;
+    const minBin = Math.floor(minFrequency / binSize);
+    const maxBin = Math.min(Math.floor(maxFrequency / binSize), frequencyData.length - 1);
     
-    // If we found a frequency, use parabolic interpolation for accuracy
-    let frequency = 0;
-    let confidence = 0;
+    // Find the bin with maximum magnitude above threshold
+    let maxMag = -Infinity;
+    let maxBinIdx = minBin;
     
-    if (fundamental.frequency > 0) {
-      const interpolated = findPeakWithInterpolation(frequencyData, sampleRate, fftSize);
-      frequency = interpolated.frequency;
-      confidence = Math.min(100, Math.max(0, (fundamental.magnitude + 100) / 1.5));
+    for (let i = minBin; i <= maxBin; i++) {
+      if (frequencyData[i] > maxMag && frequencyData[i] > threshold) {
+        maxMag = frequencyData[i];
+        maxBinIdx = i;
+      }
     }
     
-    // Update UI with results
-    fundEl.textContent = frequency > 0 ? `${frequency.toFixed(2)} Hz` : '-- Hz';
-    confEl.textContent = confidence > 0 ? `${confidence.toFixed(1)} %` : '-- %';
-    
-    // Update harmonics
-    if (frequency > 0) {
-      [h1, h2, h3, h4].forEach((el, i) => {
-        el.textContent = `${(frequency * (i + 1)).toFixed(1)} Hz`;
-      });
-      persistentDisplay.textContent = `Fundamental: ${frequency.toFixed(2)} Hz`;
-    } else {
-      [h1, h2, h3, h4].forEach(el => el.textContent = '-- Hz');
-      persistentDisplay.textContent = 'No significant frequency detected';
+    // If we found a valid frequency, display it
+    if (maxMag > threshold) {
+      const frequency = maxBinIdx * binSize;
+      resultEl.textContent = Math.round(frequency) + ' Hz';
     }
-    
-    lastAnalysisTimeEl.textContent = new Date().toLocaleTimeString();
-    statusEl.textContent = 'Analysis complete';
     
     // Clean up
     source.disconnect();
     tempAnalyser.disconnect();
   }
   
-  // Calibrate function
-  function calibrate() {
-    statusEl.textContent = 'Calibration not implemented in this demo';
-  }
-  
-  // Export data function
-  function exportData() {
-    statusEl.textContent = 'Export not implemented in this demo';
-  }
-  
-  // Event listeners
-  recordBtn.addEventListener('click', () => {
-    if (isRecording) {
-      stopRecording();
-    } else {
-      startRecording();
+  // Apply window function to data (simplified from original)
+  function applyWindowFunction(data, windowName) {
+    const windowedData = new Float32Array(data.length);
+    
+    for (let i = 0; i < data.length; i++) {
+      // Simple Blackman window
+      const blackman = 0.42 - 0.5 * Math.cos(2 * Math.PI * i / (data.length - 1)) + 
+                       0.08 * Math.cos(4 * Math.PI * i / (data.length - 1));
+      
+      windowedData[i] = data[i] * blackman;
     }
-  });
-  
-  analyzeBtn.addEventListener('click', analyzeRecording);
-  calibrateBtn.addEventListener('click', calibrate);
-  exportBtn.addEventListener('click', exportData);
-  
-  // Initialize the app
-  init();
+    
+    return windowedData;
+  }
 });
 </script>
 </body>
