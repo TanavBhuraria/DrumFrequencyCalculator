@@ -3,28 +3,38 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Drum Frequency Analyzer — Spectrum+Harmonic Check</title>
+<title>Drum Frequency Analyzer — Low-Freq Capable</title>
 <style>
   body{background:#16213e;color:#fff;font-family:Segoe UI, Tahoma, Geneva, Verdana, sans-serif;
     display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;text-align:center}
-  h1{color:#feb47b;margin-bottom:12px}
+  h1{color:#feb47b;margin-bottom:10px}
   .record-btn{background:linear-gradient(135deg,#ff7e5f,#feb47b);color:#fff;border:none;padding:14px 30px;border-radius:40px;cursor:pointer;font-weight:700}
   .record-btn.recording{background:linear-gradient(135deg,#f44336,#ff7e5f)}
-  .result{font-size:2.4rem;font-weight:800;margin:16px 0;color:#feb47b;min-height:56px}
+  .result{font-size:2.6rem;font-weight:800;margin:16px 0;color:#feb47b;min-height:56px}
   .status{color:#a0a0d0;margin-top:8px}
   .small{font-size:.85rem;color:#bfbfdc;margin-top:6px}
-  .debug{font-size:.78rem;color:#bfbfdc;margin-top:8px;opacity:.9;white-space:pre-wrap}
+  .debug{font-size:.78rem;color:#bfbfdc;margin-top:8px;white-space:pre-wrap}
 </style>
 </head>
 <body>
-  <h1>Drum Frequency Analyzer — Spectrum + Harmonic Check</h1>
-  <button id="recordBtn" class="record-btn">Click to Record</button>
+  <h1>Drum Frequency Analyzer — Low-Freq Capable</h1>
+  <button id="recordBtn" class="record-btn">Start</button>
   <div class="result" id="result">-- Hz</div>
-  <div class="status" id="status">Ready — use Chrome/Edge. Localhost/HTTPS recommended.</div>
-  <div class="small">Tip: mic 5–15 cm from drum. One hit per test.</div>
+  <div class="status" id="status">Ready. Use Chrome/Edge. Localhost/HTTPS recommended.</div>
+  <div class="small">Tip: place mic 5–15 cm from drum. Hit once per test.</div>
   <div class="debug" id="debug"></div>
 
 <script>
+/*
+  All-in-one in-browser drum fundamental detector.
+  Strategy:
+   - Continuously collect raw mic samples into a long circular buffer (~1s).
+   - Use light real-time gating (mean abs) to detect hits.
+   - On hit: copy last 1s, downsample to 8k, run constrained autocorrelation (lags for 20-400Hz).
+   - If autocorr gives valid low freq -> use it (best for kicks/floors).
+   - Otherwise fallback to FFT peak+harmonic-check for mid/high drums.
+   - Smooth & hold display to avoid blinking.
+*/
 document.addEventListener('DOMContentLoaded', () => {
   const recordBtn = document.getElementById('recordBtn');
   const resultEl = document.getElementById('result');
@@ -37,313 +47,324 @@ document.addEventListener('DOMContentLoaded', () => {
   let scriptNode = null;
   let isRecording = false;
 
-  // PARAMETERS
-  const FFT_SIZE = 8192;           // resolution for low drums
-  const PROCESSOR_SIZE = 2048;
+  // Params
+  const FFT_SIZE = 32768;            // max fft size for analyser (improves bin resolution)
+  const PROCESSOR_SIZE = 2048;       // script processor frame size
+  const RING_SECONDS = 1.0;          // length of circular buffer to keep (seconds)
+  const DOWNSAMPLE_RATE = 8000;      // internal analysis sampling rate (Hz)
+  const MIN_FREQ = 20;               // ignore below this
+  const MAX_FREQ = 4000;             // ignore above this for main logic
+  const LOW_TARGET_MIN = 20;         // low band we especially care about (kicks/floor)
+  const LOW_TARGET_MAX = 400;        // upper bound for autocorr detection area
   const SMOOTH_WINDOW = 6;
-  const HOLD_MS = 260;
-  const MIN_VOLUME = 0.0006;
-  let noiseFloor = 0.002;
+  const HOLD_MS = 300;
+  const MIN_MEANABS = 0.0005;        // very low absolute floor
+  let noiseFloor = 0.002;            // EMA noise floor
 
-  // Drum fundamental target band (we prefer fundamentals in this)
-  const DRUM_MIN = 40;
-  const DRUM_MAX = 300;
-
-  // smoothing & state
+  // state
+  let ringBuffer = null;
+  let ringLen = 0;
+  let ringWrite = 0;
+  let sampleRate = 44100;
   let freqBuffer = [];
-  let lastDisplayTime = 0;
   let lastShownFreq = null;
-
-  // debug
+  let lastDisplayTime = 0;
+  let lastHitTime = 0;
   const LOG = false;
 
   recordBtn.addEventListener('click', async () => {
-    if (isRecording) {
-      stop();
-      recordBtn.classList.remove('recording');
-      recordBtn.textContent = 'Click to Record';
-      statusEl.textContent = 'Stopped';
-    } else {
-      try {
-        await start();
-        recordBtn.classList.add('recording');
-        recordBtn.textContent = 'Recording... Click to Stop';
-        statusEl.textContent = 'Live — hit the drum';
-      } catch (err) {
-        console.error(err);
-        statusEl.textContent = 'Error: ' + (err && err.message ? err.message : err);
-      }
-    }
+    if (isRecording) { stop(); recordBtn.textContent = 'Start'; recordBtn.classList.remove('recording'); statusEl.textContent = 'Stopped'; }
+    else { await start(); recordBtn.textContent = 'Stop'; recordBtn.classList.add('recording'); statusEl.textContent = 'Recording — hit the drum'; }
   });
 
-  async function start() {
+  async function start(){
     if (isRecording) return;
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    sampleRate = audioContext.sampleRate;
     analyser = audioContext.createAnalyser();
-    analyser.fftSize = FFT_SIZE;
+    // set analyser fft size to max allowed (cap at 32768)
+    analyser.fftSize = Math.min(FFT_SIZE, 32768);
     analyser.smoothingTimeConstant = 0.0;
 
-    scriptNode = audioContext.createScriptProcessor(PROCESSOR_SIZE, 1, 1);
-    scriptNode.onaudioprocess = () => {
-      if (!isRecording) return;
-      processFrame();
-    };
+    scriptNode = audioContext.createScriptProcessor(PROCESSOR_SIZE,1,1);
+    scriptNode.onaudioprocess = onAudioProcess;
 
     const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        channelCount: 1,
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false
-      }
+      audio: { channelCount:1, echoCancellation:false, noiseSuppression:false, autoGainControl:false }
     });
 
     micSource = audioContext.createMediaStreamSource(stream);
+    // connect mic to both analyser and script node
     micSource.connect(analyser);
-    analyser.connect(scriptNode);
+    micSource.connect(scriptNode);
     scriptNode.connect(audioContext.destination);
 
+    // prepare ring buffer
+    ringLen = Math.ceil(RING_SECONDS * sampleRate);
+    ringBuffer = new Float32Array(ringLen);
+    ringWrite = 0;
+
     isRecording = true;
-    console.log('Started. sampleRate:', audioContext.sampleRate, 'fftSize:', analyser.fftSize);
+    console.log('Started. sampleRate=', sampleRate, 'analyser.fftSize=', analyser.fftSize, 'ringLen=', ringLen);
   }
 
-  function stop() {
+  function stop(){
     if (!isRecording) return;
+    try { micSource.mediaStream.getTracks().forEach(t=>t.stop()); micSource.disconnect(); } catch(e){}
+    scriptNode.disconnect(); analyser.disconnect(); audioContext.close();
     isRecording = false;
-
-    try {
-      if (micSource) {
-        micSource.mediaStream.getTracks().forEach(t => t.stop());
-        micSource.disconnect();
-      }
-    } catch (e) { /* ignore */ }
-
-    if (scriptNode) { scriptNode.disconnect(); scriptNode = null; }
-    if (analyser) { analyser.disconnect(); analyser = null; }
-    if (audioContext) { audioContext.close(); audioContext = null; }
-
-    freqBuffer = [];
-    lastShownFreq = null;
-    lastDisplayTime = 0;
+    ringBuffer = null;
     resultEl.textContent = '-- Hz';
     debugEl.textContent = '';
-    console.log('Stopped');
+    lastShownFreq = null;
   }
 
-  function processFrame() {
-    const bufferLen = analyser.fftSize;
-    // time-domain for volume gating
-    const timeByte = new Uint8Array(bufferLen);
-    analyser.getByteTimeDomainData(timeByte);
-
-    // convert to float and compute mean absolute
-    const floatTime = new Float32Array(bufferLen);
-    let sumAbs = 0;
-    for (let i = 0; i < bufferLen; i++) {
-      const v = (timeByte[i] - 128) / 128;
-      floatTime[i] = v;
-      sumAbs += Math.abs(v);
+  function onAudioProcess(event){
+    if (!isRecording) return;
+    const inBuf = event.inputBuffer.getChannelData(0);
+    // write to ring buffer
+    for (let i=0;i<inBuf.length;i++){
+      ringBuffer[ringWrite++] = inBuf[i];
+      if (ringWrite >= ringLen) ringWrite = 0;
     }
-    const meanAbs = sumAbs / bufferLen;
 
-    // update noise floor (slow EMA)
+    // quick frame-level gating: use mean absolute of this frame
+    let sumAbs = 0;
+    for (let i=0;i<inBuf.length;i++) sumAbs += Math.abs(inBuf[i]);
+    const meanAbs = sumAbs / inBuf.length;
+
+    // update noise floor EMA
     const alpha = 0.02;
-    noiseFloor = noiseFloor * (1 - alpha) + meanAbs * alpha;
-    const triggerThreshold = Math.max(MIN_VOLUME, noiseFloor * 2.2);
+    noiseFloor = noiseFloor * (1-alpha) + meanAbs * alpha;
+    const trigger = Math.max(MIN_MEANABS, noiseFloor * 2.2);
 
-    if (meanAbs < triggerThreshold) {
-      const now = performance.now();
+    // quick hold: if we've just analyzed a hit, avoid analyzing again immediately
+    const now = performance.now();
+    if (meanAbs >= trigger && (now - lastHitTime) > 70) {
+      lastHitTime = now;
+      // heavy analysis on a hit (async-ish but done here synchronously)
+      analyzeLastSecond();
+    } else {
+      // show previous value for HOLD_MS, otherwise clear
       if (lastShownFreq && (now - lastDisplayTime) < HOLD_MS) {
-        // hold last shown
+        // keep
       } else {
         resultEl.textContent = '-- Hz';
-        lastShownFreq = null;
-      }
-      if (LOG) debugEl.textContent = `quiet meanAbs:${meanAbs.toFixed(4)} thr:${triggerThreshold.toFixed(4)} nf:${noiseFloor.toFixed(4)}`;
-      return;
-    }
-
-    // get frequency spectrum (byte)
-    const freqByte = new Uint8Array(analyser.frequencyBinCount);
-    analyser.getByteFrequencyData(freqByte); // 0..255 magnitude-like
-    // convert to float magnitudes
-    const mags = new Float32Array(freqByte.length);
-    let maxMag = 0, sumMag = 0;
-    for (let i = 0; i < freqByte.length; i++) {
-      const m = freqByte[i];
-      mags[i] = m;
-      if (m > maxMag) maxMag = m;
-      sumMag += m;
-    }
-    const meanMag = sumMag / mags.length;
-    const sampleRate = audioContext.sampleRate;
-    const binSize = sampleRate / analyser.fftSize;
-
-    // find peaks (local maxima) within a reasonable range
-    const minBin = Math.max(2, Math.floor( (DRUM_MIN/2) / binSize )); // start a bit lower to detect low energy
-    const maxBin = Math.min(mags.length - 2, Math.floor(8000 / binSize)); // ignore ultra-high
-    const peakThresholdAbs = Math.max(maxMag * 0.12, meanMag * 3, 6); // tuned thresholds (bytes 0..255)
-    const peaks = [];
-    for (let i = minBin; i <= maxBin; i++) {
-      if (mags[i] > mags[i-1] && mags[i] >= mags[i+1] && mags[i] >= peakThresholdAbs) {
-        peaks.push({bin: i, freq: i * binSize, mag: mags[i]});
+        // don't null lastShownFreq here — keep for smoothing if needed
       }
     }
-
-    if (peaks.length === 0) {
-      // fallback: if no peaks (maybe very low frequency), try autocorrelation time-domain (optional)
-      const acFreq = autoCorrelate(floatTime, sampleRate);
-      if (acFreq > 0) pushAndShowFrequency(acFreq);
-      else {
-        const now = performance.now();
-        if (!(lastShownFreq && (now - lastDisplayTime) < HOLD_MS)) {
-          resultEl.textContent = '-- Hz';
-          lastShownFreq = null;
-        }
-      }
-      if (LOG) debugEl.textContent = `no peaks. maxMag:${maxMag.toFixed(1)} meanMag:${meanMag.toFixed(2)} thr:${peakThresholdAbs.toFixed(1)}`;
-      return;
-    }
-
-    // sort peaks by frequency ascending (prefer lower fundamentals)
-    peaks.sort((a,b) => a.freq - b.freq);
-
-    // candidate selection:
-    // - if there's a low peak inside DRUM_MIN..DRUM_MAX, choose the strongest among them
-    const inBandPeaks = peaks.filter(p => p.freq >= DRUM_MIN && p.freq <= DRUM_MAX);
-    if (inBandPeaks.length > 0) {
-      // choose peak with highest magnitude among inBand
-      inBandPeaks.sort((a,b)=>b.mag - a.mag);
-      pushAndShowFrequency(inBandPeaks[0].freq);
-      if (LOG) debugEl.textContent = `picked in-band peak ${inBandPeaks[0].freq.toFixed(1)}Hz mag:${inBandPeaks[0].mag.toFixed(1)}`;
-      return;
-    }
-
-    // no in-band peaks: examine peaks (ascending freq). For each peak, check for subharmonic energy.
-    // take the first peak where subharmonic energy is present (lowest plausible fundamental)
-    let chosenFreq = null;
-
-    for (let p = 0; p < peaks.length; p++) {
-      const peak = peaks[p];
-      // if peak freq is not too high, consider it as-is
-      if (peak.freq <= DRUM_MAX * 1.15 && peak.freq >= DRUM_MIN) {
-        chosenFreq = peak.freq;
-        break;
-      }
-      // search divisors for subharmonic energy
-      const limitDiv = 12;
-      let found = false;
-      for (let d = 2; d <= limitDiv; d++) {
-        const candFreq = peak.freq / d;
-        if (candFreq < DRUM_MIN - 5) break; // no need to go lower
-        const candBin = Math.round(candFreq / binSize);
-        if (candBin <= 1 || candBin >= mags.length - 1) continue;
-        const subMag = mags[candBin];
-        // acceptance criteria:
-        // subMag must be a non-trivial fraction of the peak mag OR above a fraction of global max
-        if (subMag >= peak.mag * 0.20 || subMag >= maxMag * 0.08 || subMag >= meanMag * 3) {
-          // accept this subharmonic as the fundamental
-          chosenFreq = candFreq;
-          found = true;
-          if (LOG) console.log(`subharmonic found: ${peak.freq.toFixed(1)} / ${d} -> ${candFreq.toFixed(1)} (subMag:${subMag.toFixed(1)} peakMag:${peak.mag.toFixed(1)})`);
-          break;
-        }
-      }
-      if (found) break;
-    }
-
-    if (!chosenFreq) {
-      // fallback: choose strongest peak (lowest freq among strongest)
-      peaks.sort((a,b)=>b.mag - a.mag);
-      const strongest = peaks[0];
-      chosenFreq = strongest.freq;
-      if (LOG) debugEl.textContent = `fallback strongest ${chosenFreq.toFixed(1)}Hz mag:${strongest.mag.toFixed(1)}`;
-    } else {
-      if (LOG) debugEl.textContent = `chosen ${chosenFreq.toFixed(1)}Hz`;
-    }
-
-    // final sanity clamp: ensure within physically reasonable range
-    if (chosenFreq < 15 || chosenFreq > 8000) {
-      const now = performance.now();
-      if (!(lastShownFreq && (now - lastDisplayTime) < HOLD_MS)) {
-        resultEl.textContent = '-- Hz';
-        lastShownFreq = null;
-      }
-      return;
-    }
-
-    pushAndShowFrequency(chosenFreq);
   }
 
-  // smoothing: median + small EMA + spike clamp
+  // copy last ringLen samples into a linear buffer (most recent last)
+  function copyRingLatest() {
+    const out = new Float32Array(ringLen);
+    const tail = ringLen - ringWrite;
+    if (tail > 0) {
+      out.set(ringBuffer.subarray(ringWrite, ringLen), 0);
+      out.set(ringBuffer.subarray(0, ringWrite), tail);
+    } else {
+      out.set(ringBuffer);
+    }
+    return out;
+  }
+
+  // downsample from originalSampleRate to targetRate (returns Float32Array)
+  function downsampleBuffer(buf, originalRate, targetRate) {
+    if (targetRate >= originalRate) return buf.slice(); // no upsample
+    const ratio = originalRate / targetRate;
+    const outLen = Math.floor(buf.length / ratio);
+    const out = new Float32Array(outLen);
+    let srcIndex = 0;
+    for (let i=0;i<outLen;i++){
+      let start = Math.floor(i * ratio);
+      let end = Math.floor((i+1) * ratio);
+      if (end <= start) end = start+1;
+      let sum = 0;
+      for (let j=start;j<end && j < buf.length; j++) sum += buf[j];
+      out[i] = sum / (end - start);
+    }
+    return out;
+  }
+
+  // constrained autocorrelation on downsampled buffer (targetRate), search for lags corresponding to [lowF..highF]
+  function constrainedAutoCorrelate(downBuf, targetRate, lowF=LOW_TARGET_MIN, highF=LOW_TARGET_MAX) {
+    const N = downBuf.length;
+    // remove DC mean
+    let mean = 0;
+    for (let i=0;i<N;i++) mean += downBuf[i];
+    mean /= N;
+    for (let i=0;i<N;i++) downBuf[i] -= mean;
+
+    // compute energy once for normalization
+    let energy = 0;
+    for (let i=0;i<N;i++) energy += downBuf[i]*downBuf[i];
+    if (energy <= 1e-8) return -1;
+
+    const minLag = Math.max(2, Math.floor(targetRate / highF)); // highF -> small lag
+    const maxLag = Math.min(N-2, Math.floor(targetRate / lowF)); // lowF -> large lag
+
+    let bestLag = -1;
+    let bestCorr = -Infinity;
+
+    // For speed, compute correlation sums for each lag
+    // correlation(lag) = sum_{i=0}^{N-lag-1} buf[i]*buf[i+lag]
+    // We'll compute normalized correlation = corr / (N-lag)
+    for (let lag = minLag; lag <= maxLag; lag++){
+      let s = 0;
+      // iterate with a stride to speed up? keep full for accuracy
+      for (let i=0;i < N - lag; i++) {
+        s += downBuf[i] * downBuf[i + lag];
+      }
+      const norm = s / (N - lag);
+      // a crude acceptance: scale by sqrt(energy) not done; compare norm
+      if (norm > bestCorr) { bestCorr = norm; bestLag = lag; }
+    }
+
+    if (bestLag <= 0) return -1;
+
+    // refine lag via parabolic interpolation on a small neighborhood (bestLag-1, bestLag, bestLag+1)
+    // compute three nearby values
+    function acAt(lag) {
+      let s=0;
+      for (let i=0;i < N - lag; i++) s += downBuf[i] * downBuf[i+lag];
+      return s / (N - lag);
+    }
+    const y1 = acAt(bestLag);
+    const y0 = (bestLag-1>=minLag) ? acAt(bestLag-1) : y1;
+    const y2 = (bestLag+1<=maxLag) ? acAt(bestLag+1) : y1;
+    const denom = (y0 - 2*y1 + y2);
+    let shift = 0;
+    if (denom !== 0) shift = (y0 - y2) / (2 * denom); // parabolic interpolation
+    const refinedLag = bestLag + shift;
+    if (!isFinite(refinedLag) || refinedLag <= 0) return -1;
+    const frequency = targetRate / refinedLag;
+    // basic sanity: ensure frequency within our search bounds
+    if (frequency < lowF*0.6 || frequency > highF*1.5) return -1;
+    return {frequency, strength: bestCorr};
+  }
+
+  // fallback: FFT-based peak detection using analyser frequency data (for mid/high drums)
+  function fftPeakDetect() {
+    const freqLen = analyser.frequencyBinCount;
+    const freqByte = new Uint8Array(freqLen);
+    analyser.getByteFrequencyData(freqByte);
+    // convert bytes to magnitudes (0..255)
+    let maxMag = 0;
+    for (let i=0;i<freqLen;i++) if (freqByte[i] > maxMag) maxMag = freqByte[i];
+    if (maxMag < 6) return null; // too quiet
+    const sampleRateLocal = sampleRate;
+    const binSize = sampleRateLocal / analyser.fftSize;
+    const minBin = Math.max(1, Math.floor(MIN_FREQ / binSize));
+    const maxBin = Math.min(freqLen-2, Math.floor(MAX_FREQ / binSize));
+    // find peaks above local threshold
+    const peaks = [];
+    const meanMag = freqByte.reduce((a,b)=>a+b,0)/freqLen;
+    const absThr = Math.max(meanMag * 2.5, maxMag * 0.08, 6);
+    for (let i = minBin; i <= maxBin; i++){
+      if (freqByte[i] > freqByte[i-1] && freqByte[i] >= freqByte[i+1] && freqByte[i] >= absThr) {
+        peaks.push({bin:i, mag:freqByte[i], freq: i * binSize});
+      }
+    }
+    if (peaks.length === 0) return null;
+    // sort by magnitude descending, prefer lower freq when near equal magnitude
+    peaks.sort((a,b)=> (b.mag - a.mag) || (a.freq - b.freq));
+    return peaks[0].freq;
+  }
+
+  // harmonic check: given a highFreq candidate, see if subharmonic bins show enough energy. Return corrected freq or null.
+  function harmonicCheckCandidate(highFreq) {
+    const freqLen = analyser.frequencyBinCount;
+    const freqByte = new Uint8Array(freqLen);
+    analyser.getByteFrequencyData(freqByte);
+    const sampleRateLocal = sampleRate;
+    const binSize = sampleRateLocal / analyser.fftSize;
+
+    // compute global stats
+    let maxMag = 0, sumMag = 0;
+    for (let i=0;i<freqLen;i++){ sumMag += freqByte[i]; if (freqByte[i] > maxMag) maxMag = freqByte[i]; }
+    const meanMag = sumMag / freqLen;
+
+    // try divisors up to 12
+    for (let d = 2; d <= 12; d++) {
+      const cand = highFreq / d;
+      if (cand < LOW_TARGET_MIN - 5) break;
+      const candBin = Math.round(cand / binSize);
+      if (candBin <= 1 || candBin >= freqLen-1) continue;
+      const subMag = freqByte[candBin];
+      // acceptance criteria: subMag is a notable fraction of peak or above global mean multipliers
+      if (subMag >= (maxMag * 0.18) || subMag >= (meanMag * 3) || subMag >= 8) {
+        return cand;
+      }
+    }
+    return null;
+  }
+
+  // main heavy analysis pipeline
+  function analyzeLastSecond() {
+    if (!ringBuffer) return;
+    const linear = copyRingLatest(); // most recent last
+    // quick check energy
+    let energy=0;
+    for (let i=0;i<linear.length;i++) energy += Math.abs(linear[i]);
+    const meanAbs = energy / linear.length;
+    if (LOG) debugEl.textContent = `hit detected meanAbs:${meanAbs.toFixed(4)} noise:${noiseFloor.toFixed(4)}`;
+
+    // downsample to 8k
+    const down = downsampleBuffer(linear, sampleRate, DOWNSAMPLE_RATE);
+    // do constrained autocorrelation (good for low fundamentals)
+    const ac = constrainedAutoCorrelate(down, DOWNSAMPLE_RATE, LOW_TARGET_MIN, LOW_TARGET_MAX);
+    if (ac && ac.frequency > 0 && ac.frequency < 1000) {
+      // if valid low freq found and strength decent -> accept it
+      if (LOG) debugEl.textContent += `\nAC result: ${ac.frequency.toFixed(1)} Hz strength:${ac.strength.toFixed(4)}`;
+      pushAndShowFrequency(ac.frequency);
+      return;
+    }
+
+    // otherwise fallback to FFT peak detection + harmonic check
+    const fftCandidate = fftPeakDetect();
+    if (!fftCandidate) {
+      // try a quicker autocorr across higher band using time-domain small buffer
+      const smallAC = constrainedAutoCorrelate(down, DOWNSAMPLE_RATE, 60, 800); // try mid band
+      if (smallAC && smallAC.frequency > 0) { pushAndShowFrequency(smallAC.frequency); return; }
+      // nothing
+      if (LOG) debugEl.textContent += '\nno viable candidate from FFT or AC';
+      return;
+    }
+
+    // harmonic-check (only divide if subharmonic energy exists)
+    const corrected = harmonicCheckCandidate(fftCandidate);
+    if (corrected) {
+      if (LOG) debugEl.textContent += `\nFFT ${fftCandidate.toFixed(1)} -> corrected ${corrected.toFixed(1)}`;
+      pushAndShowFrequency(corrected);
+    } else {
+      if (LOG) debugEl.textContent += `\nFFT ${fftCandidate.toFixed(1)} (no subharmonic)`;
+      pushAndShowFrequency(fftCandidate);
+    }
+  }
+
+  // smoothing & display
   function pushAndShowFrequency(freq) {
     if (!isFinite(freq) || freq <= 0 || freq > 20000) return;
+    // clamp wildly low/high
+    if (freq < MIN_FREQ || freq > MAX_FREQ*5) return;
 
     freqBuffer.push(freq);
     if (freqBuffer.length > SMOOTH_WINDOW) freqBuffer.shift();
-
     const sorted = freqBuffer.slice().sort((a,b)=>a-b);
     const median = sorted[Math.floor(sorted.length/2)];
-
     const displayed = lastShownFreq || median;
-    const smooth = displayed * 0.58 + median * 0.42;
-
-    // clamp weird spikes: avoid >2.5x jumps
+    const smooth = displayed * 0.5 + median * 0.5;
+    // spike clamp
     let final = smooth;
     if (lastShownFreq && smooth > lastShownFreq * 2.5) final = lastShownFreq;
     if (lastShownFreq && smooth < lastShownFreq * 0.35) final = lastShownFreq;
-
     resultEl.textContent = Math.round(final) + ' Hz';
     lastShownFreq = final;
     lastDisplayTime = performance.now();
+    debugEl.textContent = `display:${final.toFixed(1)}Hz`;
   }
 
-  // fallback autocorrelation (time-domain) used only if no clear peaks found
-  function autoCorrelate(buf, sampleRate) {
-    const SIZE = buf.length;
-    let rms = 0;
-    for (let i = 0; i < SIZE; i++) {
-      const v = buf[i];
-      rms += v*v;
-    }
-    rms = Math.sqrt(rms / SIZE);
-    if (rms < 0.0018) return -1;
-
-    // trim quiet edges
-    let r1 = 0, r2 = SIZE-1;
-    const th = Math.max(0.01, rms * 0.25);
-    for (let i=0;i<SIZE/2;i++){ if (Math.abs(buf[i])<th) { r1=i; break; } }
-    for (let i=1;i<SIZE/2;i++){ if (Math.abs(buf[SIZE-i])<th) { r2=SIZE-i; break; } }
-    const trimmed = buf.subarray(r1, r2);
-    const N = trimmed.length;
-    if (N < 128) return -1;
-
-    const ac = new Float32Array(N);
-    for (let lag=0; lag<N; lag++){
-      let s=0;
-      for (let i=0; i<N-lag; i++) s += trimmed[i]*trimmed[i+lag];
-      ac[lag] = s;
-    }
-    const minFreq=20, maxFreq=4000;
-    const minLag = Math.floor(sampleRate / maxFreq);
-    const maxLag = Math.min(N-2, Math.floor(sampleRate / minFreq));
-    let best=-1, bestVal=-Infinity;
-    for (let lag=Math.max(2,minLag); lag<=maxLag; lag++){
-      if (ac[lag] > bestVal){ bestVal = ac[lag]; best = lag; }
-    }
-    if (best <= 0 || bestVal <= 0) return -1;
-
-    const y0 = ac[best-1] || 0;
-    const y1 = ac[best];
-    const y2 = ac[best+1] || 0;
-    const denom = (y0 - 2*y1 + y2);
-    let shift = 0;
-    if (denom !== 0) shift = (y0 - y2) / (2*denom);
-    const refined = best + shift;
-    if (refined <= 0) return -1;
-    return sampleRate / refined;
-  }
-
+  // done
 });
 </script>
 </body>
