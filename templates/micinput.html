@@ -3,368 +3,238 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Drum Frequency Analyzer — Low-Freq Capable</title>
+<title>Drum Classifier — Snare(1)/Toms(2)/Kick(3)</title>
 <style>
-  body{background:#16213e;color:#fff;font-family:Segoe UI, Tahoma, Geneva, Verdana, sans-serif;
-    display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;text-align:center}
-  h1{color:#feb47b;margin-bottom:10px}
-  .record-btn{background:linear-gradient(135deg,#ff7e5f,#feb47b);color:#fff;border:none;padding:14px 30px;border-radius:40px;cursor:pointer;font-weight:700}
-  .record-btn.recording{background:linear-gradient(135deg,#f44336,#ff7e5f)}
-  .result{font-size:2.6rem;font-weight:800;margin:16px 0;color:#feb47b;min-height:56px}
-  .status{color:#a0a0d0;margin-top:8px}
-  .small{font-size:.85rem;color:#bfbfdc;margin-top:6px}
-  .debug{font-size:.78rem;color:#bfbfdc;margin-top:8px;white-space:pre-wrap}
+  body{background:#111827;color:#fff;font-family:Segoe UI,system-ui,Arial,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:18px;text-align:center}
+  h1{color:#f59e0b;margin-bottom:8px}
+  button{background:#0ea5e9;border:none;padding:12px 20px;border-radius:10px;color:#022;cursor:pointer;font-weight:700;margin-bottom:12px}
+  .result{font-size:2.4rem;font-weight:800;color:#f59e0b;margin:8px 0;min-height:48px}
+  .sub{color:#9ca3af;margin-bottom:6px}
+  .debug{font-family:monospace;font-size:0.86rem;color:#cbd5e1;margin-top:12px;white-space:pre-wrap;text-align:left;max-width:700px}
 </style>
 </head>
 <body>
-  <h1>Drum Frequency Analyzer — Low-Freq Capable</h1>
-  <button id="recordBtn" class="record-btn">Start</button>
-  <div class="result" id="result">-- Hz</div>
-  <div class="status" id="status">Ready. Use Chrome/Edge. Localhost/HTTPS recommended.</div>
-  <div class="small">Tip: place mic 5–15 cm from drum. Hit once per test.</div>
-  <div class="debug" id="debug"></div>
+  <h1>Drum Classifier</h1>
+  <button id="btn">Start</button>
+  <div class="sub">Outputs: <strong>1 = Snare</strong>, <strong>2 = Toms</strong>, <strong>3 = Kick</strong>, <strong>unknown</strong></div>
+  <div class="result" id="label">idle</div>
+  <div class="debug" id="dbg">debug: not running</div>
 
 <script>
 /*
-  All-in-one in-browser drum fundamental detector.
-  Strategy:
-   - Continuously collect raw mic samples into a long circular buffer (~1s).
-   - Use light real-time gating (mean abs) to detect hits.
-   - On hit: copy last 1s, downsample to 8k, run constrained autocorrelation (lags for 20-400Hz).
-   - If autocorr gives valid low freq -> use it (best for kicks/floors).
-   - Otherwise fallback to FFT peak+harmonic-check for mid/high drums.
-   - Smooth & hold display to avoid blinking.
+Conservative Drum Classifier (snare=1, toms=2, kick=3)
+Strategy:
+ - Use AnalyserNode with large fftSize for spectrum (low freq resolution).
+ - Continuous gating (mean absolute) to detect hits (onset).
+ - On each onset: capture current spectrum (getByteFrequencyData) and compute:
+    - E_low  (20-150 Hz)
+    - E_mid  (150-800 Hz)
+    - E_high (800-6000 Hz)
+    - spectral centroid, spectral flatness, tonalPeak frequency
+ - Apply conservative rule set:
+    - Kick (3): E_low dominant (low/mid ratio high), centroid low, tonalPeak low
+    - Snare (1): mid+high broadband (flatness high), centroid higher, energy spread
+    - Toms (2): mid-tonal energy dominant, clear tonal peak in mid band
+ - If ambiguous, return 'unknown' (prevents mislabels).
 */
 document.addEventListener('DOMContentLoaded', () => {
-  const recordBtn = document.getElementById('recordBtn');
-  const resultEl = document.getElementById('result');
-  const statusEl = document.getElementById('status');
-  const debugEl = document.getElementById('debug');
+  const btn = document.getElementById('btn');
+  const labelEl = document.getElementById('label');
+  const dbg = document.getElementById('dbg');
 
-  let audioContext = null;
-  let analyser = null;
-  let micSource = null;
-  let scriptNode = null;
-  let isRecording = false;
+  let audioCtx = null, analyser = null, src = null, script = null;
+  let isRunning = false;
+  // params
+  const FFT_SIZE = 32768; // large for good low-frequency resolution
+  const PROCESSOR = 2048;
+  let sr = 44100;
 
-  // Params
-  const FFT_SIZE = 32768;            // max fft size for analyser (improves bin resolution)
-  const PROCESSOR_SIZE = 2048;       // script processor frame size
-  const RING_SECONDS = 1.0;          // length of circular buffer to keep (seconds)
-  const DOWNSAMPLE_RATE = 8000;      // internal analysis sampling rate (Hz)
-  const MIN_FREQ = 20;               // ignore below this
-  const MAX_FREQ = 4000;             // ignore above this for main logic
-  const LOW_TARGET_MIN = 20;         // low band we especially care about (kicks/floor)
-  const LOW_TARGET_MAX = 400;        // upper bound for autocorr detection area
-  const SMOOTH_WINDOW = 6;
-  const HOLD_MS = 300;
-  const MIN_MEANABS = 0.0005;        // very low absolute floor
-  let noiseFloor = 0.002;            // EMA noise floor
+  // gating & adapt noise floor
+  let noiseEMA = 0.002;
+  const EMA_ALPHA = 0.02;
+  const MIN_MEANABS = 0.0005;
+  const HIT_MULT = 2.2; // meanAbs must be > noiseEMA * HIT_MULT
 
-  // state
-  let ringBuffer = null;
-  let ringLen = 0;
-  let ringWrite = 0;
-  let sampleRate = 44100;
-  let freqBuffer = [];
-  let lastShownFreq = null;
-  let lastDisplayTime = 0;
-  let lastHitTime = 0;
-  const LOG = false;
+  // hit debounce
+  let lastHit = 0;
+  const HIT_DEBOUNCE_MS = 80;
 
-  recordBtn.addEventListener('click', async () => {
-    if (isRecording) { stop(); recordBtn.textContent = 'Start'; recordBtn.classList.remove('recording'); statusEl.textContent = 'Stopped'; }
-    else { await start(); recordBtn.textContent = 'Stop'; recordBtn.classList.add('recording'); statusEl.textContent = 'Recording — hit the drum'; }
+  // classification smoothing (small history)
+  const HISTORY = 5;
+  const classBuffer = [];
+
+  btn.addEventListener('click', async () => {
+    if (isRunning) { stop(); btn.textContent='Start'; labelEl.textContent='idle'; dbg.textContent='stopped'; }
+    else { await start(); btn.textContent='Stop'; }
   });
 
-  async function start(){
-    if (isRecording) return;
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    sampleRate = audioContext.sampleRate;
-    analyser = audioContext.createAnalyser();
-    // set analyser fft size to max allowed (cap at 32768)
+  async function start() {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    sr = audioCtx.sampleRate;
+    analyser = audioCtx.createAnalyser();
     analyser.fftSize = Math.min(FFT_SIZE, 32768);
     analyser.smoothingTimeConstant = 0.0;
 
-    scriptNode = audioContext.createScriptProcessor(PROCESSOR_SIZE,1,1);
-    scriptNode.onaudioprocess = onAudioProcess;
+    script = audioCtx.createScriptProcessor(PROCESSOR, 1, 1);
+    script.onaudioprocess = onAudioProcess;
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { channelCount:1, echoCancellation:false, noiseSuppression:false, autoGainControl:false }
-    });
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount:1, echoCancellation:false, noiseSuppression:false, autoGainControl:false }});
+    src = audioCtx.createMediaStreamSource(stream);
+    src.connect(analyser);
+    src.connect(script);
+    script.connect(audioCtx.destination);
 
-    micSource = audioContext.createMediaStreamSource(stream);
-    // connect mic to both analyser and script node
-    micSource.connect(analyser);
-    micSource.connect(scriptNode);
-    scriptNode.connect(audioContext.destination);
-
-    // prepare ring buffer
-    ringLen = Math.ceil(RING_SECONDS * sampleRate);
-    ringBuffer = new Float32Array(ringLen);
-    ringWrite = 0;
-
-    isRecording = true;
-    console.log('Started. sampleRate=', sampleRate, 'analyser.fftSize=', analyser.fftSize, 'ringLen=', ringLen);
+    isRunning = true;
+    dbg.textContent = 'running — sampleRate: ' + sr + ' fftSize: ' + analyser.fftSize;
   }
 
-  function stop(){
-    if (!isRecording) return;
-    try { micSource.mediaStream.getTracks().forEach(t=>t.stop()); micSource.disconnect(); } catch(e){}
-    scriptNode.disconnect(); analyser.disconnect(); audioContext.close();
-    isRecording = false;
-    ringBuffer = null;
-    resultEl.textContent = '-- Hz';
-    debugEl.textContent = '';
-    lastShownFreq = null;
+  function stop() {
+    try { src.mediaStream.getTracks().forEach(t => t.stop()); } catch(e){}
+    try { script.disconnect(); analyser.disconnect(); audioCtx.close(); } catch(e){}
+    audioCtx = analyser = src = script = null;
+    isRunning = false;
+    classBuffer.length = 0;
   }
 
-  function onAudioProcess(event){
-    if (!isRecording) return;
-    const inBuf = event.inputBuffer.getChannelData(0);
-    // write to ring buffer
-    for (let i=0;i<inBuf.length;i++){
-      ringBuffer[ringWrite++] = inBuf[i];
-      if (ringWrite >= ringLen) ringWrite = 0;
-    }
-
-    // quick frame-level gating: use mean absolute of this frame
+  function onAudioProcess(ev) {
+    if (!analyser) return;
+    const bufferLen = analyser.fftSize;
+    // quick time-domain gating: use analyser.getByteTimeDomainData
+    const timeBytes = new Uint8Array(bufferLen);
+    analyser.getByteTimeDomainData(timeBytes);
+    // convert meanAbs quickly
     let sumAbs = 0;
-    for (let i=0;i<inBuf.length;i++) sumAbs += Math.abs(inBuf[i]);
-    const meanAbs = sumAbs / inBuf.length;
-
-    // update noise floor EMA
-    const alpha = 0.02;
-    noiseFloor = noiseFloor * (1-alpha) + meanAbs * alpha;
-    const trigger = Math.max(MIN_MEANABS, noiseFloor * 2.2);
-
-    // quick hold: if we've just analyzed a hit, avoid analyzing again immediately
+    for (let i=0;i<bufferLen;i++) sumAbs += Math.abs((timeBytes[i]-128)/128);
+    const meanAbs = sumAbs / bufferLen;
+    // update noise floor
+    noiseEMA = noiseEMA * (1 - EMA_ALPHA) + meanAbs * EMA_ALPHA;
+    const thr = Math.max(MIN_MEANABS, noiseEMA * HIT_MULT);
     const now = performance.now();
-    if (meanAbs >= trigger && (now - lastHitTime) > 70) {
-      lastHitTime = now;
-      // heavy analysis on a hit (async-ish but done here synchronously)
-      analyzeLastSecond();
+    // detect onset when meanAbs exceeds threshold and debounced
+    if (meanAbs >= thr && (now - lastHit) > HIT_DEBOUNCE_MS) {
+      lastHit = now;
+      classifyHit(meanAbs, thr);
     } else {
-      // show previous value for HOLD_MS, otherwise clear
-      if (lastShownFreq && (now - lastDisplayTime) < HOLD_MS) {
-        // keep
-      } else {
-        resultEl.textContent = '-- Hz';
-        // don't null lastShownFreq here — keep for smoothing if needed
-      }
+      // clear label after HOLD if no hits in a bit
+      if (lastHit && (now - lastHit) > 600) labelEl.textContent = 'idle';
     }
   }
 
-  // copy last ringLen samples into a linear buffer (most recent last)
-  function copyRingLatest() {
-    const out = new Float32Array(ringLen);
-    const tail = ringLen - ringWrite;
-    if (tail > 0) {
-      out.set(ringBuffer.subarray(ringWrite, ringLen), 0);
-      out.set(ringBuffer.subarray(0, ringWrite), tail);
-    } else {
-      out.set(ringBuffer);
-    }
-    return out;
-  }
-
-  // downsample from originalSampleRate to targetRate (returns Float32Array)
-  function downsampleBuffer(buf, originalRate, targetRate) {
-    if (targetRate >= originalRate) return buf.slice(); // no upsample
-    const ratio = originalRate / targetRate;
-    const outLen = Math.floor(buf.length / ratio);
-    const out = new Float32Array(outLen);
-    let srcIndex = 0;
-    for (let i=0;i<outLen;i++){
-      let start = Math.floor(i * ratio);
-      let end = Math.floor((i+1) * ratio);
-      if (end <= start) end = start+1;
-      let sum = 0;
-      for (let j=start;j<end && j < buf.length; j++) sum += buf[j];
-      out[i] = sum / (end - start);
-    }
-    return out;
-  }
-
-  // constrained autocorrelation on downsampled buffer (targetRate), search for lags corresponding to [lowF..highF]
-  function constrainedAutoCorrelate(downBuf, targetRate, lowF=LOW_TARGET_MIN, highF=LOW_TARGET_MAX) {
-    const N = downBuf.length;
-    // remove DC mean
-    let mean = 0;
-    for (let i=0;i<N;i++) mean += downBuf[i];
-    mean /= N;
-    for (let i=0;i<N;i++) downBuf[i] -= mean;
-
-    // compute energy once for normalization
-    let energy = 0;
-    for (let i=0;i<N;i++) energy += downBuf[i]*downBuf[i];
-    if (energy <= 1e-8) return -1;
-
-    const minLag = Math.max(2, Math.floor(targetRate / highF)); // highF -> small lag
-    const maxLag = Math.min(N-2, Math.floor(targetRate / lowF)); // lowF -> large lag
-
-    let bestLag = -1;
-    let bestCorr = -Infinity;
-
-    // For speed, compute correlation sums for each lag
-    // correlation(lag) = sum_{i=0}^{N-lag-1} buf[i]*buf[i+lag]
-    // We'll compute normalized correlation = corr / (N-lag)
-    for (let lag = minLag; lag <= maxLag; lag++){
-      let s = 0;
-      // iterate with a stride to speed up? keep full for accuracy
-      for (let i=0;i < N - lag; i++) {
-        s += downBuf[i] * downBuf[i + lag];
-      }
-      const norm = s / (N - lag);
-      // a crude acceptance: scale by sqrt(energy) not done; compare norm
-      if (norm > bestCorr) { bestCorr = norm; bestLag = lag; }
-    }
-
-    if (bestLag <= 0) return -1;
-
-    // refine lag via parabolic interpolation on a small neighborhood (bestLag-1, bestLag, bestLag+1)
-    // compute three nearby values
-    function acAt(lag) {
-      let s=0;
-      for (let i=0;i < N - lag; i++) s += downBuf[i] * downBuf[i+lag];
-      return s / (N - lag);
-    }
-    const y1 = acAt(bestLag);
-    const y0 = (bestLag-1>=minLag) ? acAt(bestLag-1) : y1;
-    const y2 = (bestLag+1<=maxLag) ? acAt(bestLag+1) : y1;
-    const denom = (y0 - 2*y1 + y2);
-    let shift = 0;
-    if (denom !== 0) shift = (y0 - y2) / (2 * denom); // parabolic interpolation
-    const refinedLag = bestLag + shift;
-    if (!isFinite(refinedLag) || refinedLag <= 0) return -1;
-    const frequency = targetRate / refinedLag;
-    // basic sanity: ensure frequency within our search bounds
-    if (frequency < lowF*0.6 || frequency > highF*1.5) return -1;
-    return {frequency, strength: bestCorr};
-  }
-
-  // fallback: FFT-based peak detection using analyser frequency data (for mid/high drums)
-  function fftPeakDetect() {
+  function classifyHit(meanAbs, thr) {
+    // get frequency spectrum snapshot
     const freqLen = analyser.frequencyBinCount;
-    const freqByte = new Uint8Array(freqLen);
-    analyser.getByteFrequencyData(freqByte);
-    // convert bytes to magnitudes (0..255)
-    let maxMag = 0;
-    for (let i=0;i<freqLen;i++) if (freqByte[i] > maxMag) maxMag = freqByte[i];
-    if (maxMag < 6) return null; // too quiet
-    const sampleRateLocal = sampleRate;
-    const binSize = sampleRateLocal / analyser.fftSize;
-    const minBin = Math.max(1, Math.floor(MIN_FREQ / binSize));
-    const maxBin = Math.min(freqLen-2, Math.floor(MAX_FREQ / binSize));
-    // find peaks above local threshold
-    const peaks = [];
-    const meanMag = freqByte.reduce((a,b)=>a+b,0)/freqLen;
-    const absThr = Math.max(meanMag * 2.5, maxMag * 0.08, 6);
-    for (let i = minBin; i <= maxBin; i++){
-      if (freqByte[i] > freqByte[i-1] && freqByte[i] >= freqByte[i+1] && freqByte[i] >= absThr) {
-        peaks.push({bin:i, mag:freqByte[i], freq: i * binSize});
+    const freqBytes = new Uint8Array(freqLen);
+    analyser.getByteFrequencyData(freqBytes); // bytes 0..255 ~ magnitude
+    const binSize = sr / analyser.fftSize;
+
+    // compute band energies (sum of mags) and some features
+    const E = {low:0, mid:0, high:0, full:0};
+    const lowRange = [20,150];
+    const midRange = [150,800];
+    const highRange = [800,6000];
+    let maxMag = 0, maxBin = 0;
+    let sumWeightedFreq = 0; // for centroid numerator
+    let sumMag = 0;
+    for (let i=1;i<freqLen;i++){
+      const f = i * binSize;
+      const m = freqBytes[i];
+      sumMag += m;
+      sumWeightedFreq += m * f;
+      if (m > maxMag){ maxMag = m; maxBin = i; }
+      E.full += m;
+      if (f >= lowRange[0] && f <= lowRange[1]) E.low += m;
+      else if (f > midRange[0] && f <= midRange[1]) E.mid += m;
+      else if (f > highRange[0] && f <= highRange[1]) E.high += m;
+    }
+    const centroid = sumMag > 0 ? (sumWeightedFreq / sumMag) : 0;
+    // spectral flatness (approx) — ratio geometric mean / arithmetic mean; for bytes approximate by small transform
+    // compute log-mean of magnitudes (avoid zeros)
+    let logSum = 0, nonzero = 0;
+    for (let i=1;i<freqLen;i++){ const v = Math.max(1, freqBytes[i]); logSum += Math.log(v); nonzero++; }
+    const geoMean = Math.exp(logSum / Math.max(1, nonzero));
+    const arithMean = sumMag / Math.max(1, freqLen-1);
+    const flatness = arithMean > 0 ? (geoMean / arithMean) : 0; // closer to 1 => noise-like broadband
+
+    // tonal peak frequency
+    const peakFreq = maxBin * binSize;
+
+    // normalize energies to avoid absolute-scale sensitivity
+    const eLow = E.low;
+    const eMid = E.mid;
+    const eHigh = E.high;
+    const eFull = E.full || 1;
+    const lowRatio = eLow / eFull;
+    const midRatio = eMid / eFull;
+    const highRatio = eHigh / eFull;
+
+    // Decision rules (conservative)
+    // Compute some heuristics
+    // Kick candidate: strong low energy ratio and centroid low
+    const isKickScore = (lowRatio > 0.45 && centroid < 200) ? 1 : 0; // strong low energy -> kick
+    // Tom candidate: mid energy dominant and has tonal peak in mid band
+    const isTomScore = (midRatio > 0.35 && peakFreq >= 80 && peakFreq <= 500 && flatness < 0.6) ? 1 : 0;
+    // Snare candidate: broadband mid+high energy, high flatness (noise-like), centroid higher
+    const isSnareScore = ((midRatio + highRatio) > 0.55 && flatness > 0.45 && centroid > 300) ? 1 : 0;
+
+    // Additional safe checks to avoid overlap:
+    // If two scores tie or none pass, mark unknown.
+    let chosen = 'unknown';
+    let chosenId = null;
+
+    const scores = {kick:isKickScore, tom:isTomScore, snare:isSnareScore};
+    // prefer kick if exclusively kick-like
+    if (scores.kick && !scores.tom && !scores.snare) { chosen = 'kick'; chosenId = 3; }
+    else if (scores.tom && !scores.kick && !scores.snare) { chosen = 'toms'; chosenId = 2; }
+    else if (scores.snare && !scores.kick && !scores.tom) { chosen = 'snare'; chosenId = 1; }
+    else {
+      // No exclusive winner — use graded thresholds & tie-breakers (conservative)
+      // If lowRatio massively dominant -> kick
+      if (lowRatio > 0.6 && centroid < 220 && eLow > eMid*1.8) { chosen = 'kick'; chosenId = 3; }
+      // If tonal peak in mid band and mid ratio relatively strong -> tom
+      else if (peakFreq >= 100 && peakFreq <= 450 && midRatio > 0.35 && flatness < 0.6) { chosen = 'toms'; chosenId = 2; }
+      // If energy spread high and flatness indicates noise -> snare
+      else if ( (midRatio + highRatio) > 0.6 && flatness > 0.42 && centroid > 280) { chosen = 'snare'; chosenId = 1; }
+      else {
+        // ambiguous — to avoid wrong labels, set unknown
+        chosen = 'unknown';
+        chosenId = null;
       }
     }
-    if (peaks.length === 0) return null;
-    // sort by magnitude descending, prefer lower freq when near equal magnitude
-    peaks.sort((a,b)=> (b.mag - a.mag) || (a.freq - b.freq));
-    return peaks[0].freq;
-  }
 
-  // harmonic check: given a highFreq candidate, see if subharmonic bins show enough energy. Return corrected freq or null.
-  function harmonicCheckCandidate(highFreq) {
-    const freqLen = analyser.frequencyBinCount;
-    const freqByte = new Uint8Array(freqLen);
-    analyser.getByteFrequencyData(freqByte);
-    const sampleRateLocal = sampleRate;
-    const binSize = sampleRateLocal / analyser.fftSize;
-
-    // compute global stats
-    let maxMag = 0, sumMag = 0;
-    for (let i=0;i<freqLen;i++){ sumMag += freqByte[i]; if (freqByte[i] > maxMag) maxMag = freqByte[i]; }
-    const meanMag = sumMag / freqLen;
-
-    // try divisors up to 12
-    for (let d = 2; d <= 12; d++) {
-      const cand = highFreq / d;
-      if (cand < LOW_TARGET_MIN - 5) break;
-      const candBin = Math.round(cand / binSize);
-      if (candBin <= 1 || candBin >= freqLen-1) continue;
-      const subMag = freqByte[candBin];
-      // acceptance criteria: subMag is a notable fraction of peak or above global mean multipliers
-      if (subMag >= (maxMag * 0.18) || subMag >= (meanMag * 3) || subMag >= 8) {
-        return cand;
-      }
-    }
-    return null;
-  }
-
-  // main heavy analysis pipeline
-  function analyzeLastSecond() {
-    if (!ringBuffer) return;
-    const linear = copyRingLatest(); // most recent last
-    // quick check energy
-    let energy=0;
-    for (let i=0;i<linear.length;i++) energy += Math.abs(linear[i]);
-    const meanAbs = energy / linear.length;
-    if (LOG) debugEl.textContent = `hit detected meanAbs:${meanAbs.toFixed(4)} noise:${noiseFloor.toFixed(4)}`;
-
-    // downsample to 8k
-    const down = downsampleBuffer(linear, sampleRate, DOWNSAMPLE_RATE);
-    // do constrained autocorrelation (good for low fundamentals)
-    const ac = constrainedAutoCorrelate(down, DOWNSAMPLE_RATE, LOW_TARGET_MIN, LOW_TARGET_MAX);
-    if (ac && ac.frequency > 0 && ac.frequency < 1000) {
-      // if valid low freq found and strength decent -> accept it
-      if (LOG) debugEl.textContent += `\nAC result: ${ac.frequency.toFixed(1)} Hz strength:${ac.strength.toFixed(4)}`;
-      pushAndShowFrequency(ac.frequency);
-      return;
+    // Post-check: ensure no obvious contradictions (e.g., cymbal/hihat: very high centroid or very high flatness)
+    if (centroid > 3000 || highRatio > 0.7 && flatness > 0.6) {
+      // probably cymbal/hihat — classify as unknown (we don't want to label cymbal as kick/tom/snare)
+      chosen = 'unknown';
+      chosenId = null;
     }
 
-    // otherwise fallback to FFT peak detection + harmonic check
-    const fftCandidate = fftPeakDetect();
-    if (!fftCandidate) {
-      // try a quicker autocorr across higher band using time-domain small buffer
-      const smallAC = constrainedAutoCorrelate(down, DOWNSAMPLE_RATE, 60, 800); // try mid band
-      if (smallAC && smallAC.frequency > 0) { pushAndShowFrequency(smallAC.frequency); return; }
-      // nothing
-      if (LOG) debugEl.textContent += '\nno viable candidate from FFT or AC';
-      return;
+    // Buffer smoothing: push to history, use majority to reduce flicker
+    classBuffer.push(chosenId === null ? 'unknown' : chosenId);
+    if (classBuffer.length > HISTORY) classBuffer.shift();
+    const counts = classBuffer.reduce((acc, v) => { acc[v] = (acc[v]||0)+1; return acc; }, {});
+    // pick majority if any element > half
+    let majority = null;
+    for (const k in counts) {
+      if (counts[k] > Math.floor(HISTORY/2)) { majority = k; break; }
     }
+    const finalLabel = majority !== null ? majority : (chosenId === null ? 'unknown' : chosenId);
 
-    // harmonic-check (only divide if subharmonic energy exists)
-    const corrected = harmonicCheckCandidate(fftCandidate);
-    if (corrected) {
-      if (LOG) debugEl.textContent += `\nFFT ${fftCandidate.toFixed(1)} -> corrected ${corrected.toFixed(1)}`;
-      pushAndShowFrequency(corrected);
-    } else {
-      if (LOG) debugEl.textContent += `\nFFT ${fftCandidate.toFixed(1)} (no subharmonic)`;
-      pushAndShowFrequency(fftCandidate);
-    }
+    // Update UI
+    labelEl.textContent = (finalLabel === 'unknown') ? 'unknown' : `${finalLabel}`;
+    // debug output helpful for tuning
+    dbg.textContent = [
+      `meanAbs:${meanAbs.toFixed(4)} thr:${thr.toFixed(4)} noiseEMA:${noiseEMA.toFixed(4)}`,
+      `E_low:${eLow.toFixed(1)} E_mid:${eMid.toFixed(1)} E_high:${eHigh.toFixed(1)} full:${eFull.toFixed(1)}`,
+      `ratios low/mid/high: ${(lowRatio).toFixed(2)}/${(midRatio).toFixed(2)}/${(highRatio).toFixed(2)}`,
+      `centroid:${centroid.toFixed(1)} peakFreq:${peakFreq.toFixed(1)} flatness:${flatness.toFixed(2)}`,
+      `scores: kick=${scores.kick} tom=${scores.tom} snare=${scores.snare}`,
+      `chosen:${chosen} -> id:${chosenId === null ? 'unknown' : chosenId}`,
+      `final:${finalLabel}`
+    ].join('\n');
+
+    // Done.
   }
 
-  // smoothing & display
-  function pushAndShowFrequency(freq) {
-    if (!isFinite(freq) || freq <= 0 || freq > 20000) return;
-    // clamp wildly low/high
-    if (freq < MIN_FREQ || freq > MAX_FREQ*5) return;
-
-    freqBuffer.push(freq);
-    if (freqBuffer.length > SMOOTH_WINDOW) freqBuffer.shift();
-    const sorted = freqBuffer.slice().sort((a,b)=>a-b);
-    const median = sorted[Math.floor(sorted.length/2)];
-    const displayed = lastShownFreq || median;
-    const smooth = displayed * 0.5 + median * 0.5;
-    // spike clamp
-    let final = smooth;
-    if (lastShownFreq && smooth > lastShownFreq * 2.5) final = lastShownFreq;
-    if (lastShownFreq && smooth < lastShownFreq * 0.35) final = lastShownFreq;
-    resultEl.textContent = Math.round(final) + ' Hz';
-    lastShownFreq = final;
-    lastDisplayTime = performance.now();
-    debugEl.textContent = `display:${final.toFixed(1)}Hz`;
-  }
-
-  // done
 });
 </script>
 </body>
