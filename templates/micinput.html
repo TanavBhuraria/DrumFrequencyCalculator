@@ -760,16 +760,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     return dataArray;
   }
   
-  // Find peak with parabolic interpolation
+  // Find peak with parabolic interpolation (ACTUALLY IMPLEMENTED)
   function findPeakWithInterpolation(magnitude, sampleRate, fftSize) {
     const binSize = sampleRate / fftSize;
     const minBin = Math.floor(minFrequency / binSize);
     const maxBin = Math.min(Math.floor(maxFrequency / binSize), magnitude.length - 1);
     
+    // Find the bin with maximum magnitude
     let maxMag = -Infinity;
     let maxBinIdx = minBin;
     
-    // Find the bin with maximum magnitude
     for (let i = minBin; i <= maxBin; i++) {
       if (magnitude[i] > maxMag) {
         maxMag = magnitude[i];
@@ -777,15 +777,86 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
     
-    // Always return the highest peak (even if it might be wrong)
-    const frequency = maxBinIdx * binSize;
-    const confidence = Math.min(100, Math.max(0, (maxMag + 100) / 1.5)); // Convert from dB scale to 0-100%
+    // If the signal is too quiet, return no frequency
+    if (maxMag < -90) {
+      return { frequency: 0, confidence: 0, bin: maxBinIdx };
+    }
+    
+    // If at the edges, can't interpolate
+    if (maxBinIdx <= minBin || maxBinIdx >= maxBin) {
+      const frequency = maxBinIdx * binSize;
+      const confidence = Math.min(100, Math.max(0, (maxMag + 100) / 1.5));
+      return { frequency, confidence, bin: maxBinIdx };
+    }
+    
+    // Get magnitudes for interpolation
+    const leftMag = magnitude[maxBinIdx - 1];
+    const centerMag = magnitude[maxBinIdx];
+    const rightMag = magnitude[maxBinIdx + 1];
+    
+    // Parabolic interpolation formula
+    const delta = (leftMag - rightMag) / (2 * (leftMag - 2 * centerMag + rightMag));
+    const interpolatedBin = maxBinIdx + delta;
+    const frequency = interpolatedBin * binSize;
+    
+    // Calculate confidence based on peak prominence
+    const confidence = Math.min(100, Math.max(0, (centerMag + 100) / 1.5));
     
     return {
       frequency,
       confidence,
       bin: maxBinIdx
     };
+  }
+  
+  // Find fundamental frequency by checking for harmonic relationships
+  function findFundamentalFrequency(magnitude, sampleRate, fftSize) {
+    const binSize = sampleRate / fftSize;
+    const minBin = Math.floor(minFrequency / binSize);
+    const maxBin = Math.min(Math.floor(maxFrequency / binSize), magnitude.length - 1);
+    
+    // Find all peaks above threshold
+    const peaks = [];
+    const threshold = -80; // dB threshold
+    
+    for (let i = minBin; i <= maxBin; i++) {
+      if (magnitude[i] > threshold && 
+          magnitude[i] > magnitude[i-1] && 
+          magnitude[i] > magnitude[i+1]) {
+        peaks.push({
+          bin: i,
+          magnitude: magnitude[i],
+          frequency: i * binSize
+        });
+      }
+    }
+    
+    // Sort peaks by magnitude (highest first)
+    peaks.sort((a, b) => b.magnitude - a.magnitude);
+    
+    // Try to find fundamental by checking harmonic relationships
+    for (let i = 0; i < Math.min(peaks.length, 5); i++) {
+      const candidate = peaks[i];
+      let harmonicCount = 0;
+      
+      // Check for harmonics (2x, 3x, 4x)
+      for (let multiple = 2; multiple <= 4; multiple++) {
+        const harmonicFreq = candidate.frequency * multiple;
+        const harmonicBin = Math.round(harmonicFreq / binSize);
+        
+        if (harmonicBin < magnitude.length && magnitude[harmonicBin] > threshold) {
+          harmonicCount++;
+        }
+      }
+      
+      // If we found at least one harmonic, this is likely the fundamental
+      if (harmonicCount >= 1) {
+        return candidate;
+      }
+    }
+    
+    // If no fundamental found, return the strongest peak
+    return peaks.length > 0 ? peaks[0] : { frequency: 0, magnitude: -100, bin: 0 };
   }
   
   // Analyze the recording
@@ -800,16 +871,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Flatten the recording data
     const flatData = recordingData.flat();
     
-    // If we have more data than needed for FFT, take a portion
-    let analysisData;
-    if (flatData.length > fftSize) {
-      const start = Math.floor((flatData.length - fftSize) / 2);
-      analysisData = flatData.slice(start, start + fftSize);
-    } else {
-      // Zero-padding if we don't have enough data
-      analysisData = new Float32Array(fftSize);
-      analysisData.set(flatData, 0);
+    // Find the segment with the highest energy (where the hit occurred)
+    let maxEnergy = 0;
+    let maxEnergyIndex = 0;
+    
+    // Calculate energy in sliding window
+    const windowSize = fftSize;
+    for (let i = 0; i <= flatData.length - windowSize; i += Math.floor(windowSize/2)) {
+      let energy = 0;
+      for (let j = 0; j < windowSize; j++) {
+        energy += Math.abs(flatData[i + j]);
+      }
+      
+      if (energy > maxEnergy) {
+        maxEnergy = energy;
+        maxEnergyIndex = i;
+      }
     }
+    
+    // Take the segment with highest energy
+    const analysisData = flatData.slice(maxEnergyIndex, maxEnergyIndex + windowSize);
     
     // Apply window function
     const windowName = windowFunctionSelect.value;
@@ -834,19 +915,34 @@ document.addEventListener('DOMContentLoaded', async () => {
     const frequencyData = new Float32Array(tempAnalyser.frequencyBinCount);
     tempAnalyser.getFloatFrequencyData(frequencyData);
     
-    // Find fundamental frequency
-    const { frequency, confidence } = findPeakWithInterpolation(frequencyData, sampleRate, fftSize);
+    // Find fundamental frequency using improved method
+    const fundamental = findFundamentalFrequency(frequencyData, sampleRate, fftSize);
+    
+    // If we found a frequency, use parabolic interpolation for accuracy
+    let frequency = 0;
+    let confidence = 0;
+    
+    if (fundamental.frequency > 0) {
+      const interpolated = findPeakWithInterpolation(frequencyData, sampleRate, fftSize);
+      frequency = interpolated.frequency;
+      confidence = Math.min(100, Math.max(0, (fundamental.magnitude + 100) / 1.5));
+    }
     
     // Update UI with results
-    fundEl.textContent = `${frequency.toFixed(2)} Hz`;
-    confEl.textContent = `${confidence.toFixed(1)} %`;
+    fundEl.textContent = frequency > 0 ? `${frequency.toFixed(2)} Hz` : '-- Hz';
+    confEl.textContent = confidence > 0 ? `${confidence.toFixed(1)} %` : '-- %';
     
     // Update harmonics
-    [h1, h2, h3, h4].forEach((el, i) => {
-      el.textContent = `${(frequency * (i + 1)).toFixed(1)} Hz`;
-    });
+    if (frequency > 0) {
+      [h1, h2, h3, h4].forEach((el, i) => {
+        el.textContent = `${(frequency * (i + 1)).toFixed(1)} Hz`;
+      });
+      persistentDisplay.textContent = `Fundamental: ${frequency.toFixed(2)} Hz`;
+    } else {
+      [h1, h2, h3, h4].forEach(el => el.textContent = '-- Hz');
+      persistentDisplay.textContent = 'No significant frequency detected';
+    }
     
-    persistentDisplay.textContent = `Fundamental: ${frequency.toFixed(2)} Hz`;
     lastAnalysisTimeEl.textContent = new Date().toLocaleTimeString();
     statusEl.textContent = 'Analysis complete';
     
