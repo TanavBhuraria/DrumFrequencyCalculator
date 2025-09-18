@@ -3,230 +3,663 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Drum ID — Centroid-based (1=snare,2=toms,3=kick)</title>
+<title>Drum Classifier — Calibrate & Live (1=snare,2=tom,3=kick)</title>
 <style>
-  body{background:#071029;color:#fff;font-family:Inter,Segoe UI,Arial,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:18px;text-align:center}
-  h1{color:#f59e0b;margin-bottom:8px}
-  button{background:#06b6d4;border:none;padding:10px 18px;border-radius:8px;color:#022;cursor:pointer;font-weight:700;margin-bottom:12px}
-  .result{font-size:2rem;font-weight:800;color:#f59e0b;margin:8px 0;min-height:44px}
-  .sub{color:#94a3b8;margin-bottom:6px}
-  .debug{font-family:monospace;font-size:0.85rem;color:#cbd5e1;margin-top:12px;white-space:pre-wrap;max-width:820px;text-align:left}
+  body{background:#071029;color:#fff;font-family:Inter,Segoe UI,Arial,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;min-height:100vh;margin:0;padding:18px;gap:8px}
+  .card{background:#071a2b;border-radius:10px;padding:16px;box-shadow:0 6px 24px rgba(0,0,0,0.4);width:920px;max-width:96%}
+  h1{color:#f59e0b;margin:0 0 8px 0}
+  .controls{display:flex;gap:8px;flex-wrap:wrap}
+  button{background:#06b6d4;border:none;padding:10px 14px;border-radius:8px;color:#022;cursor:pointer;font-weight:700}
+  .result{font-size:1.9rem;font-weight:800;color:#f59e0b;margin:8px 0;min-height:40px}
+  .row{display:flex;gap:12px;align-items:center}
+  .dbg{font-family:monospace;color:#cbd5e1;white-space:pre-wrap;margin-top:10px;background:#031022;padding:10px;border-radius:8px}
+  label{font-size:0.9rem;color:#94a3b8}
+  .small{font-size:0.9rem;color:#94a3b8}
+  input[type=number]{width:70px;padding:6px;border-radius:6px;border:none}
+  select{padding:6px;border-radius:6px}
+  .flex{display:flex;gap:8px}
 </style>
 </head>
 <body>
-  <h1>Drum ID — Centroid-based</h1>
-  <button id="btn">Start</button>
-  <div class="sub">Outputs: <strong>1 = snare</strong>, <strong>2 = toms</strong>, <strong>3 = kick</strong> (shows idle when quiet)</div>
-  <div class="result" id="label">idle</div>
-  <div class="debug" id="dbg">debug: not running</div>
+  <div class="card">
+    <h1>Drum Classifier — Calibrate & Live</h1>
+    <div class="row controls">
+      <button id="startBtn">Start Audio</button>
+      <button id="calKick">Calibrate Kick (3)</button>
+      <button id="calTom">Calibrate Tom (2)</button>
+      <button id="calSnare">Calibrate Snare (1)</button>
+      <label class="small">Samples per class: <input id="samplesInput" type="number" value="8" min="3" max="25"/></label>
+      <button id="trainBtn">Train</button>
+      <label class="small">k (k-NN): <input id="kInput" type="number" value="3" min="1" max="11"/></label>
+      <button id="liveBtn">Live</button>
+      <button id="resetBtn">Reset Cal</button>
+      <button id="exportBtn">Export Cal</button>
+      <button id="importBtn">Import Cal</button>
+      <input id="importFile" type="file" accept=".json" style="display:none"/>
+    </div>
+
+    <div style="margin-top:10px;">
+      <div class="result" id="label">idle</div>
+      <div class="small" id="instruction">Status: audio stopped. Press <strong>Start Audio</strong>.</div>
+    </div>
+
+    <div style="margin-top:12px;">
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <div>
+          <label>Kick samples collected:</label>
+          <div id="kickCount">0</div>
+        </div>
+        <div>
+          <label>Tom samples collected:</label>
+          <div id="tomCount">0</div>
+        </div>
+        <div>
+          <label>Snare samples collected:</label>
+          <div id="snareCount">0</div>
+        </div>
+        <div>
+          <label>Classifier status:</label>
+          <div id="clfStatus">untrained</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dbg" id="debug">debug: nothing yet</div>
+  </div>
 
 <script>
 /*
-Centroid-based Drum Identifier
-1 -> snare
-2 -> toms
-3 -> kick
+Comprehensive in-browser drum classifier with calibration.
+Classes:
+  3 = Kick
+  2 = Tom
+  1 = Snare
 
-Principles:
-- Hit detection: adaptive noise floor (EMA) + peak detection to avoid missing loud low hits.
-- Spectral centroid computed from analyser.getByteFrequencyData (0..255).
-- centroid (Hz) used as primary differentiator; augmented with band energy ratios.
-- Classification is volume-invariant (ratios, centroid) once a hit is detected.
-- Idle shown if no hits detected for a short window.
-- Conservative smoothing via short history majority.
+Flow:
+ - Start audio (AudioContext)
+ - Press "Calibrate Kick/Tom/Snare" to collect N hits per class
+ - Press Train -> normalizes features & stores sample vectors
+ - Live -> classifies every hit using k-NN
+ - Export/Import calibration JSON to reuse models
+
+Feature set (per hit):
+ - spectral centroid (Hz)
+ - low/mid/high band ratios (normalized)
+ - spectral rolloff (85%)
+ - spectral flatness
+ - peak-to-RMS ratio
+ - zero-crossing rate (normalized)
+ - attack slope (quick proxy)
+ - decay energy ratio (early/late)
+ - autocorrelation pitch strength (normalized)
+ - peak frequency (Hz)
+
+Normalization is computed from collected calibration samples.
+k-NN classifier (Euclidean on normalized features).
 */
 
-document.addEventListener('DOMContentLoaded', () => {
-  const btn = document.getElementById('btn');
+(() => {
+  // ---- UI elements
+  const startBtn = document.getElementById('startBtn');
+  const calKickBtn = document.getElementById('calKick');
+  const calTomBtn = document.getElementById('calTom');
+  const calSnareBtn = document.getElementById('calSnare');
+  const trainBtn = document.getElementById('trainBtn');
+  const liveBtn = document.getElementById('liveBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const debugEl = document.getElementById('debug');
   const labelEl = document.getElementById('label');
-  const dbg = document.getElementById('dbg');
+  const instructionEl = document.getElementById('instruction');
+  const kickCountEl = document.getElementById('kickCount');
+  const tomCountEl = document.getElementById('tomCount');
+  const snareCountEl = document.getElementById('snareCount');
+  const clfStatusEl = document.getElementById('clfStatus');
+  const samplesInput = document.getElementById('samplesInput');
+  const kInput = document.getElementById('kInput');
+  const exportBtn = document.getElementById('exportBtn');
+  const importBtn = document.getElementById('importBtn');
+  const importFile = document.getElementById('importFile');
 
-  let audioCtx = null, analyser = null, src = null, script = null;
-  let running = false;
-
-  // === PARAMETERS (tweak if needed) ===
-  const FFT_SIZE = 16384;         // high-enough resolution for centroid
-  const PROCESSOR_FRAMES = 2048;  // scriptProcessor frame
-  const NOISE_EMA_ALPHA = 0.02;   // adapt speed for noise floor
-  const MIN_MEANABS = 0.0002;     // absolute minimum mean abs to consider
-  const HIT_MULT = 1.8;           // multiplier of noiseFloor for meanAbs trigger
-  const PEAK_ABS_MIN = 0.04;      // absolute peak threshold to catch sharp transients
-  const PEAK_MULT = 4.0;          // peak relative to noise floor
-  const HIT_DEBOUNCE_MS = 80;     // minimum ms between hits
-  const HOLD_MS = 360;            // show detected label for this long
-  const HISTORY_LEN = 5;          // smoothing history length
-
-  // centroid bands for classification (Hz)
-  // tuned to be conservative and generalize
-  const CENTROID_SNARE_MIN = 350; // >= this tends to snare/noise
-  const CENTROID_TOM_MIN = 140;   // >= this is tom range lower bound
-  const CENTROID_KICK_MAX = 160;  // <= this tends to kick
-
-  // energy band ranges (Hz) used for ratios
-  const LOW_BAND = [20, 160];
-  const MID_BAND = [160, 900];
-  const HIGH_BAND = [900, 8000];
-
-  // === STATE ===
+  // ---- Audio state
+  let audioCtx = null;
+  let analyser = null;
+  let src = null;
+  let scriptNode = null;
+  let isRunning = false;
   let sampleRate = 44100;
-  let noiseEMA = 0.002;   // adaptive ambient
+  let ringBuffer = null;
+  let ringLen = 0;
+  let ringWrite = 0;
+
+  // config
+  const RING_SECS = 1.0; // keep 1 second
+  const PROCESSOR_SIZE = 2048;
+  const FFT_SIZE = 16384; // good resolution for spectral features
+
+  // hit detection parameters
+  let noiseEMA = 0.0016;
+  const EMA_ALPHA = 0.02;
+  const MIN_MEANABS = 0.00008;
+  const HIT_MULT = 1.6;
+  const PEAK_ABS_MIN = 0.03;
+  const PEAK_MULT = 4.0;
+  const HIT_DEBOUNCE_MS = 100;
+
   let lastHitTime = 0;
   let lastShownTime = 0;
-  let lastLabel = null;
-  const history = [];
+  let mode = 'idle'; // 'idle', 'calibrate', 'train', 'live'
+  let calibratingFor = null; // 3,2,1
+  let samplesPerClass = parseInt(samplesInput.value,10) || 8;
 
-  // start / stop
-  btn.addEventListener('click', async () => {
-    if (running) { stop(); btn.textContent='Start'; labelEl.textContent='idle'; dbg.textContent='stopped'; }
-    else { await start(); btn.textContent='Stop'; }
+  // storage for raw feature vectors
+  const rawSamples = { 3: [], 2: [], 1: [] }; // arrays of feature arrays
+
+  // normalization stats
+  let featureMeans = null;
+  let featureStds = null;
+  let normalizedSamples = {3:[],2:[],1:[]};
+
+  // classifier params
+  let kNN = 3;
+
+  // helper for UI counts
+  function refreshCounts() {
+    kickCountEl.textContent = rawSamples[3].length;
+    tomCountEl.textContent = rawSamples[2].length;
+    snareCountEl.textContent = rawSamples[1].length;
+    clfStatusEl.textContent = featureMeans ? 'trained' : 'untrained';
+  }
+
+  // start audio
+  startBtn.addEventListener('click', async () => {
+    if (isRunning) {
+      stopAudio();
+      startBtn.textContent = 'Start Audio';
+      instructionEl.textContent = 'Stopped.';
+    } else {
+      await startAudio();
+      startBtn.textContent = 'Stop Audio';
+      instructionEl.textContent = 'Audio running. Use "Calibrate ..." to collect samples.';
+    }
   });
 
-  async function start() {
+  async function startAudio() {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    sampleRate = audioCtx.sampleRate || 44100;
-
+    sampleRate = audioCtx.sampleRate;
     analyser = audioCtx.createAnalyser();
     analyser.fftSize = Math.min(FFT_SIZE, 32768);
     analyser.smoothingTimeConstant = 0.0;
 
-    script = audioCtx.createScriptProcessor(PROCESSOR_FRAMES, 1, 1);
-    script.onaudioprocess = onAudioProcess;
+    scriptNode = audioCtx.createScriptProcessor(PROCESSOR_SIZE, 1, 1);
+    scriptNode.onaudioprocess = onAudioProcess;
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false }
-    });
-
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount:1, echoCancellation:false, noiseSuppression:false, autoGainControl:false }});
     src = audioCtx.createMediaStreamSource(stream);
     src.connect(analyser);
-    src.connect(script);
-    script.connect(audioCtx.destination);
+    src.connect(scriptNode);
+    scriptNode.connect(audioCtx.destination);
 
-    running = true;
-    dbg.textContent = `running — sr:${sampleRate} fft:${analyser.fftSize}`;
+    // ring buffer
+    ringLen = Math.ceil(RING_SECS * sampleRate);
+    ringBuffer = new Float32Array(ringLen);
+    ringWrite = 0;
+
+    isRunning = true;
+    mode = 'idle';
+    refreshCounts();
+    debug('Audio started. sampleRate: ' + sampleRate);
   }
 
-  function stop() {
-    try { src.mediaStream.getTracks().forEach(t => t.stop()); } catch(e){}
-    try { script.disconnect(); analyser.disconnect(); audioCtx.close(); } catch(e){}
-    running = false;
-    history.length = 0;
-    lastLabel = null;
+  function stopAudio() {
+    if (!isRunning) return;
+    try { src.mediaStream.getTracks().forEach(t=>t.stop()); } catch(e){}
+    try { scriptNode.disconnect(); analyser.disconnect(); audioCtx.close(); } catch(e){}
+    isRunning = false;
+    mode = 'idle';
+    debug('Audio stopped');
   }
 
-  function onAudioProcess(ev) {
-    if (!analyser) return;
+  // utilities
+  function debug(txt) { debugEl.textContent = txt; console.log(txt); }
+  function nowMs(){ return performance.now(); }
 
-    // Use inputBuffer for gating (accurate and low-latency)
-    const input = ev.inputBuffer.getChannelData(0);
-    let sumAbs = 0, peak = 0;
-    for (let i=0;i<input.length;i++) {
-      const a = Math.abs(input[i]);
-      sumAbs += a;
-      if (a > peak) peak = a;
+  // hit detection via script processor buffer
+  function onAudioProcess(ev){
+    if (!isRunning) return;
+    const inBuf = ev.inputBuffer.getChannelData(0);
+    // write to ring buffer
+    for (let i=0;i<inBuf.length;i++){
+      ringBuffer[ringWrite++] = inBuf[i];
+      if (ringWrite >= ringLen) ringWrite = 0;
     }
-    const meanAbs = sumAbs / input.length;
 
-    // update noise floor (EMA)
-    noiseEMA = noiseEMA * (1 - NOISE_EMA_ALPHA) + meanAbs * NOISE_EMA_ALPHA;
+    // compute meanAbs & peak for this block
+    let sumAbs = 0, peak = 0;
+    for (let i=0;i<inBuf.length;i++){
+      const v = Math.abs(inBuf[i]);
+      sumAbs += v;
+      if (v > peak) peak = v;
+    }
+    const meanAbs = sumAbs / inBuf.length;
+    // update noise EMA
+    noiseEMA = noiseEMA * (1-EMA_ALPHA) + meanAbs * EMA_ALPHA;
     const meanThreshold = Math.max(MIN_MEANABS, noiseEMA * HIT_MULT);
     const peakThreshold = Math.max(PEAK_ABS_MIN, noiseEMA * PEAK_MULT);
 
-    const now = performance.now();
-
-    // Hit detection — dual condition: meanAbs or peak
-    const isHit = (meanAbs >= meanThreshold) || (peak >= peakThreshold);
-    if (isHit && (now - lastHitTime) > HIT_DEBOUNCE_MS) {
+    const now = nowMs();
+    if ((meanAbs >= meanThreshold || peak >= peakThreshold) && (now - lastHitTime) > HIT_DEBOUNCE_MS) {
       lastHitTime = now;
-      analyzeSpectrumAndClassify();
-    } else {
-      // clear to idle if nothing for HOLD_MS
-      if (lastShownTime && (now - lastShownTime) > HOLD_MS) {
-        labelEl.textContent = 'idle';
-        lastLabel = null;
-      }
+      // copy last segment (500ms) for feature extraction
+      captureAndProcess();
     }
-
-    // update debug minimal info
-    dbg.textContent = `meanAbs:${meanAbs.toFixed(4)} peak:${peak.toFixed(3)} noise:${noiseEMA.toFixed(4)} thr:${meanThreshold.toFixed(4)}`;
   }
 
-  function analyzeSpectrumAndClassify() {
-    // Spectrum snapshot (bytes 0..255)
+  function copyRingLatest(durationSec=0.6){
+    const length = Math.min(ringLen, Math.floor(durationSec * sampleRate));
+    const out = new Float32Array(length);
+    const start = (ringWrite - length + ringLen) % ringLen;
+    if (start + length <= ringLen) {
+      out.set(ringBuffer.subarray(start, start + length), 0);
+    } else {
+      const tail = ringLen - start;
+      out.set(ringBuffer.subarray(start, ringLen), 0);
+      out.set(ringBuffer.subarray(0, length - tail), tail);
+    }
+    return out;
+  }
+
+  // feature extraction
+  function extractFeatures(timeBuf){
+    // timeBuf: Float32Array, most recent last
+    // We'll compute:
+    // - centroid (Hz), peakFreq (Hz) using analyser frequency snapshot (FFT)
+    // - low/mid/high band energy ratios (using analyser)
+    // - spectral flatness, rolloff(0.85)
+    // - zero crossing rate
+    // - peak-to-rms ratio
+    // - attack slope proxy (time to reach 90% of peak)
+    // - decay ratio (energy early vs late)
+    // - autocorr strength proxy (downsampled)
+
+    // Use analyser.getByteFrequencyData for spectrum snapshot
     const freqLen = analyser.frequencyBinCount;
     const freqBytes = new Uint8Array(freqLen);
-    analyser.getByteFrequencyData(freqBytes);
-
+    analyser.getByteFrequencyData(freqBytes); // 0..255 representing magnitudes
     const binSize = sampleRate / analyser.fftSize;
-    // compute centroid (Hz) and band energies
-    let sumMag = 0;
-    let weighted = 0;
-    let E_low = 0, E_mid = 0, E_high = 0;
-    let maxMag = 0, maxBin = 0;
-    for (let i=1;i<freqLen;i++) {
-      const mag = freqBytes[i];
+    // spectral stats
+    let sumMag = 0, weighted=0, maxMag = 0, maxBin = 0;
+    for (let i=1;i<freqLen;i++){
+      const m = Math.max(0, freqBytes[i]);
       const f = i * binSize;
-      sumMag += mag;
-      weighted += mag * f;
-      if (mag > maxMag) { maxMag = mag; maxBin = i; }
-      if (f >= LOW_BAND[0] && f <= LOW_BAND[1]) E_low += mag;
-      else if (f > MID_BAND[0] && f <= MID_BAND[1]) E_mid += mag;
-      else if (f > HIGH_BAND[0] && f <= HIGH_BAND[1]) E_high += mag;
+      sumMag += m;
+      weighted += m * f;
+      if (m > maxMag) { maxMag = m; maxBin = i; }
     }
     const centroid = sumMag > 0 ? (weighted / sumMag) : 0;
     const peakFreq = maxBin * binSize;
+
+    // band energies
+    const lowRange = [20,160];
+    const midRange = [160,900];
+    const highRange = [900, sampleRate/2];
+    let E_low=0, E_mid=0, E_high=0;
+    for (let i=1;i<freqLen;i++){
+      const f = i * binSize, m = freqBytes[i];
+      if (f >= lowRange[0] && f <= lowRange[1]) E_low += m;
+      else if (f > midRange[0] && f <= midRange[1]) E_mid += m;
+      else if (f > highRange[0] && f <= highRange[1]) E_high += m;
+    }
     const eTotal = Math.max(1, E_low + E_mid + E_high);
     const lowR = E_low / eTotal, midR = E_mid / eTotal, highR = E_high / eTotal;
 
-    // Classification rules (centroid primary, ratios as tie-breakers)
-    // Conservative thresholds chosen for general kits; we always produce 1/2/3 on hit.
-    let chosenId;
+    // spectral flatness (approx)
+    let logSum = 0, nonzero=0;
+    for (let i=1;i<freqLen;i++){
+      const v = Math.max(1, freqBytes[i]);
+      logSum += Math.log(v);
+      nonzero++;
+    }
+    const geoMean = Math.exp(logSum / Math.max(1, nonzero));
+    const arithMean = sumMag / Math.max(1, freqLen-1);
+    const flatness = arithMean>0 ? (geoMean / arithMean) : 0;
 
-    // If centroid very low and lowR dominant -> Kick
-    if (centroid <= CENTROID_KICK_MAX && lowR > 0.45) {
-      chosenId = 3; // kick
-    }
-    // If centroid in tom band and mid ratio moderately high -> tom
-    else if (centroid >= CENTROID_TOM_MIN && centroid < CENTROID_SNARE_MIN && midR >= 0.30) {
-      chosenId = 2; // toms
-    }
-    // If centroid high OR high ratio dominant -> snare
-    else if (centroid >= CENTROID_SNARE_MIN || highR > 0.45 || (midR + highR) > 0.6) {
-      chosenId = 1; // snare
-    }
-    // Edge handling: if centroid near low but lowR not dominant, use ratio tie-breaker
-    else {
-      // decide by highest relative band ratio
-      const maxR = Math.max(lowR, midR, highR);
-      if (maxR === lowR) chosenId = 3;
-      else if (maxR === midR) chosenId = 2;
-      else chosenId = 1;
+    // spectral rolloff 85%
+    let rollSum = 0, total = sumMag;
+    let rollFreq = 0;
+    for (let i=1;i<freqLen;i++){
+      rollSum += freqBytes[i];
+      if (rollSum >= total * 0.85) { rollFreq = i * binSize; break; }
     }
 
-    // smoothing: history majority to avoid single-frame flips
-    history.push(chosenId);
-    if (history.length > HISTORY_LEN) history.shift();
-    const counts = history.reduce((acc, v) => { acc[v] = (acc[v]||0)+1; return acc; }, {});
-    // pick majority if exists
-    let final = chosenId;
-    for (const k of [1,2,3]) {
-      if (counts[k] && counts[k] > Math.floor(HISTORY_LEN/2)) { final = k; break; }
+    // time-domain features using timeBuf
+    const N = timeBuf.length;
+    // rms, peak, peakToRms
+    let sumSq=0, peak=0;
+    for (let i=0;i<N;i++){
+      const v = timeBuf[i];
+      sumSq += v*v;
+      if (Math.abs(v) > peak) peak = Math.abs(v);
     }
+    const rms = Math.sqrt(sumSq / N) || 1e-8;
+    const peakToRms = peak / rms;
 
-    // update UI
-    const labelText = final === 1 ? '1 (snare)' : final === 2 ? '2 (toms)' : '3 (kick)';
-    labelEl.textContent = labelText;
-    lastLabel = final;
-    lastShownTime = performance.now();
+    // zero-crossing rate
+    let zc = 0;
+    for (let i=1;i<N;i++){
+      if ((timeBuf[i-1] >= 0 && timeBuf[i] < 0) || (timeBuf[i-1] < 0 && timeBuf[i] >= 0)) zc++;
+    }
+    const zcr = zc / N;
 
-    // debug details for tuning
-    dbg.textContent = [
-      `centroid:${Math.round(centroid)}Hz peak:${Math.round(peakFreq)}Hz`,
-      `ratios low/mid/high: ${lowR.toFixed(2)} / ${midR.toFixed(2)} / ${highR.toFixed(2)}`,
-      `maxMag:${maxMag.toFixed(1)} chosen:${chosenId} final:${final}`
-    ].join('\n');
+    // attack slope / attack time: find index where abs >= 0.9*peak within first 150ms
+    const attackWindow = Math.min(N, Math.floor(0.15 * sampleRate));
+    let attackIdx = -1;
+    for (let i=0;i<attackWindow;i++){
+      if (Math.abs(timeBuf[i]) >= 0.85 * peak) { attackIdx = i; break; }
+    }
+    const attackMs = attackIdx >=0 ? (attackIdx / sampleRate * 1000) : attackWindow / sampleRate * 1000;
+
+    // decay ratio: energy first 100ms vs next 300ms
+    const earlyN = Math.min(N, Math.floor(0.1 * sampleRate));
+    const lateN = Math.min(N, Math.floor(0.4 * sampleRate));
+    let eEarly=0, eLate=0;
+    for (let i=0;i<earlyN;i++) eEarly += timeBuf[i]*timeBuf[i];
+    for (let i=earlyN;i<lateN;i++) eLate += timeBuf[i]*timeBuf[i];
+    const decayRatio = (eEarly + 1e-9) / (eLate + 1e-9);
+
+    // autocorrelation strength: downsample for speed to 8000 Hz
+    function downsample(buf, origSR, target=8000){
+      if (target >= origSR) return buf.slice();
+      const ratio = origSR / target;
+      const outLen = Math.floor(buf.length / ratio);
+      const out = new Float32Array(outLen);
+      for (let i=0;i<outLen;i++){
+        const start = Math.floor(i * ratio), end = Math.floor((i+1) * ratio);
+        let s=0;
+        for (let j=start;j<end && j<buf.length;j++) s += buf[j];
+        out[i] = s / Math.max(1, (end-start));
+      }
+      return out;
+    }
+    const ds = downsample(timeBuf, sampleRate, 8000);
+    // quick autocorr strength: normalized correlation peak in 20-400Hz band
+    const dsN = ds.length;
+    let acBest = 0;
+    let minLag = Math.max(2, Math.floor(8000/400));
+    let maxLag = Math.min(dsN-2, Math.floor(8000/20));
+    // quick AC using naive loop (ok, only on hit)
+    for (let lag = minLag; lag <= maxLag; lag++){
+      let s = 0;
+      for (let i=0;i < dsN - lag; i++) s += ds[i] * ds[i + lag];
+      if (s > acBest) acBest = s;
+    }
+    const acStrength = acBest / Math.max(1e-8, dsN); // rough normalization
+
+    // assemble features array (normalized-ish)
+    const features = {
+      centroid, peakFreq, lowR, midR, highR, flatness, rollFreq,
+      zcr, peakToRms, attackMs, decayRatio, acStrength, rms
+    };
+    return features;
   }
 
-}); // dom loaded
+  // capture and either add to calibration or classify
+  function captureAndProcess(){
+    const timeBuf = copyRingLatest(0.6);
+    const feats = extractFeatures(timeBuf);
+    const t = mode;
+    if (mode === 'calibrate' && calibratingFor) {
+      // add sample
+      rawSamples[calibratingFor].push(feats);
+      refreshCounts();
+      instructionEl.textContent = `Collected ${rawSamples[calibratingFor].length}/${samplesPerClass} for ${labelName(calibratingFor)}.`;
+      if (rawSamples[calibratingFor].length >= samplesPerClass) {
+        calibratingFor = null;
+        mode = 'idle';
+        instructionEl.textContent = `Finished collecting for class. Press other Calibrate or Train.`;
+      }
+      return;
+    }
+
+    if (mode === 'live' && featureMeans) {
+      // normalize features for classification
+      const fv = vectorizeAndNormalize(feats);
+      const {pred, conf, dists} = classifyKNN(fv, kNN);
+      labelEl.textContent = `${pred} (${labelName(pred)})  ${Math.round(conf*100)}%`;
+      debugElUpdate(feats, fv, pred, conf, dists);
+      lastShownTime = nowMs();
+    } else {
+      // if not trained, optionally store for later or just show raw centroid-based
+      // fallback: simple heuristic (centroid) to avoid no-response
+      const pred = heuristicLabel(feats);
+      labelEl.textContent = `${pred} (${labelName(pred)})`;
+      debugElUpdate(feats, null, pred, 0, null);
+    }
+  }
+
+  function labelName(id) { return id===3? 'kick' : id===2 ? 'toms' : 'snare'; }
+
+  // --- CALIBRATE buttons
+  calKickBtn.addEventListener('click', ()=> beginCalibration(3));
+  calTomBtn.addEventListener('click', ()=> beginCalibration(2));
+  calSnareBtn.addEventListener('click', ()=> beginCalibration(1));
+  samplesInput.addEventListener('change', ()=> {
+    samplesPerClass = parseInt(samplesInput.value,10) || 8;
+  });
+
+  function beginCalibration(id) {
+    if (!isRunning) { alert('Start audio first'); return; }
+    calibratingFor = id;
+    mode = 'calibrate';
+    instructionEl.textContent = `Calibrating ${labelName(id)}: hit the drum ${samplesPerClass} times (one hit per ~0.6s).`;
+  }
+
+  // --- TRAIN
+  trainBtn.addEventListener('click', ()=> {
+    // verify we have samples for each class
+    const min = samplesPerClass;
+    if (rawSamples[3].length < min || rawSamples[2].length < min || rawSamples[1].length < min) {
+      alert('Need at least ' + min + ' samples per class for reliable training.');
+      return;
+    }
+    computeNormalizationAndPrepareKNNSamples();
+    clfStatusEl.textContent = 'trained';
+    instructionEl.textContent = 'Trained — press Live to classify.';
+  });
+
+  function computeNormalizationAndPrepareKNNSamples(){
+    // flatten raw feature objects into matrix and compute per-feature means/std
+    const all = [];
+    const labels = [];
+    for (const id of [3,2,1]) {
+      for (const s of rawSamples[id]) {
+        all.push(objToArray(s));
+        labels.push(id);
+      }
+    }
+    // compute means & stds elementwise
+    const dim = all[0].length;
+    featureMeans = new Array(dim).fill(0);
+    featureStds = new Array(dim).fill(0);
+    const n = all.length;
+    for (let j=0;j<dim;j++){
+      let sum=0;
+      for (let i=0;i<n;i++) sum += all[i][j];
+      featureMeans[j] = sum / n;
+    }
+    for (let j=0;j<dim;j++){
+      let s=0;
+      for (let i=0;i<n;i++){
+        const d = all[i][j] - featureMeans[j];
+        s += d*d;
+      }
+      featureStds[j] = Math.sqrt(s / Math.max(1,n-1)) || 1e-6;
+    }
+    // store normalized samples
+    normalizedSamples = {3:[],2:[],1:[]};
+    let idx = 0;
+    for (const id of [3,2,1]) {
+      for (const s of rawSamples[id]) {
+        const arr = objToArray(s);
+        const norm = arr.map((v,i)=> (v - featureMeans[i]) / featureStds[i]);
+        normalizedSamples[id].push(norm);
+        idx++;
+      }
+    }
+    debug('Normalization computed. Feature dim: ' + dim);
+  }
+
+  // helper: convert feature object to ordered array
+  function objToArray(o){
+    // order must be consistent with extractFeatures
+    return [
+      o.centroid || 0,
+      o.peakFreq || 0,
+      o.lowR || 0,
+      o.midR || 0,
+      o.highR || 0,
+      o.flatness || 0,
+      o.rollFreq || 0,
+      o.zcr || 0,
+      o.peakToRms || 0,
+      o.attackMs || 0,
+      o.decayRatio || 0,
+      o.acStrength || 0,
+      o.rms || 0
+    ];
+  }
+
+  // vectorize & normalize a feature object (prepare for k-NN)
+  function vectorizeAndNormalize(features){
+    const arr = objToArray(features);
+    if (!featureMeans) return arr; // unnormalized fallback
+    return arr.map((v,i)=> (v - featureMeans[i]) / featureStds[i]);
+  }
+
+  // KNN classifier
+  function classifyKNN(fv, k){
+    if (!featureMeans) return {pred: heuristicLabelObj(fv), conf:0, dists:null};
+    k = Math.max(1, parseInt(kInput.value,10) || kNN);
+    // collect all normalized samples with labels
+    const pool = [];
+    for (const id of [3,2,1]) {
+      for (const s of normalizedSamples[id]) pool.push({v:s,label:id});
+    }
+    // compute distances
+    const dists = pool.map(p => {
+      const v = p.v;
+      let sum=0;
+      for (let i=0;i<v.length;i++){
+        const d = (fv[i] - v[i]);
+        sum += d*d;
+      }
+      return {label:p.label, dist: Math.sqrt(sum)};
+    });
+    dists.sort((a,b)=>a.dist - b.dist);
+    const topk = dists.slice(0,k);
+    const votes = {};
+    for (const t of topk) votes[t.label] = (votes[t.label]||0) + 1;
+    // pick label with most votes; confidence = votes/ k
+    let bestLabel = null, bestCount = -1;
+    for (const lbl in votes) {
+      if (votes[lbl] > bestCount) { bestCount = votes[lbl]; bestLabel = Number(lbl); }
+    }
+    const conf = bestCount / k;
+    return {pred: bestLabel, conf, dists: dists.slice(0,10)};
+  }
+
+  // simple heuristic fallback (centroid-based)
+  function heuristicLabel(features){
+    const c = features.centroid || 0;
+    if (c <= 160) return 3;
+    if (c >= 350) return 1;
+    return 2;
+  }
+  function heuristicLabelObj(arrOrObj){
+    // arr or obj
+    let c = 0;
+    if (Array.isArray(arrOrObj)) c = arrOrObj[0];
+    else c = arrOrObj.centroid || 0;
+    if (c <= 160) return 3;
+    if (c >= 350) return 1;
+    return 2;
+  }
+
+  function debugElUpdate(feats, fv, pred, conf, dists){
+    let s = [
+      `pred: ${pred} (${labelName(pred)}) conf:${(conf*100).toFixed(0)}%`,
+      `centroid:${Math.round(feats.centroid)}Hz peak:${Math.round(feats.peakFreq)}Hz`,
+      `low/mid/high: ${feats.lowR.toFixed(2)}/${feats.midR.toFixed(2)}/${feats.highR.toFixed(2)}`,
+      `flatness:${feats.flatness.toFixed(3)} roll:${Math.round(feats.rollFreq)}Hz`,
+      `zcr:${feats.zcr.toFixed(3)} pk/RMS:${feats.peakToRms.toFixed(2)} attack:${Math.round(feats.attackMs)}ms decayR:${feats.decayRatio.toFixed(2)}`,
+      `acStr:${feats.acStrength.toFixed(3)} rms:${feats.rms.toFixed(4)}`
+    ];
+    if (fv) s.push('normalized vector: ' + fv.map(v=>v.toFixed(2)).join(', '));
+    if (dists) s.push('nearest dists:' + dists.slice(0,6).map(x=>`${x.label}:${x.dist.toFixed(2)}`).join(', '));
+    debugEl.textContent = s.join('\n');
+  }
+
+  // TRAINED EXPORT/IMPORT
+  exportBtn.addEventListener('click', ()=> {
+    if (!featureMeans) { alert('No trained calibration to export'); return; }
+    const data = {featureMeans, featureStds, normalizedSamplesRaw: normalizedSamples, rawSamples};
+    const blob = new Blob([JSON.stringify(data)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'drum_calibration.json'; a.click();
+    URL.revokeObjectURL(url);
+  });
+  importBtn.addEventListener('click', ()=> importFile.click());
+  importFile.addEventListener('change', (ev)=> {
+    const f = ev.target.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = (e)=> {
+      try {
+        const json = JSON.parse(e.target.result);
+        if (json.featureMeans && json.featureStds && json.rawSamples) {
+          featureMeans = json.featureMeans;
+          featureStds = json.featureStds;
+          // rehydrate normalizedSamples if present, else compute
+          normalizedSamples = json.normalizedSamplesRaw || {3:[],2:[],1:[]};
+          for (const id of [3,2,1]) rawSamples[id] = json.rawSamples[id] || [];
+          refreshCounts();
+          clfStatusEl.textContent = featureMeans ? 'trained (imported)' : 'untrained';
+          instructionEl.textContent = 'Calibration imported. Press Live to classify.';
+          debug('Imported calibration data — ready.');
+        } else {
+          alert('Invalid calibration file');
+        }
+      } catch(err){ alert('Invalid JSON'); }
+    };
+    reader.readAsText(f);
+  });
+
+  // live/training toggle
+  liveBtn.addEventListener('click', ()=> {
+    if (!isRunning) { alert('Start audio first'); return; }
+    if (!featureMeans) {
+      // allow live w/o training (heuristic) but warn
+      if (!confirm('No calibration trained. Live will use heuristic centroid fallback. Continue?')) return;
+    }
+    mode = 'live';
+    instructionEl.textContent = 'Live mode — hitting drums will classify.';
+  });
+
+  resetBtn.addEventListener('click', ()=> {
+    if (!confirm('Reset all calibration samples?')) return;
+    rawSamples[3]=[]; rawSamples[2]=[]; rawSamples[1]=[];
+    featureMeans=null; featureStds=null; normalizedSamples={3:[],2:[],1:[]};
+    refreshCounts();
+    instructionEl.textContent = 'Calibration reset.';
+  });
+
+  // small helper
+  function labelName(id){ return id===3? 'kick' : id===2 ? 'tom' : 'snare'; }
+
+  refreshCounts();
+  debug('Ready. Click Start Audio to begin.');
+
+})(); // IIFE
 </script>
 </body>
 </html>
