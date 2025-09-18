@@ -3,40 +3,24 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Drum Classifier — Snare(1)/Toms(2)/Kick(3)</title>
+<title>Drum Classifier — Fixed Idle + No Unknown</title>
 <style>
-  body{background:#111827;color:#fff;font-family:Segoe UI,system-ui,Arial,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:18px;text-align:center}
+  body{background:#071029;color:#fff;font-family:Segoe UI,system-ui,Arial,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:18px;text-align:center}
   h1{color:#f59e0b;margin-bottom:8px}
-  button{background:#0ea5e9;border:none;padding:12px 20px;border-radius:10px;color:#022;cursor:pointer;font-weight:700;margin-bottom:12px}
-  .result{font-size:2.4rem;font-weight:800;color:#f59e0b;margin:8px 0;min-height:48px}
-  .sub{color:#9ca3af;margin-bottom:6px}
-  .debug{font-family:monospace;font-size:0.86rem;color:#cbd5e1;margin-top:12px;white-space:pre-wrap;text-align:left;max-width:700px}
+  button{background:#06b6d4;border:none;padding:12px 22px;border-radius:10px;color:#012;cursor:pointer;font-weight:700;margin-bottom:12px}
+  .result{font-size:2.2rem;font-weight:800;color:#f59e0b;margin:8px 0;min-height:48px}
+  .sub{color:#94a3b8;margin-bottom:6px}
+  .debug{font-family:monospace;font-size:0.86rem;color:#cbd5e1;margin-top:12px;white-space:pre-wrap;text-align:left;max-width:800px}
 </style>
 </head>
 <body>
-  <h1>Drum Classifier</h1>
+  <h1>Drum Classifier — 1:Snare, 2:Toms, 3:Kick</h1>
   <button id="btn">Start</button>
-  <div class="sub">Outputs: <strong>1 = Snare</strong>, <strong>2 = Toms</strong>, <strong>3 = Kick</strong>, <strong>unknown</strong></div>
+  <div class="sub">Always returns 1/2/3. Idle when nothing is played.</div>
   <div class="result" id="label">idle</div>
   <div class="debug" id="dbg">debug: not running</div>
 
 <script>
-/*
-Conservative Drum Classifier (snare=1, toms=2, kick=3)
-Strategy:
- - Use AnalyserNode with large fftSize for spectrum (low freq resolution).
- - Continuous gating (mean absolute) to detect hits (onset).
- - On each onset: capture current spectrum (getByteFrequencyData) and compute:
-    - E_low  (20-150 Hz)
-    - E_mid  (150-800 Hz)
-    - E_high (800-6000 Hz)
-    - spectral centroid, spectral flatness, tonalPeak frequency
- - Apply conservative rule set:
-    - Kick (3): E_low dominant (low/mid ratio high), centroid low, tonalPeak low
-    - Snare (1): mid+high broadband (flatness high), centroid higher, energy spread
-    - Toms (2): mid-tonal energy dominant, clear tonal peak in mid band
- - If ambiguous, return 'unknown' (prevents mislabels).
-*/
 document.addEventListener('DOMContentLoaded', () => {
   const btn = document.getElementById('btn');
   const labelEl = document.getElementById('label');
@@ -44,24 +28,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let audioCtx = null, analyser = null, src = null, script = null;
   let isRunning = false;
-  // params
-  const FFT_SIZE = 32768; // large for good low-frequency resolution
+
+  // PARAMETERS
+  const FFT_SIZE = 16384;   // decent low-freq resolution but not insane
   const PROCESSOR = 2048;
-  let sr = 44100;
+  const SR_DEFAULT = 44100;
 
-  // gating & adapt noise floor
-  let noiseEMA = 0.002;
-  const EMA_ALPHA = 0.02;
-  const MIN_MEANABS = 0.0005;
-  const HIT_MULT = 2.2; // meanAbs must be > noiseEMA * HIT_MULT
+  // Gating & thresholds (tuned conservative defaults)
+  let noiseEMA = 0.0018;    // adaptive noise floor
+  const EMA_ALPHA = 0.02;   // noise adaptation speed
+  const MIN_MEANABS = 0.0003; // floor
+  const HIT_MULT = 1.7;     // meanAbs multiplier for trigger
+  const PEAK_ABS_MIN = 0.04; // absolute peak threshold (for strong transient)
+  const PEAK_MULT = 4.0;    // peak relative to noise floor multiplier
 
-  // hit debounce
-  let lastHit = 0;
+  // smoothing and debounce
   const HIT_DEBOUNCE_MS = 80;
-
-  // classification smoothing (small history)
+  let lastHit = 0;
   const HISTORY = 5;
   const classBuffer = [];
+
+  // audio state
+  let sampleRate = SR_DEFAULT;
 
   btn.addEventListener('click', async () => {
     if (isRunning) { stop(); btn.textContent='Start'; labelEl.textContent='idle'; dbg.textContent='stopped'; }
@@ -70,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function start() {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    sr = audioCtx.sampleRate;
+    sampleRate = audioCtx.sampleRate || SR_DEFAULT;
     analyser = audioCtx.createAnalyser();
     analyser.fftSize = Math.min(FFT_SIZE, 32768);
     analyser.smoothingTimeConstant = 0.0;
@@ -85,7 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
     script.connect(audioCtx.destination);
 
     isRunning = true;
-    dbg.textContent = 'running — sampleRate: ' + sr + ' fftSize: ' + analyser.fftSize;
+    dbg.textContent = `running — sr:${sampleRate} fft:${analyser.fftSize}`;
   }
 
   function stop() {
@@ -99,140 +87,142 @@ document.addEventListener('DOMContentLoaded', () => {
   function onAudioProcess(ev) {
     if (!analyser) return;
     const bufferLen = analyser.fftSize;
-    // quick time-domain gating: use analyser.getByteTimeDomainData
-    const timeBytes = new Uint8Array(bufferLen);
+
+    // USE time-domain bytes for gating (works across browsers)
+    const timeBytes = new Uint8Array(Math.min(2048, bufferLen)); // small read for low-latency gating
     analyser.getByteTimeDomainData(timeBytes);
-    // convert meanAbs quickly
+
+    // compute mean absolute and peak absolute in this small frame
     let sumAbs = 0;
-    for (let i=0;i<bufferLen;i++) sumAbs += Math.abs((timeBytes[i]-128)/128);
-    const meanAbs = sumAbs / bufferLen;
-    // update noise floor
+    let peakAbs = 0;
+    for (let i=0;i<timeBytes.length;i++) {
+      const v = (timeBytes[i] - 128) / 128;
+      const av = Math.abs(v);
+      sumAbs += av;
+      if (av > peakAbs) peakAbs = av;
+    }
+    const meanAbs = sumAbs / timeBytes.length;
+
+    // update noise floor EMA
     noiseEMA = noiseEMA * (1 - EMA_ALPHA) + meanAbs * EMA_ALPHA;
-    const thr = Math.max(MIN_MEANABS, noiseEMA * HIT_MULT);
+    const triggerThreshold = Math.max(MIN_MEANABS, noiseEMA * HIT_MULT);
+    const peakThreshold = Math.max(PEAK_ABS_MIN, noiseEMA * PEAK_MULT);
+
     const now = performance.now();
-    // detect onset when meanAbs exceeds threshold and debounced
-    if (meanAbs >= thr && (now - lastHit) > HIT_DEBOUNCE_MS) {
+
+    // HIT CRITERIA (dual trigger):
+    // A hit is true if meanAbs exceeds trigger OR peakAbs exceeds peakThreshold
+    if ((meanAbs >= triggerThreshold || peakAbs >= peakThreshold) && (now - lastHit) > HIT_DEBOUNCE_MS) {
       lastHit = now;
-      classifyHit(meanAbs, thr);
+      classifyHit(); // capture spectrum and classify
     } else {
-      // clear label after HOLD if no hits in a bit
+      // If no hit recently, clear to idle after short hold
       if (lastHit && (now - lastHit) > 600) labelEl.textContent = 'idle';
     }
+
+    // debug info update (not verbose)
+    dbg.textContent = `meanAbs:${meanAbs.toFixed(4)} peak:${peakAbs.toFixed(3)} thr:${triggerThreshold.toFixed(4)} pthr:${peakThreshold.toFixed(3)} noise:${noiseEMA.toFixed(4)}`;
   }
 
-  function classifyHit(meanAbs, thr) {
-    // get frequency spectrum snapshot
+  function classifyHit() {
+    if (!analyser) return;
+
+    // Get spectrum snapshot
     const freqLen = analyser.frequencyBinCount;
     const freqBytes = new Uint8Array(freqLen);
-    analyser.getByteFrequencyData(freqBytes); // bytes 0..255 ~ magnitude
-    const binSize = sr / analyser.fftSize;
+    analyser.getByteFrequencyData(freqBytes); // 0..255
 
-    // compute band energies (sum of mags) and some features
-    const E = {low:0, mid:0, high:0, full:0};
-    const lowRange = [20,150];
-    const midRange = [150,800];
-    const highRange = [800,6000];
+    // basic spectral features
+    const binSize = sampleRate / analyser.fftSize;
+
+    // define bands - make them broader so classification is robust
+    const lowBand = [20, 160];    // kick/floor area
+    const midBand = [160, 900];   // toms/snare area
+    const highBand = [900, 8000]; // cymbals etc.
+
+    let E_low = 0, E_mid = 0, E_high = 0, E_full = 0;
     let maxMag = 0, maxBin = 0;
-    let sumWeightedFreq = 0; // for centroid numerator
-    let sumMag = 0;
-    for (let i=1;i<freqLen;i++){
+    let weightedFreq = 0, sumMag = 0;
+    for (let i = 1; i < freqLen; i++) {
       const f = i * binSize;
       const m = freqBytes[i];
+      E_full += m;
       sumMag += m;
-      sumWeightedFreq += m * f;
-      if (m > maxMag){ maxMag = m; maxBin = i; }
-      E.full += m;
-      if (f >= lowRange[0] && f <= lowRange[1]) E.low += m;
-      else if (f > midRange[0] && f <= midRange[1]) E.mid += m;
-      else if (f > highRange[0] && f <= highRange[1]) E.high += m;
+      weightedFreq += m * f;
+      if (m > maxMag) { maxMag = m; maxBin = i; }
+      if (f >= lowBand[0] && f <= lowBand[1]) E_low += m;
+      else if (f > midBand[0] && f <= midBand[1]) E_mid += m;
+      else if (f > highBand[0] && f <= highBand[1]) E_high += m;
     }
-    const centroid = sumMag > 0 ? (sumWeightedFreq / sumMag) : 0;
-    // spectral flatness (approx) — ratio geometric mean / arithmetic mean; for bytes approximate by small transform
-    // compute log-mean of magnitudes (avoid zeros)
+    const centroid = sumMag > 0 ? (weightedFreq / sumMag) : 0;
+    const peakFreq = maxBin * binSize;
+
+    // normalize
+    const eFull = Math.max(1, E_full);
+    const lowRatio = E_low / eFull;
+    const midRatio = E_mid / eFull;
+    const highRatio = E_high / eFull;
+
+    // quick flatness indicator (rough)
     let logSum = 0, nonzero = 0;
     for (let i=1;i<freqLen;i++){ const v = Math.max(1, freqBytes[i]); logSum += Math.log(v); nonzero++; }
     const geoMean = Math.exp(logSum / Math.max(1, nonzero));
     const arithMean = sumMag / Math.max(1, freqLen-1);
-    const flatness = arithMean > 0 ? (geoMean / arithMean) : 0; // closer to 1 => noise-like broadband
+    const flatness = arithMean > 0 ? (geoMean / arithMean) : 0;
 
-    // tonal peak frequency
-    const peakFreq = maxBin * binSize;
+    // Classification logic (conservative + expanded ranges)
+    // Score heuristics (values tuned to be robust and non-overlapping)
+    let kickScore = 0, tomScore = 0, snareScore = 0;
 
-    // normalize energies to avoid absolute-scale sensitivity
-    const eLow = E.low;
-    const eMid = E.mid;
-    const eHigh = E.high;
-    const eFull = E.full || 1;
-    const lowRatio = eLow / eFull;
-    const midRatio = eMid / eFull;
-    const highRatio = eHigh / eFull;
+    // Kick: strong low band, centroid low, peak low
+    if (lowRatio > 0.35) kickScore += 2;
+    if (centroid < 180) kickScore += 1;
+    if (peakFreq < 180) kickScore += 1;
 
-    // Decision rules (conservative)
-    // Compute some heuristics
-    // Kick candidate: strong low energy ratio and centroid low
-    const isKickScore = (lowRatio > 0.45 && centroid < 200) ? 1 : 0; // strong low energy -> kick
-    // Tom candidate: mid energy dominant and has tonal peak in mid band
-    const isTomScore = (midRatio > 0.35 && peakFreq >= 80 && peakFreq <= 500 && flatness < 0.6) ? 1 : 0;
-    // Snare candidate: broadband mid+high energy, high flatness (noise-like), centroid higher
-    const isSnareScore = ((midRatio + highRatio) > 0.55 && flatness > 0.45 && centroid > 300) ? 1 : 0;
+    // Tom: mid energy strong and tonal (peak in mid)
+    if (midRatio > 0.30) tomScore += 2;
+    if (peakFreq >= 90 && peakFreq <= 700) tomScore += 1;
+    if (flatness < 0.6 && midRatio > 0.18) tomScore += 1;
 
-    // Additional safe checks to avoid overlap:
-    // If two scores tie or none pass, mark unknown.
-    let chosen = 'unknown';
-    let chosenId = null;
+    // Snare: broadband mid+high and higher centroid
+    if ((midRatio + highRatio) > 0.5) snareScore += 2;
+    if (centroid > 350) snareScore += 1;
+    if (flatness > 0.4) snareScore += 1;
 
-    const scores = {kick:isKickScore, tom:isTomScore, snare:isSnareScore};
-    // prefer kick if exclusively kick-like
-    if (scores.kick && !scores.tom && !scores.snare) { chosen = 'kick'; chosenId = 3; }
-    else if (scores.tom && !scores.kick && !scores.snare) { chosen = 'toms'; chosenId = 2; }
-    else if (scores.snare && !scores.kick && !scores.tom) { chosen = 'snare'; chosenId = 1; }
-    else {
-      // No exclusive winner — use graded thresholds & tie-breakers (conservative)
-      // If lowRatio massively dominant -> kick
-      if (lowRatio > 0.6 && centroid < 220 && eLow > eMid*1.8) { chosen = 'kick'; chosenId = 3; }
-      // If tonal peak in mid band and mid ratio relatively strong -> tom
-      else if (peakFreq >= 100 && peakFreq <= 450 && midRatio > 0.35 && flatness < 0.6) { chosen = 'toms'; chosenId = 2; }
-      // If energy spread high and flatness indicates noise -> snare
-      else if ( (midRatio + highRatio) > 0.6 && flatness > 0.42 && centroid > 280) { chosen = 'snare'; chosenId = 1; }
-      else {
-        // ambiguous — to avoid wrong labels, set unknown
-        chosen = 'unknown';
-        chosenId = null;
-      }
+    // Soft tie-breakers to avoid mislabels:
+    // If one score strongly dominates, pick it. Otherwise prefer snare (id=1) as fallback per your request.
+    const scores = [{id:3,score:kickScore},{id:2,score:tomScore},{id:1,score:snareScore}];
+    scores.sort((a,b)=>b.score - a.score);
+
+    let chosenId;
+    // require at least 2 points to be confident for non-snare; snare allowed as default
+    if (scores[0].score >= 2 && scores[0].score >= scores[1].score + 1) {
+      chosenId = scores[0].id;
+    } else {
+      // fallback: choose snare (1) to satisfy "call highest drum we have"
+      chosenId = 1;
     }
 
-    // Post-check: ensure no obvious contradictions (e.g., cymbal/hihat: very high centroid or very high flatness)
-    if (centroid > 3000 || highRatio > 0.7 && flatness > 0.6) {
-      // probably cymbal/hihat — classify as unknown (we don't want to label cymbal as kick/tom/snare)
-      chosen = 'unknown';
-      chosenId = null;
-    }
-
-    // Buffer smoothing: push to history, use majority to reduce flicker
-    classBuffer.push(chosenId === null ? 'unknown' : chosenId);
+    // smoothing / majority history
+    classBuffer.push(chosenId);
     if (classBuffer.length > HISTORY) classBuffer.shift();
     const counts = classBuffer.reduce((acc, v) => { acc[v] = (acc[v]||0)+1; return acc; }, {});
-    // pick majority if any element > half
-    let majority = null;
-    for (const k in counts) {
-      if (counts[k] > Math.floor(HISTORY/2)) { majority = k; break; }
+    // majority
+    let final = null;
+    for (const k of [1,2,3]) {
+      if (counts[k] && counts[k] > Math.floor(HISTORY/2)) { final = Number(k); break; }
     }
-    const finalLabel = majority !== null ? majority : (chosenId === null ? 'unknown' : chosenId);
+    if (final === null) final = chosenId;
 
     // Update UI
-    labelEl.textContent = (finalLabel === 'unknown') ? 'unknown' : `${finalLabel}`;
-    // debug output helpful for tuning
+    const idText = final === 1 ? '1 (snare)' : final === 2 ? '2 (toms)' : '3 (kick)';
+    labelEl.textContent = idText;
     dbg.textContent = [
-      `meanAbs:${meanAbs.toFixed(4)} thr:${thr.toFixed(4)} noiseEMA:${noiseEMA.toFixed(4)}`,
-      `E_low:${eLow.toFixed(1)} E_mid:${eMid.toFixed(1)} E_high:${eHigh.toFixed(1)} full:${eFull.toFixed(1)}`,
-      `ratios low/mid/high: ${(lowRatio).toFixed(2)}/${(midRatio).toFixed(2)}/${(highRatio).toFixed(2)}`,
-      `centroid:${centroid.toFixed(1)} peakFreq:${peakFreq.toFixed(1)} flatness:${flatness.toFixed(2)}`,
-      `scores: kick=${scores.kick} tom=${scores.tom} snare=${scores.snare}`,
-      `chosen:${chosen} -> id:${chosenId === null ? 'unknown' : chosenId}`,
-      `final:${finalLabel}`
+      `ratios low/mid/high: ${lowRatio.toFixed(2)}/${midRatio.toFixed(2)}/${highRatio.toFixed(2)}`,
+      `centroid: ${centroid.toFixed(1)}Hz peak:${peakFreq.toFixed(1)}Hz maxMag:${maxMag.toFixed(1)}`,
+      `scores: kick=${kickScore} tom=${tomScore} snare=${snareScore}`,
+      `chosen:${chosenId} final:${final}`
     ].join('\n');
-
-    // Done.
   }
 
 });
