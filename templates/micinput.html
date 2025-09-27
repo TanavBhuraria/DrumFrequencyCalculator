@@ -3,537 +3,842 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Drum Calibrator — Snare / Kick / LowTom / MidTom / HighTom</title>
+<title>Drum Frequency — Verbose Build (Fixed samples=12, k=5)</title>
 <style>
-  body{background:#071029;color:#fff;font-family:Inter,Segoe UI,Arial,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;min-height:100vh;margin:0;padding:18px;gap:10px}
-  .card{background:#071a2b;border-radius:10px;padding:16px;box-shadow:0 6px 24px rgba(0,0,0,0.4);width:980px;max-width:96%}
-  h1{color:#f59e0b;margin:0 0 12px 0}
-  .controls{display:flex;gap:8px;flex-wrap:wrap}
-  button{background:#06b6d4;border:none;padding:10px 14px;border-radius:8px;color:#022;cursor:pointer;font-weight:700}
-  .result{font-size:1.75rem;font-weight:800;color:#f59e0b;margin:8px 0;min-height:44px}
-  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-  .dbg{font-family:monospace;color:#cbd5e1;white-space:pre-wrap;margin-top:10px;background:#031022;padding:10px;border-radius:8px}
-  label{font-size:0.9rem;color:#94a3b8}
-  .small{font-size:0.9rem;color:#94a3b8}
-  input[type=number]{width:70px;padding:6px;border-radius:6px;border:none}
-  .counts{display:flex;gap:18px;margin-top:8px}
-  .counts div{background:#041427;padding:8px;border-radius:8px;min-width:140px;text-align:center}
-  .mapping{font-size:.95rem;color:#c7f0ff;margin-top:8px}
+  :root{
+    --background: #071029;
+    --card: #071a2b;
+    --accent: #f59e0b;
+    --muted: #94a3b8;
+    --button: #06b6d4;
+    --debug-bg: #031022;
+  }
+  html,body{height:100%;margin:0;padding:0}
+  body{
+    background:var(--background);
+    color:#fff;
+    font-family: "Inter", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    display:flex;
+    align-items:flex-start;
+    justify-content:center;
+    padding:20px;
+  }
+
+  .container {
+    width: 1000px;
+    max-width: 98%;
+  }
+
+  .card {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+  }
+
+  h1 { margin: 0 0 8px 0; color: var(--accent); font-size: 1.5rem; }
+  .subtitle { color: var(--muted); margin-bottom: 14px; }
+
+  .controls { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:12px; }
+  button {
+    background: var(--button);
+    border: none;
+    color: #012;
+    padding: 10px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 700;
+  }
+  button.secondary { background: #0ea5a1; color: #012; }
+  .info { color: var(--muted); font-size: 0.95rem; margin-top:6px; }
+
+  .outputBox {
+    background: rgba(0,0,0,0.12);
+    padding: 14px;
+    border-radius: 10px;
+    margin-top: 12px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+
+  .displayFreq {
+    color: var(--accent);
+    font-size: 2.0rem;
+    font-weight: 800;
+    min-height:46px;
+  }
+
+  .countsRow { display:flex; gap:12px; flex-wrap:wrap; margin-top:8px; }
+  .countCard {
+    background:#041427;
+    padding:8px;
+    border-radius:8px;
+    min-width:130px;
+    text-align:center;
+  }
+  .countCard strong { display:block; margin-bottom:6px; color:#cbd5e1; }
+
+  .debugPanel {
+    margin-top:12px;
+    background: var(--debug-bg);
+    padding: 12px;
+    border-radius: 10px;
+    font-family: monospace;
+    white-space: pre-wrap;
+    color:#cbd5e1;
+  }
+
+  .footer { margin-top:12px; color:var(--muted); font-size:0.9rem; }
+
+  /* make buttons visually disabled when appropriate */
+  .disabled { opacity: 0.45; pointer-events: none; }
+
+  /* responsive */
+  @media (max-width:720px){
+    .displayFreq { font-size:1.6rem; }
+    .controls { gap:6px; }
+  }
 </style>
 </head>
 <body>
-  <div class="card">
-    <h1>Drum Calibrator — 5-Class (1=Snare,2=Kick,3=LowTom,4=MidTom,5=HighTom)</h1>
+  <div class="container">
+    <div class="card">
+      <h1>Drum Frequency — Verbose Build</h1>
+      <div class="subtitle">
+        Fixed calibration samples = <strong>12</strong> per class, k-NN k = <strong>5</strong>. Output shows only the benchmark frequency (e.g. <em>150 Hz</em>).
+      </div>
 
-    <div class="controls row">
-      <button id="startBtn">Start Audio</button>
+      <div class="controls">
+        <button id="startAudioBtn">Start Audio</button>
 
-      <button id="calSnare">Calibrate Snare (1)</button>
-      <button id="calKick">Calibrate Kick (2)</button>
-      <button id="calLowTom">Calibrate Low Tom (3)</button>
-      <button id="calMidTom">Calibrate Mid Tom (4)</button>
-      <button id="calHighTom">Calibrate High Tom (5)</button>
+        <!-- Calibration buttons -->
+        <button id="calibrateSnareBtn">Calibrate: Snare (12)</button>
+        <button id="calibrateHighTomBtn">Calibrate: High Tom (12)</button>
+        <button id="calibrateMidTomBtn">Calibrate: Mid Tom (12)</button>
+        <button id="calibrateLowTomBtn">Calibrate: Low Tom (12)</button>
+        <button id="calibrateKickBtn">Calibrate: Kick (12)</button>
 
-      <label class="small">Samples per class: <input id="samplesInput" type="number" value="8" min="3" max="25"/></label>
-      <button id="trainBtn">Train</button>
-      <label class="small">k (k-NN): <input id="kInput" type="number" value="3" min="1" max="11"/></label>
-      <button id="liveBtn">Live</button>
-      <button id="resetBtn">Reset Cal</button>
-      <button id="exportBtn">Export Cal</button>
-      <button id="importBtn">Import Cal</button>
-      <input id="importFile" type="file" accept=".json" style="display:none"/>
-    </div>
+        <!-- Train / Live / Reset -->
+        <button id="trainBtn" class="secondary">Train</button>
+        <button id="liveBtn" class="secondary">Live</button>
+        <button id="resetBtn" class="secondary">Reset Cal</button>
 
-    <div style="margin-top:12px;">
-      <div class="result" id="label">idle</div>
-      <div class="small" id="instruction">Status: audio stopped. Press <strong>Start Audio</strong>.</div>
-      <div class="mapping">Mapping: <strong>1=Snare</strong>, <strong>2=Kick</strong>, <strong>3=Low Tom</strong>, <strong>4=Mid Tom</strong>, <strong>5=High Tom</strong></div>
-    </div>
+        <!-- Export / Import -->
+        <button id="exportBtn">Export Cal</button>
+        <button id="importBtn">Import Cal</button>
+        <input id="fileInput" type="file" accept=".json" style="display:none" />
+      </div>
 
-    <div class="counts">
-      <div><strong>Snare (1)</strong><div id="snareCount">0</div></div>
-      <div><strong>Kick (2)</strong><div id="kickCount">0</div></div>
-      <div><strong>Low Tom (3)</strong><div id="lowCount">0</div></div>
-      <div><strong>Mid Tom (4)</strong><div id="midCount">0</div></div>
-      <div><strong>High Tom (5)</strong><div id="highCount">0</div></div>
-      <div><strong>Classifier</strong><div id="clfStatus">untrained</div></div>
-    </div>
+      <div class="info">
+        Notes: One physical hit counts as one calibration sample (debounced). The app will show counts to the right. When in Live mode the display will show only the benchmark frequency (no drum name).
+      </div>
 
-    <div style="margin-top:12px;">
-      <div class="dbg" id="debug">debug: not running</div>
+      <div class="outputBox">
+        <div class="displayFreq" id="frequencyDisplay">idle</div>
+        <div class="info" id="statusText">Status: audio stopped. Press <strong>Start Audio</strong></div>
+        <div class="countsRow">
+          <div class="countCard"><strong>Snare</strong><span id="countSnare">0</span></div>
+          <div class="countCard"><strong>High Tom</strong><span id="countHigh">0</span></div>
+          <div class="countCard"><strong>Mid Tom</strong><span id="countMid">0</span></div>
+          <div class="countCard"><strong>Low Tom</strong><span id="countLow">0</span></div>
+          <div class="countCard"><strong>Kick</strong><span id="countKick">0</span></div>
+          <div class="countCard"><strong>Classifier</strong><span id="classifierStatus">untrained</span></div>
+        </div>
+      </div>
+
+      <div class="debugPanel" id="debugPanel">
+        debug: not running
+      </div>
+
+      <div class="footer">
+        Implementation verbose edition. Calibration samples per class: <strong>12</strong>. k-NN k: <strong>5</strong>. Output only benchmark frequency.
+      </div>
     </div>
   </div>
 
 <script>
-/* 
-Robust 5-class drum calibration + classification with per-hit debounce.
-IDs:
-  1 = Snare
-  2 = Kick
-  3 = Low Tom
-  4 = Mid Tom
-  5 = High Tom
+/* ======================================================================
+   Verbose, expanded single-file Drum Frequency app
+   - Fixed: samplesPerClass = 12
+   - Fixed: k-NN k = 5
+   - Output only benchmark frequency (no drum names)
+   - Debounced calibration: one physical hit -> one stored sample
+   - Detailed comments and helper functions included to avoid "silent cleanup"
+   ====================================================================== */
 
-Behavior:
- - Start audio.
- - Press a Calibrate button, hit that drum N times (one physical hit = one sample).
- - After collecting the chosen number, press Train.
- - Click Live to classify hits.
- - Export/import calibration data available.
-*/
+(function(){ 'use strict';
 
-(() => {
-  // UI
-  const startBtn = document.getElementById('startBtn');
-  const calSnareBtn = document.getElementById('calSnare');
-  const calKickBtn = document.getElementById('calKick');
-  const calLowBtn = document.getElementById('calLowTom');
-  const calMidBtn = document.getElementById('calMidTom');
-  const calHighBtn = document.getElementById('calHighTom');
-  const trainBtn = document.getElementById('trainBtn');
-  const liveBtn = document.getElementById('liveBtn');
-  const resetBtn = document.getElementById('resetBtn');
-  const exportBtn = document.getElementById('exportBtn');
-  const importBtn = document.getElementById('importBtn');
-  const importFile = document.getElementById('importFile');
-  const samplesInput = document.getElementById('samplesInput');
-  const kInput = document.getElementById('kInput');
+  /* =========================
+     Configuration & Constants
+     ========================= */
 
-  const labelEl = document.getElementById('label');
-  const debugEl = document.getElementById('debug');
-  const instructionEl = document.getElementById('instruction');
-  const snareCountEl = document.getElementById('snareCount');
-  const kickCountEl = document.getElementById('kickCount');
-  const lowCountEl = document.getElementById('lowCount');
-  const midCountEl = document.getElementById('midCount');
-  const highCountEl = document.getElementById('highCount');
-  const clfStatusEl = document.getElementById('clfStatus');
+  // FIXED: number of calibration hits required per drum (user cannot change)
+  const SAMPLES_PER_CLASS = 12;
 
-  // audio state
-  let audioCtx = null;
-  let analyser = null;
-  let scriptNode = null;
-  let src = null;
-  let isRunning = false;
-  let sampleRate = 44100;
+  // FIXED: k for k-NN classifier (user cannot change)
+  const K_NEAREST = 5;
 
-  // ring buffer for feature extraction
-  let ringBuffer = null;
-  let ringLen = 0;
-  let ringWrite = 0;
-  const RING_SECS = 1.0;
+  // Internal class ID mapping (explicit)
+  // We'll use 1..5 to match previous conversation's mapping
+  const CLASS_SNARE   = 1;
+  const CLASS_HIGHTOM = 2;
+  const CLASS_MIDTOM  = 3;
+  const CLASS_LOWTOM  = 4;
+  const CLASS_KICK    = 5;
 
-  // processor params
-  const PROCESSOR_SIZE = 2048;
-  const FFT_SIZE = 16384;
+  // Benchmark frequencies we will output when a class is chosen
+  // IMPORTANT: these are the numbers that will be shown (no drum name)
+  const BENCHMARK_FREQUENCIES = {
+    [CLASS_SNARE]:   180,
+    [CLASS_HIGHTOM]: 150,
+    [CLASS_MIDTOM]:  130,
+    [CLASS_LOWTOM]:  90,
+    [CLASS_KICK]:    60
+  };
 
-  // hit detection params
-  let noiseEMA = 0.0016;
+  // Benchmark ranges (for optional clamping, debugging, future use)
+  const BENCHMARK_RANGES = {
+    [CLASS_SNARE]:   [170, 190],
+    [CLASS_HIGHTOM]: [140, 160],
+    [CLASS_MIDTOM]:  [120, 140],
+    [CLASS_LOWTOM]:  [80, 100],
+    [CLASS_KICK]:    [50, 70]
+  };
+
+  // Audio & analysis constants
+  const RING_BUFFER_SECONDS = 1.0;        // how much audio we keep for capture
+  const SCRIPT_PROCESSOR_SIZE = 2048;     // onaudioprocess buffer size
+  const ANALYSER_FFT_SIZE = 16384;        // high resolution for spectral features (may be clamped by browser)
+
+  // Hit detection (adaptive)
+  let noiseEMA = 0.0016;                  // exponential moving average of ambient meanAbs
   const EMA_ALPHA = 0.02;
   const MIN_MEANABS = 0.00006;
-  const HIT_MULT = 1.6;
+  const HIT_MEAN_MULTIPLIER = 1.6;
   const PEAK_ABS_MIN = 0.03;
-  const PEAK_MULT = 4.0;
-  const HIT_DEBOUNCE_MS = 120;        // short block-level debounce
-  const CALIBRATE_COOLDOWN_MS = 550;  // critical: ensure 1 physical hit -> 1 calibration sample
+  const HIT_PEAK_MULTIPLIER = 4.0;
 
-  let lastHitTime = 0;
-  let lastCalRecordTime = 0;
+  // Debounce timings (ms)
+  const HIT_DETECTION_DEBOUNCE_MS = 120;    // block-level debounce to avoid retriggers in rapid frames
+  const CALIBRATE_HIT_COOLDOWN_MS = 550;    // calibration-level cooldown: one physical hit => one stored sample
 
-  // mode and calibration
-  let mode = 'idle'; // 'idle','calibrate','train','live'
-  let calibratingFor = null; // id 1..5
-  let samplesPerClass = parseInt(samplesInput.value,10) || 8;
-  samplesInput.addEventListener('change', ()=> samplesPerClass = parseInt(samplesInput.value,10) || 8);
+  /* =========================
+     UI elements (grabbed up front)
+     ========================= */
+  const startAudioBtn       = document.getElementById('startAudioBtn');
+  const calibrateSnareBtn   = document.getElementById('calibrateSnareBtn');
+  const calibrateHighBtn    = document.getElementById('calibrateHighTomBtn');
+  const calibrateMidBtn     = document.getElementById('calibrateMidTomBtn');
+  const calibrateLowBtn     = document.getElementById('calibrateLowTomBtn');
+  const calibrateKickBtn    = document.getElementById('calibrateKickBtn');
 
-  // storage
-  const rawSamples = { 1:[], 2:[], 3:[], 4:[], 5:[] }; // feature objects
-  let normalizedSamples = { 1:[], 2:[], 3:[], 4:[], 5:[] };
+  const trainBtn            = document.getElementById('trainBtn');
+  const liveBtn             = document.getElementById('liveBtn');
+  const resetBtn            = document.getElementById('resetBtn');
+  const exportBtn           = document.getElementById('exportBtn');
+  const importBtn           = document.getElementById('importBtn');
+  const fileInput           = document.getElementById('fileInput');
+
+  const frequencyDisplay    = document.getElementById('frequencyDisplay');
+  const statusTextEl        = document.getElementById('statusText');
+  const debugPanelEl        = document.getElementById('debugPanel');
+
+  const countSnareEl        = document.getElementById('countSnare');
+  const countHighEl         = document.getElementById('countHigh');
+  const countMidEl          = document.getElementById('countMid');
+  const countLowEl          = document.getElementById('countLow');
+  const countKickEl         = document.getElementById('countKick');
+  const classifierStatusEl  = document.getElementById('classifierStatus');
+
+  /* =========================
+     Audio context & nodes
+     ========================= */
+  let audioContext = null;
+  let analyserNode = null;
+  let scriptProcessorNode = null;
+  let mediaStreamSource = null;
+
+  let sampleRate = 44100;       // updated after AudioContext created
+
+  // ring buffer to capture the last RING_BUFFER_SECONDS of audio for feature extraction
+  let ringBuffer = null;
+  let ringBufferLength = 0;
+  let ringWriteIndex = 0;
+
+  // runtime state for hit detection
+  let lastBlockHitTime = 0;     // used for block-level debounce
+  let lastCalRecordTime = 0;    // ensure calibration records spaced by cooldown
+
+  // app mode: 'idle', 'calibrate', 'live'
+  let appMode = 'idle';
+  let calibratingClassId = null;
+
+  /* =========================
+     Calibration storage & classifier data
+     ========================= */
+  // rawSamples: store full feature objects per sample, keyed by class id
+  const rawSamples = {
+    [CLASS_SNARE]:   [],
+    [CLASS_HIGHTOM]: [],
+    [CLASS_MIDTOM]:  [],
+    [CLASS_LOWTOM]:  [],
+    [CLASS_KICK]:    []
+  };
+
+  // normalizedSamples: after normalization, per class stored normalized vectors (arrays)
+  let normalizedSamples = {
+    [CLASS_SNARE]:   [],
+    [CLASS_HIGHTOM]: [],
+    [CLASS_MIDTOM]:  [],
+    [CLASS_LOWTOM]:  [],
+    [CLASS_KICK]:    []
+  };
+
+  // means / stds for normalization (computed during training)
   let featureMeans = null;
   let featureStds = null;
 
-  // classifier params
-  let knnK = parseInt(kInput.value,10) || 3;
-  kInput.addEventListener('change', ()=> knnK = parseInt(kInput.value,10) || 3);
+  /* =========================
+     UI wiring and event listeners
+     ========================= */
 
-  // UI hookups
-  startBtn.addEventListener('click', async () => {
-    if (isRunning) {
-      stopAudio();
-      startBtn.textContent = 'Start Audio';
-      instructionEl.textContent = 'Stopped.';
+  startAudioBtn.addEventListener('click', async () => {
+    if (audioContext && audioContext.state !== 'closed') {
+      stopAudioProcessing();
+      startAudioBtn.textContent = 'Start Audio';
+      statusTextEl.innerHTML = 'Status: audio stopped.';
+      frequencyDisplay.textContent = 'idle';
     } else {
-      await startAudio();
-      startBtn.textContent = 'Stop Audio';
-      instructionEl.textContent = 'Audio started. Calibrate each drum by pressing its button then hitting the drum.';
-    }
-  });
-
-  calSnareBtn.addEventListener('click', ()=> beginCalibration(1));
-  calKickBtn.addEventListener('click', ()=> beginCalibration(2));
-  calLowBtn.addEventListener('click', ()=> beginCalibration(3));
-  calMidBtn.addEventListener('click', ()=> beginCalibration(4));
-  calHighBtn.addEventListener('click', ()=> beginCalibration(5));
-
-  trainBtn.addEventListener('click', ()=> {
-    const need = samplesPerClass;
-    for (const id of [1,2,3,4,5]) {
-      if (rawSamples[id].length < need) {
-        alert(`Need at least ${need} samples for each class. ${labelName(id)} has ${rawSamples[id].length}.`);
-        return;
+      try {
+        await startAudioProcessing();
+        startAudioBtn.textContent = 'Stop Audio';
+        statusTextEl.innerHTML = 'Status: audio running. Use Calibrate buttons to collect samples.';
+      } catch (err) {
+        console.error('Failed to start audio:', err);
+        alert('Unable to access microphone: ' + (err && err.message ? err.message : 'unknown'));
       }
     }
-    computeNormalization();
-    clfStatusEl.textContent = 'trained';
-    instructionEl.textContent = 'Trained — press Live to classify.';
   });
 
-  liveBtn.addEventListener('click', ()=> {
-    if (!isRunning) { alert('Start audio first'); return; }
-    mode = 'live';
-    instructionEl.textContent = 'Live mode — hitting drums will classify.';
+  // calibration button handlers
+  calibrateSnareBtn.addEventListener('click', () => beginCalibration(CLASS_SNARE));
+  calibrateHighBtn.addEventListener('click', () => beginCalibration(CLASS_HIGHTOM));
+  calibrateMidBtn.addEventListener('click', () => beginCalibration(CLASS_MIDTOM));
+  calibrateLowBtn.addEventListener('click', () => beginCalibration(CLASS_LOWTOM));
+  calibrateKickBtn.addEventListener('click', () => beginCalibration(CLASS_KICK));
+
+  // train button (compute normalization and build normalizedSamples)
+  trainBtn.addEventListener('click', () => {
+    const missing = classesWithInsufficientSamples();
+    if (missing.length > 0) {
+      alert('Need ' + SAMPLES_PER_CLASS + ' samples per class. Missing: ' + missing.map(id => classLabel(id)).join(', '));
+      return;
+    }
+    computeNormalizationAndPrepareKNN();
+    classifierStatusEl.textContent = 'trained';
+    statusTextEl.innerHTML = 'Trained — switch to <strong>Live</strong> to get benchmark frequencies.';
   });
 
-  resetBtn.addEventListener('click', ()=> {
-    if (!confirm('Reset all calibration?')) return;
-    for (const id of [1,2,3,4,5]) rawSamples[id] = [];
-    featureMeans = null; featureStds = null; normalizedSamples = {1:[],2:[],3:[],4:[],5:[]};
-    clfStatusEl.textContent = 'untrained';
-    refreshCounts();
-    instructionEl.textContent = 'Calibration reset.';
+  // live mode
+  liveBtn.addEventListener('click', () => {
+    if (!audioContext) { alert('Start audio first'); return; }
+    if (!featureMeans) {
+      if (!confirm('Classifier not trained. Live will use heuristic fallback. Continue?')) return;
+    }
+    appMode = 'live';
+    statusTextEl.innerHTML = 'Live mode — hitting drums will display benchmark frequency only.';
   });
 
-  exportBtn.addEventListener('click', ()=> {
+  // reset calibration
+  resetBtn.addEventListener('click', () => {
+    if (!confirm('Reset all calibration data?')) return;
+    for (const id of [CLASS_SNARE, CLASS_HIGHTOM, CLASS_MIDTOM, CLASS_LOWTOM, CLASS_KICK]) {
+      rawSamples[id] = [];
+      normalizedSamples[id] = [];
+    }
+    featureMeans = null;
+    featureStds = null;
+    classifierStatusEl.textContent = 'untrained';
+    refreshCountsOnUI();
+    statusTextEl.innerHTML = 'Calibration reset.';
+  });
+
+  // export calibration JSON
+  exportBtn.addEventListener('click', () => {
     if (!featureMeans) { alert('No trained calibration to export'); return; }
-    const out = { featureMeans, featureStds, rawSamples };
-    const blob = new Blob([JSON.stringify(out)], {type:'application/json'});
+    const exportObject = {
+      featureMeans: featureMeans,
+      featureStds: featureStds,
+      rawSamples: rawSamples
+    };
+    const json = JSON.stringify(exportObject);
+    const blob = new Blob([json], {type: 'application/json'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = 'drum_calibration.json'; a.click();
+    a.href = url;
+    a.download = 'drum_calibration.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
     URL.revokeObjectURL(url);
   });
 
-  importBtn.addEventListener('click', ()=> importFile.click());
-  importFile.addEventListener('change', (ev)=> {
-    const f = ev.target.files[0];
-    if (!f) return;
+  // import calibration JSON
+  importBtn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', (ev) => {
+    const file = ev.target.files && ev.target.files[0];
+    if (!file) return;
     const reader = new FileReader();
-    reader.onload = (e)=> {
+    reader.onload = (e) => {
       try {
-        const json = JSON.parse(e.target.result);
-        if (json.featureMeans && json.featureStds && json.rawSamples) {
-          featureMeans = json.featureMeans;
-          featureStds = json.featureStds;
-          for (const id of [1,2,3,4,5]) rawSamples[id] = json.rawSamples[id] || [];
-          computeNormalization(); // rehydrate normalized samples
-          clfStatusEl.textContent = 'trained (imported)';
-          refreshCounts();
-          instructionEl.textContent = 'Imported calibration. Press Live to classify.';
-        } else alert('Invalid calibration file.');
-      } catch (err) { alert('Invalid JSON'); }
+        const parsed = JSON.parse(e.target.result);
+        if (!parsed.featureMeans || !parsed.featureStds || !parsed.rawSamples) {
+          alert('Invalid calibration file format');
+          return;
+        }
+        featureMeans = parsed.featureMeans;
+        featureStds = parsed.featureStds;
+        for (const id of [CLASS_SNARE, CLASS_HIGHTOM, CLASS_MIDTOM, CLASS_LOWTOM, CLASS_KICK]) {
+          rawSamples[id] = parsed.rawSamples[id] || [];
+        }
+        computeNormalizationAndPrepareKNN(); // to populate normalizedSamples
+        classifierStatusEl.textContent = 'trained (imported)';
+        refreshCountsOnUI();
+        statusTextEl.innerHTML = 'Calibration imported. Press Live.';
+      } catch (err) {
+        console.error('Import error', err);
+        alert('Failed to parse calibration file: ' + err.message);
+      }
     };
-    reader.readAsText(f);
+    reader.readAsText(file);
   });
 
-  // start audio
-  async function startAudio(){
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    sampleRate = audioCtx.sampleRate;
-    analyser = audioCtx.createAnalyser();
-    analyser.fftSize = Math.min(FFT_SIZE, 32768);
-    analyser.smoothingTimeConstant = 0.0;
-
-    scriptNode = audioCtx.createScriptProcessor(PROCESSOR_SIZE, 1, 1);
-    scriptNode.onaudioprocess = onAudioProcess;
-
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount:1, echoCancellation:false, noiseSuppression:false, autoGainControl:false }});
-    src = audioCtx.createMediaStreamSource(stream);
-    src.connect(analyser);
-    src.connect(scriptNode);
-    scriptNode.connect(audioCtx.destination);
-
-    // ring buffer
-    ringLen = Math.ceil(RING_SECS * sampleRate);
-    ringBuffer = new Float32Array(ringLen);
-    ringWrite = 0;
-
-    isRunning = true;
-    mode = 'idle';
-    refreshCounts();
-    debug('Audio started — sr:' + sampleRate + ' fft:' + analyser.fftSize);
+  /* =========================
+     Helper: class label
+     ========================= */
+  function classLabel(id) {
+    switch(id) {
+      case CLASS_SNARE: return 'Snare';
+      case CLASS_HIGHTOM: return 'High Tom';
+      case CLASS_MIDTOM: return 'Mid Tom';
+      case CLASS_LOWTOM: return 'Low Tom';
+      case CLASS_KICK: return 'Kick';
+      default: return 'Unknown';
+    }
   }
 
-  function stopAudio(){
-    if (!isRunning) return;
-    try { src.mediaStream.getTracks().forEach(t=>t.stop()); } catch(e){}
-    try { scriptNode.disconnect(); analyser.disconnect(); audioCtx.close(); } catch(e){}
-    isRunning = false;
-    mode = 'idle';
-    debug('Audio stopped');
+  /* =========================
+     Start / Stop Audio Processing
+     ========================= */
+
+  async function startAudioProcessing() {
+    // Create AudioContext
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    sampleRate = audioContext.sampleRate;
+
+    // analyser
+    analyserNode = audioContext.createAnalyser();
+    analyserNode.fftSize = Math.min(ANALYSER_FFT_SIZE, 32768);
+    analyserNode.smoothingTimeConstant = 0.0;
+
+    // script processor for live detection
+    scriptProcessorNode = audioContext.createScriptProcessor(SCRIPT_PROCESSOR_SIZE, 1, 1);
+    scriptProcessorNode.onaudioprocess = onAudioProcess;
+
+    // get mic
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        channelCount: 1,
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false
+      }
+    });
+
+    mediaStreamSource = audioContext.createMediaStreamSource(stream);
+    mediaStreamSource.connect(analyserNode);
+    mediaStreamSource.connect(scriptProcessorNode);
+    scriptProcessorNode.connect(audioContext.destination);
+
+    // ring buffer init
+    ringBufferLength = Math.ceil(RING_BUFFER_SECONDS * sampleRate);
+    ringBuffer = new Float32Array(ringBufferLength);
+    ringWriteIndex = 0;
+
+    // reset noise EMA (soft)
+    noiseEMA = 0.0016;
+
+    // reset mode and UI
+    appMode = 'idle';
+    calibratingClassId = null;
+    refreshCountsOnUI();
+
+    writeDebug('Audio started (sr=' + sampleRate + ')');
   }
 
-  // main process loop: write ring buffer + hit detect
-  function onAudioProcess(ev){
-    if (!isRunning) return;
-    const inBuf = ev.inputBuffer.getChannelData(0);
+  function stopAudioProcessing() {
+    try {
+      if (mediaStreamSource && mediaStreamSource.mediaStream) {
+        const tracks = mediaStreamSource.mediaStream.getTracks();
+        for (const t of tracks) t.stop();
+      }
+    } catch(e) {}
+    try { if (scriptProcessorNode) scriptProcessorNode.disconnect(); } catch(e){}
+    try { if (analyserNode) analyserNode.disconnect(); } catch(e){}
+    try { if (audioContext) audioContext.close(); } catch(e){}
+    audioContext = null;
+    analyserNode = null;
+    scriptProcessorNode = null;
+    mediaStreamSource = null;
+    writeDebug('Audio stopped');
+  }
 
-    // write ring
-    for (let i=0;i<inBuf.length;i++){
-      ringBuffer[ringWrite++] = inBuf[i];
-      if (ringWrite >= ringLen) ringWrite = 0;
+  /* =========================
+     Main audio processing / hit detection
+     ========================= */
+
+  function onAudioProcess(audioProcessingEvent) {
+    if (!audioContext || !analyserNode) return;
+
+    const inputBuffer = audioProcessingEvent.inputBuffer;
+    const channelData = inputBuffer.getChannelData(0);
+
+    // write into ring buffer
+    for (let i = 0; i < channelData.length; i++) {
+      ringBuffer[ringWriteIndex++] = channelData[i];
+      if (ringWriteIndex >= ringBufferLength) ringWriteIndex = 0;
     }
 
-    // compute quick RMS/peak for gating
-    let sumAbs = 0, peak = 0;
-    for (let i=0;i<inBuf.length;i++){
-      const v = Math.abs(inBuf[i]);
+    // compute basic block statistics for hit detection (mean abs and peak)
+    let sumAbs = 0;
+    let localPeak = 0;
+    for (let i=0;i<channelData.length;i++){
+      const v = Math.abs(channelData[i]);
       sumAbs += v;
-      if (v > peak) peak = v;
+      if (v > localPeak) localPeak = v;
     }
-    const meanAbs = sumAbs / inBuf.length;
+    const meanAbs = sumAbs / channelData.length;
 
-    // update noise floor
+    // update noise floor estimate
     noiseEMA = noiseEMA * (1 - EMA_ALPHA) + meanAbs * EMA_ALPHA;
-    const meanThr = Math.max(MIN_MEANABS, noiseEMA * HIT_MULT);
-    const peakThr = Math.max(PEAK_ABS_MIN, noiseEMA * PEAK_MULT);
+
+    // compute thresholds
+    const meanThreshold = Math.max(MIN_MEANABS, noiseEMA * HIT_MEAN_MULTIPLIER);
+    const peakThreshold = Math.max(PEAK_ABS_MIN, noiseEMA * HIT_PEAK_MULTIPLIER);
 
     const now = performance.now();
 
-    if ((meanAbs >= meanThr || peak >= peakThr) && (now - lastHitTime) > HIT_DEBOUNCE_MS) {
-      // register hit once per debounce
-      lastHitTime = now;
-      // schedule capture (immediate)
-      captureAndHandle();
+    // if energy crosses thresholds and debounce allows, treat as a hit
+    if ((meanAbs >= meanThreshold || localPeak >= peakThreshold) && (now - lastBlockHitTime > HIT_DETECTION_DEBOUNCE_MS)) {
+      lastBlockHitTime = now;
+      // schedule capture immediate
+      processDetectedHit();
     }
   }
 
-  // copy last X seconds from ring buffer
-  function copyRingLatest(durationSec = 0.6) {
-    const len = Math.min(ringLen, Math.floor(durationSec * sampleRate));
-    const out = new Float32Array(len);
-    const start = (ringWrite - len + ringLen) % ringLen;
-    if (start + len <= ringLen) {
-      out.set(ringBuffer.subarray(start, start + len), 0);
+  /* =========================
+     Capture a hit region and handle (calibrate or classify)
+     ========================= */
+
+  function processDetectedHit() {
+    if (!ringBuffer) return;
+
+    // copy a slice of last audio into a new Float32Array for analysis
+    const captured = copyLatestFromRingBuffer(0.6); // 600 ms window
+    if (!captured || captured.length === 0) return;
+
+    // extract features
+    const features = extractFeatureSet(captured);
+
+    // If we're calibrating, store sample (debounced to avoid multiple counts per physical hit)
+    if (appMode === 'calibrate' && calibratingClassId) {
+      const now = performance.now();
+      if (now - lastCalRecordTime >= CALIBRATE_HIT_COOLDOWN_MS) {
+        rawSamples[calibratingClassId].push(features);
+        lastCalRecordTime = now;
+        refreshCountsOnUI();
+        statusTextEl.innerHTML = `Calibrating ${classLabel(calibratingClassId)}: ${rawSamples[calibratingClassId].length}/${SAMPLES_PER_CLASS}`;
+        // if finished with class, reset calibratingClassId
+        if (rawSamples[calibratingClassId].length >= SAMPLES_PER_CLASS) {
+          calibratingClassId = null;
+          appMode = 'idle';
+          statusTextEl.innerHTML = `Done with class. Press Train when all classes have ${SAMPLES_PER_CLASS} samples.`;
+        }
+      } // else ignore because we're in cooldown
+      return;
+    }
+
+    // If live, classify and output benchmark frequency only (no drum name)
+    if (appMode === 'live') {
+      let outputFreqText = 'unknown';
+      if (featureMeans) {
+        // normalize the features into vector
+        const vector = convertFeaturesToNormalizedVector(features);
+        const classification = classifyKNN(vector, K_NEAREST);
+        const chosenClass = classification.pred;
+        const chosenBenchmarkFreq = BENCHMARK_FREQUENCIES[chosenClass];
+        if (chosenBenchmarkFreq !== undefined && chosenBenchmarkFreq !== null) {
+          outputFreqText = Math.round(chosenBenchmarkFreq) + ' Hz';
+        }
+        // debug panel
+        updateDebugPanel(features, vector, classification);
+      } else {
+        // fallback: use simple heuristic based on centroid zones (no classifier)
+        const guessedClass = heuristicGuessClass(features);
+        const fallbackFreq = BENCHMARK_FREQUENCIES[guessedClass];
+        outputFreqText = fallbackFreq ? Math.round(fallbackFreq) + ' Hz' : 'unknown';
+        updateDebugPanel(features, null, { pred: guessedClass, conf: 0, dists: [] });
+      }
+      frequencyDisplay.textContent = outputFreqText;
+      return;
+    }
+
+    // If not in calibrate/live mode, show heuristic value (no training)
+    const fallbackClass = heuristicGuessClass(features);
+    const fallbackFreq = BENCHMARK_FREQUENCIES[fallbackClass];
+    frequencyDisplay.textContent = fallbackFreq ? Math.round(fallbackFreq) + ' Hz' : 'idle';
+    updateDebugPanel(features, null, { pred: fallbackClass, conf: 0, dists: [] });
+  }
+
+  /* =========================
+     Copy latest N seconds from ring buffer (helper)
+     ========================= */
+  function copyLatestFromRingBuffer(durationSeconds) {
+    if (!ringBuffer) return new Float32Array(0);
+    const length = Math.min(ringBufferLength, Math.floor(durationSeconds * sampleRate));
+    const out = new Float32Array(length);
+    const start = (ringWriteIndex - length + ringBufferLength) % ringBufferLength;
+    if (start + length <= ringBufferLength) {
+      out.set(ringBuffer.subarray(start, start + length), 0);
     } else {
-      const tail = ringLen - start;
-      out.set(ringBuffer.subarray(start, ringLen), 0);
-      out.set(ringBuffer.subarray(0, len - tail), tail);
+      const tail = ringBufferLength - start;
+      out.set(ringBuffer.subarray(start, ringBufferLength), 0);
+      out.set(ringBuffer.subarray(0, length - tail), tail);
     }
     return out;
   }
 
-  // extract features (same as earlier comprehensive set but concise)
-  function extractFeatures(timeBuf) {
-    // spectral snapshot
-    const freqLen = analyser.frequencyBinCount;
-    const freqBytes = new Uint8Array(freqLen);
-    analyser.getByteFrequencyData(freqBytes);
-    const binHz = sampleRate / analyser.fftSize;
+  /* =========================
+     Feature extraction
+     - We compute a set of both spectral and time-domain features.
+     - The returned object is used for calibration and classification.
+     ========================= */
 
-    let sumMag = 0, weighted = 0, maxMag = 0, maxBin = 0;
-    for (let i=1;i<freqLen;i++){
-      const m = Math.max(0, freqBytes[i]);
+  function extractFeatureSet(timeDomainBuffer) {
+    // timeDomainBuffer: Float32Array, recent audio (most recent samples last)
+    // provide many features so classifier has orthogonal info
+    const features = {};
+
+    // 1) Spectral snapshot via analyser node: (we rely on analyser() global node to get FFT snapshot)
+    // We use analyser.getByteFrequencyData (0..255) for speed.
+    // Note: getByteFrequencyData is amplitude-like; conversion to actual magnitude isn't necessary for relative comparisons.
+    const frequencyBinCount = analyserNode.frequencyBinCount;
+    const freqByteArray = new Uint8Array(frequencyBinCount);
+    analyserNode.getByteFrequencyData(freqByteArray);
+    const binHz = sampleRate / analyserNode.fftSize;
+
+    // spectral sums
+    let totalMag = 0;
+    let weightedSumHz = 0;
+    let maxMag = 0;
+    let maxBinIndex = 0;
+    for (let i = 1; i < frequencyBinCount; i++) {
+      const m = Math.max(0, freqByteArray[i]);
       const f = i * binHz;
-      sumMag += m;
-      weighted += m * f;
-      if (m > maxMag) { maxMag = m; maxBin = i; }
-    }
-    const centroid = sumMag > 0 ? (weighted / sumMag) : 0;
-    const peakFreq = maxBin * binHz;
-
-    // band ratios
-    const lowRange = [20,160], midRange=[160,900], highRange=[900, sampleRate/2];
-    let E_low=0, E_mid=0, E_high=0;
-    for (let i=1;i<freqLen;i++){
-      const f = i*binHz, m = freqBytes[i];
-      if (f >= lowRange[0] && f <= lowRange[1]) E_low += m;
-      else if (f > midRange[0] && f <= midRange[1]) E_mid += m;
-      else if (f > highRange[0] && f <= highRange[1]) E_high += m;
-    }
-    const eTot = Math.max(1, E_low + E_mid + E_high);
-    const lowR = E_low / eTot, midR = E_mid / eTot, highR = E_high / eTot;
-
-    // flatness approx
-    let logSum=0, nz=0;
-    for (let i=1;i<freqLen;i++){ const v = Math.max(1, freqBytes[i]); logSum += Math.log(v); nz++; }
-    const geoMean = Math.exp(logSum / Math.max(1,nz));
-    const arithMean = sumMag / Math.max(1, freqLen-1);
-    const flatness = arithMean > 0 ? (geoMean / arithMean) : 0;
-
-    // rolloff 85%
-    let acc=0, rollF=0;
-    for (let i=1;i<freqLen;i++){
-      acc += freqBytes[i];
-      if (acc >= sumMag * 0.85){ rollF = i * binHz; break; }
-    }
-
-    // time-domain features
-    const N = timeBuf.length;
-    let sumSq=0, peak=0;
-    for (let i=0;i<N;i++){ const v=timeBuf[i]; sumSq += v*v; if (Math.abs(v)>peak) peak = Math.abs(v); }
-    const rms = Math.sqrt(sumSq / Math.max(1,N));
-    const peakToRms = peak / Math.max(1e-8, rms);
-
-    let zc=0;
-    for (let i=1;i<N;i++){ if ((timeBuf[i-1] >= 0 && timeBuf[i] < 0) || (timeBuf[i-1] < 0 && timeBuf[i] >= 0)) zc++; }
-    const zcr = zc / N;
-
-    // attack time (index where abs >= 85% of peak in first 150ms)
-    const attackWindow = Math.min(N, Math.floor(0.15 * sampleRate));
-    let attackIdx=-1;
-    for (let i=0;i<attackWindow;i++){ if (Math.abs(timeBuf[i]) >= 0.85 * peak) { attackIdx = i; break; } }
-    const attackMs = attackIdx >=0 ? (attackIdx / sampleRate * 1000) : (attackWindow/sampleRate*1000);
-
-    // early/late energy ratio
-    const earlyN = Math.min(N, Math.floor(0.1 * sampleRate));
-    const lateN = Math.min(N, Math.floor(0.45 * sampleRate));
-    let eEarly=0, eLate=0;
-    for (let i=0;i<earlyN;i++) eEarly += timeBuf[i]*timeBuf[i];
-    for (let i=earlyN;i<lateN;i++) eLate += timeBuf[i]*timeBuf[i];
-    const decayRatio = (eEarly + 1e-9) / (eLate + 1e-9);
-
-    // autocorr strength (downsampled)
-    function downsample(buf, orig, target=8000){
-      if (target >= orig) return buf.slice();
-      const ratio = orig / target;
-      const outLen = Math.floor(buf.length / ratio);
-      const out = new Float32Array(outLen);
-      for (let i=0;i<outLen;i++){
-        const s = Math.floor(i*ratio), e = Math.floor((i+1)*ratio);
-        let sum=0, c=0;
-        for (let j=s;j<e && j<buf.length;j++){ sum += buf[j]; c++; }
-        out[i] = c>0 ? sum/c : 0;
+      totalMag += m;
+      weightedSumHz += m * f;
+      if (m > maxMag) {
+        maxMag = m;
+        maxBinIndex = i;
       }
-      return out;
     }
-    const ds = downsample(timeBuf, sampleRate, 8000);
-    const dsN = ds.length;
-    let acBest=0;
-    const minLag = Math.max(2, Math.floor(8000 / 400));
-    const maxLag = Math.min(dsN-2, Math.floor(8000 / 20));
-    for (let lag=minLag; lag<=maxLag; lag++){
+    const centroidHz = totalMag > 0 ? (weightedSumHz / totalMag) : 0;
+    const peakBinHz = maxBinIndex * binHz;
+
+    features.centroid = centroidHz;
+    features.peakFreq = peakBinHz;
+
+    // 2) Band energy ratios (low/mid/high)
+    const lowBand = [20, 160];
+    const midBand = [160, 900];
+    const highBand = [900, sampleRate/2];
+    let energyLow = 0, energyMid = 0, energyHigh = 0;
+    for (let i=1;i<frequencyBinCount;i++){
+      const f = i * binHz;
+      const m = freqByteArray[i];
+      if (f >= lowBand[0] && f <= lowBand[1]) energyLow += m;
+      else if (f > midBand[0] && f <= midBand[1]) energyMid += m;
+      else if (f > highBand[0] && f <= highBand[1]) energyHigh += m;
+    }
+    const energyTotal = Math.max(1, energyLow + energyMid + energyHigh);
+    features.lowRatio = energyLow / energyTotal;
+    features.midRatio = energyMid / energyTotal;
+    features.highRatio = energyHigh / energyTotal;
+
+    // 3) spectral flatness (approx using byte mags)
+    let logSum = 0, nz = 0;
+    for (let i=1;i<frequencyBinCount;i++){
+      const v = Math.max(1, freqByteArray[i]);
+      logSum += Math.log(v);
+      nz++;
+    }
+    const geoMean = Math.exp(logSum / Math.max(1, nz));
+    const arithMean = totalMag / Math.max(1, frequencyBinCount-1);
+    features.flatness = arithMean > 0 ? geoMean / arithMean : 0;
+
+    // 4) spectral rolloff 85%
+    let cumulative = 0;
+    let rolloffHz = 0;
+    for (let i=1;i<frequencyBinCount;i++){
+      cumulative += freqByteArray[i];
+      if (cumulative >= totalMag * 0.85) { rolloffHz = i * binHz; break; }
+    }
+    features.rolloff = rolloffHz;
+
+    // 5) time domain metrics (rms, peak, peak/rms)
+    const N = timeDomainBuffer.length;
+    let sumSquares = 0;
+    let absPeak = 0;
+    for (let i=0;i<N;i++){
+      const v = timeDomainBuffer[i];
+      sumSquares += v * v;
+      const av = Math.abs(v);
+      if (av > absPeak) absPeak = av;
+    }
+    const rms = Math.sqrt(sumSquares / Math.max(1, N));
+    features.rms = rms;
+    features.peakToRms = absPeak / Math.max(1e-8, rms);
+
+    // 6) zero crossing rate
+    let zc = 0;
+    for (let i=1;i<N;i++){
+      if ((timeDomainBuffer[i-1] >= 0 && timeDomainBuffer[i] < 0) || (timeDomainBuffer[i-1] < 0 && timeDomainBuffer[i] >= 0)) zc++;
+    }
+    features.zcr = zc / N;
+
+    // 7) attack time (time to 85% of peak within first 150ms)
+    const attackWindow = Math.min(N, Math.floor(0.15 * sampleRate));
+    let attackIndex = -1;
+    for (let i=0;i<attackWindow;i++){
+      if (Math.abs(timeDomainBuffer[i]) >= 0.85 * absPeak) { attackIndex = i; break; }
+    }
+    features.attackMs = attackIndex >= 0 ? (attackIndex / sampleRate * 1000) : (attackWindow / sampleRate * 1000);
+
+    // 8) early/late energy ratio (decay)
+    const earlySamples = Math.min(N, Math.floor(0.1 * sampleRate));
+    const lateSamples = Math.min(N, Math.floor(0.45 * sampleRate));
+    let earlyEnergy = 0, lateEnergy = 0;
+    for (let i=0;i<earlySamples;i++) earlyEnergy += timeDomainBuffer[i]*timeDomainBuffer[i];
+    for (let i=earlySamples;i<lateSamples;i++) lateEnergy += timeDomainBuffer[i]*timeDomainBuffer[i];
+    features.decayRatio = (earlyEnergy + 1e-9) / (lateEnergy + 1e-9);
+
+    // 9) autocorrelation strength (quick downsample) — we compute a naive autocorr peak in 20-400Hz band
+    const ds = downsampleForAC(timeDomainBuffer, sampleRate, 8000);
+    const acStrength = computeQuickAutocorrStrength(ds, 8000, 20, 400);
+    features.acStrength = acStrength;
+
+    // final: return features object
+    return features;
+  }
+
+  // helper: downsample roughly by averaging into buckets
+  function downsampleForAC(buf, origRate, targetRate) {
+    if (targetRate >= origRate) return buf.slice();
+    const ratio = origRate / targetRate;
+    const outLen = Math.floor(buf.length / ratio);
+    const out = new Float32Array(Math.max(1, outLen));
+    for (let i=0;i<out.length;i++){
+      const start = Math.floor(i * ratio), end = Math.floor((i+1) * ratio);
+      let s=0, c=0;
+      for (let j=start;j<end && j<buf.length;j++){ s += buf[j]; c++; }
+      out[i] = c>0 ? s/c : 0;
+    }
+    return out;
+  }
+
+  function computeQuickAutocorrStrength(dsBuf, dsRate, lowHz, highHz) {
+    if (!dsBuf || dsBuf.length < 4) return 0;
+    const dsN = dsBuf.length;
+    let acBest = 0;
+    const minLag = Math.max(2, Math.floor(dsRate / highHz));
+    const maxLag = Math.min(dsN - 2, Math.floor(dsRate / lowHz));
+    for (let lag = minLag; lag <= maxLag; lag++){
       let s=0;
-      for (let i=0;i<dsN-lag;i++) s += ds[i]*ds[i+lag];
+      for (let i=0;i<dsN - lag; i++) s += dsBuf[i] * dsBuf[i + lag];
       if (s > acBest) acBest = s;
     }
-    const acStrength = acBest / Math.max(1e-8, dsN);
-
-    return {
-      centroid, peakFreq, lowR, midR, highR, flatness, rollF,
-      rms, peakToRms, zcr, attackMs, decayRatio, acStrength
-    };
+    return acBest / Math.max(1, dsN);
   }
 
-  // capture + handle: used by hit detector
-  function captureAndHandle(){
-    const now = performance.now();
-    // ensure calibration debouncing: one physical hit -> one calibration sample
-    if (now - lastCalRecordTime < CALIBRATE_COOLDOWN_MS) {
-      // too soon since last calibration record, ignore
-    }
-    // copy latest buffer and extract
-    const timeBuf = copyRingLatest(0.6);
-    const feats = extractFeatures(timeBuf);
+  /* =========================
+     Normalization & k-NN preparation
+     ========================= */
 
-    if (mode === 'calibrate' && calibratingFor) {
-      // record only if cooldown passed
-      if (now - lastCalRecordTime >= CALIBRATE_COOLDOWN_MS) {
-        rawSamples[calibratingFor].push(feats);
-        lastCalRecordTime = now;
-        refreshCounts();
-        instructionEl.textContent = `Calibrating ${labelName(calibratingFor)}: ${rawSamples[calibratingFor].length}/${samplesPerClass}`;
-        if (rawSamples[calibratingFor].length >= samplesPerClass) {
-          calibratingFor = null;
-          mode = 'idle';
-          instructionEl.textContent = `Done for class. Press another Calibrate or Train.`;
-        }
-      }
-      return;
-    }
-
-    if (mode === 'live' && featureMeans) {
-      // classify
-      const fv = vectorizeAndNormalize(feats);
-      const out = classifyKNN(fv, knnK);
-      labelEl.textContent = `${out.pred} (${labelName(out.pred)}) ${Math.round(out.conf*100)}%`;
-      debugUpdate(feats, fv, out.pred, out.conf, out.dists);
-      lastShownTime = now;
-      return;
-    }
-
-    // fallback if not trained: show heuristic-only label (centroid)
-    const h = heuristicLabel(feats);
-    labelEl.textContent = `${h} (${labelName(h)})`;
-    debugUpdate(feats, null, h, 0, null);
-    lastShownTime = now;
-  }
-
-  // Copy ring latest helper
-  function copyRingLatest(durationSec=0.6){
-    const len = Math.min(ringLen, Math.floor(durationSec * sampleRate));
-    const out = new Float32Array(len);
-    const start = (ringWrite - len + ringLen) % ringLen;
-    if (start + len <= ringLen) out.set(ringBuffer.subarray(start, start+len), 0);
-    else {
-      const tail = ringLen - start;
-      out.set(ringBuffer.subarray(start, ringLen), 0);
-      out.set(ringBuffer.subarray(0, len - tail), tail);
-    }
-    return out;
-  }
-
-  // begin calibration for a class id
-  function beginCalibration(id) {
-    if (!isRunning) { alert('Start audio first'); return; }
-    calibratingFor = id;
-    mode = 'calibrate';
-    instructionEl.textContent = `Calibrating ${labelName(id)} — hit the drum ${samplesPerClass} times (one hit increments by 1).`;
-  }
-
-  // compute means/std and create normalized samples
-  function computeNormalization() {
-    // flatten all samples
-    const all = []; const labels = [];
-    for (const id of [1,2,3,4,5]) {
-      for (const s of rawSamples[id]) {
-        all.push(objToArray(s)); labels.push(id);
+  function computeNormalizationAndPrepareKNN() {
+    // convert rawSamples objects into flat matrix for mean/std
+    const allVectors = [];
+    const labels = [];
+    for (const id of [CLASS_SNARE, CLASS_HIGHTOM, CLASS_MIDTOM, CLASS_LOWTOM, CLASS_KICK]) {
+      for (const featObj of rawSamples[id]) {
+        allVectors.push(featureObjectToArray(featObj));
+        labels.push(id);
       }
     }
-    const n = all.length;
-    if (n === 0) return;
-    const dim = all[0].length;
+    if (allVectors.length === 0) {
+      writeDebug('No samples to normalize.');
+      return;
+    }
+    const dim = allVectors[0].length;
     featureMeans = new Array(dim).fill(0);
     featureStds = new Array(dim).fill(0);
+
+    // compute means
     for (let j=0;j<dim;j++){
-      let sum=0; for (let i=0;i<n;i++) sum += all[i][j];
-      featureMeans[j] = sum / n;
+      let s = 0;
+      for (let i=0;i<allVectors.length;i++) s += allVectors[i][j];
+      featureMeans[j] = s / allVectors.length;
     }
+
+    // compute stds
     for (let j=0;j<dim;j++){
-      let s=0; for (let i=0;i<n;i++){ const d = all[i][j] - featureMeans[j]; s += d*d; }
-      featureStds[j] = Math.sqrt(s / Math.max(1, n-1)) || 1e-6;
+      let s = 0;
+      for (let i=0;i<allVectors.length;i++){
+        const d = allVectors[i][j] - featureMeans[j];
+        s += d*d;
+      }
+      featureStds[j] = Math.sqrt(s / Math.max(1, allVectors.length - 1)) || 1e-6;
     }
-    // create normalizedSamples
-    normalizedSamples = {1:[],2:[],3:[],4:[],5:[]};
-    for (const id of [1,2,3,4,5]) {
-      for (const s of rawSamples[id]) {
-        const arr = objToArray(s);
-        const norm = arr.map((v,i)=> (v - featureMeans[i]) / featureStds[i]);
+
+    // now produce normalizedSamples
+    normalizedSamples = {
+      [CLASS_SNARE]:   [],
+      [CLASS_HIGHTOM]: [],
+      [CLASS_MIDTOM]:  [],
+      [CLASS_LOWTOM]:  [],
+      [CLASS_KICK]:    []
+    };
+    for (const id of [CLASS_SNARE, CLASS_HIGHTOM, CLASS_MIDTOM, CLASS_LOWTOM, CLASS_KICK]) {
+      for (const featObj of rawSamples[id]) {
+        const arr = featureObjectToArray(featObj);
+        const norm = arr.map((v,i) => (v - featureMeans[i]) / featureStds[i]);
         normalizedSamples[id].push(norm);
       }
     }
-    debug('Computed normalization. Features dim: ' + dim);
+
+    writeDebug('Normalization complete. Feature dim: ' + featureMeans.length);
   }
 
-  // convert feature obj -> ordered array
-  function objToArray(o) {
+  // helper: convert feature object to ordered array — MUST match ordering everywhere
+  function featureObjectToArray(o) {
     return [
       o.centroid || 0,
       o.peakFreq || 0,
-      o.lowR || 0,
-      o.midR || 0,
-      o.highR || 0,
+      o.lowRatio || 0,
+      o.midRatio || 0,
+      o.highRatio || 0,
       o.flatness || 0,
-      o.rollF || 0,
+      o.rolloff || 0,
       o.rms || 0,
       o.peakToRms || 0,
       o.zcr || 0,
@@ -543,98 +848,185 @@ Behavior:
     ];
   }
 
-  // normalize single feature object to vector
-  function vectorizeAndNormalize(feats) {
-    const arr = objToArray(feats);
-    if (!featureMeans) return arr;
-    return arr.map((v,i)=> (v - featureMeans[i]) / featureStds[i]);
+  // helper: convert raw features to normalized vector using computed means/stds
+  function convertFeaturesToNormalizedVector(featObj) {
+    const arr = featureObjectToArray(featObj);
+    if (!featureMeans || !featureStds) return arr;
+    return arr.map((v,i) => (v - featureMeans[i]) / featureStds[i]);
   }
 
-  // k-NN classify
-  function classifyKNN(fv, k=3) {
-    if (!featureMeans) return {pred: heuristicLabelObj(fv), conf:0, dists:[]};
-    const pool = [];
-    for (const id of [1,2,3,4,5]) for (const s of normalizedSamples[id]) pool.push({v:s,label:id});
-    const dists = pool.map(p => {
-      let s=0; for (let i=0;i<p.v.length;i++){ const d=fv[i]-p.v[i]; s += d*d; } return {label:p.label, dist: Math.sqrt(s)};
-    });
-    dists.sort((a,b)=>a.dist - b.dist);
-    const topk = dists.slice(0,k);
-    const votes = {};
-    for (const t of topk) votes[t.label] = (votes[t.label]||0) + 1;
-    let best=null, bestc=-1;
-    for (const l in votes) if (votes[l] > bestc){ bestc = votes[l]; best = Number(l); }
-    const conf = bestc / k;
-    return {pred: best, conf, dists};
-  }
+  /* =========================
+     k-NN classifier (fixed K_NEAREST)
+     ========================= */
 
-  // heuristic fallback (centroid)
-  function heuristicLabel(feats) {
-    const c = feats.centroid || 0;
-    if (c <= 160) return 2; // kick
-    if (c >= 420) return 1; // snare
-    // middle centroid -> decide between toms by comparing mid/low ratios roughly
-    if (feats.midR > feats.lowR) {
-      // decide low/mid/high tom by centroid zones
-      if (c < 220) return 3;
-      if (c < 300) return 4;
-      return 5;
-    } else {
-      return 3;
+  function classifyKNN(vector, k) {
+    if (!featureMeans || !normalizedSamples) {
+      // fallback: no training present
+      const fallback = heuristicGuessClassFromVector(vector);
+      return { pred: fallback, conf: 0, dists: [] };
     }
+
+    // build pool: list of {v: normalizedVector, label}
+    const pool = [];
+    for (const id of [CLASS_SNARE, CLASS_HIGHTOM, CLASS_MIDTOM, CLASS_LOWTOM, CLASS_KICK]) {
+      for (const sampleVec of normalizedSamples[id]) {
+        pool.push({ v: sampleVec, label: id });
+      }
+    }
+
+    // compute Euclidean distances
+    const distances = pool.map(p => {
+      let s = 0;
+      for (let i=0;i<p.v.length;i++){
+        const d = (vector[i] - p.v[i]);
+        s += d*d;
+      }
+      return { label: p.label, dist: Math.sqrt(s) };
+    });
+
+    // sort ascending by distance
+    distances.sort((a,b) => a.dist - b.dist);
+
+    // pick top k
+    const topk = distances.slice(0, k);
+
+    // count votes
+    const votes = {};
+    for (const t of topk) votes[t.label] = (votes[t.label] || 0) + 1;
+
+    // winner
+    let bestLabel = null, bestCount = -1;
+    for (const label in votes) {
+      if (votes[label] > bestCount) {
+        bestCount = votes[label];
+        bestLabel = Number(label);
+      }
+    }
+
+    const confidence = bestCount / k;
+    return { pred: bestLabel, conf: confidence, dists: distances };
   }
-  function heuristicLabelObj(arr) {
-    // arr maybe normalized vector: centroid at index 0 (if normalized, not accurate)
-    return 2;
+
+  /* =========================
+     Heuristic fallback based on centroid ranges (simple)
+     ========================= */
+  function heuristicGuessClass(features) {
+    const c = features.centroid || 0;
+    // These zones are intentionally broad and simple — only used if classifier not trained
+    if (c <= 110) return CLASS_KICK;                // very low -> kick
+    if (c >= 170) return CLASS_SNARE;               // high -> snare
+    if (c >= 150) return CLASS_HIGHTOM;             // upper-mid -> high tom
+    if (c >= 135) return CLASS_MIDTOM;              // mid -> mid tom
+    return CLASS_LOWTOM;                            // lower-mid -> low tom
   }
 
-  // ui helpers
-  function labelName(id){ return id===1? 'snare' : id===2? 'kick' : id===3? 'low tom' : id===4? 'mid tom' : 'high tom'; }
-  function refreshCounts(){
-    snareCountEl.textContent = rawSamples[1].length;
-    kickCountEl.textContent = rawSamples[2].length;
-    lowCountEl.textContent = rawSamples[3].length;
-    midCountEl.textContent = rawSamples[4].length;
-    highCountEl.textContent = rawSamples[5].length;
-    clfStatusEl.textContent = featureMeans ? 'trained' : 'untrained';
+  // fallback if vector is normalized / or not available
+  function heuristicGuessClassFromVector(vec) {
+    if (!vec || vec.length === 0) return CLASS_KICK;
+    // centroid is index 0 in our vector
+    const c = vec[0];
+    // if normalized, c may be around 0; fallback to simple mapping anyway
+    if (c <= -1.0) return CLASS_KICK;
+    if (c >= 1.0) return CLASS_SNARE;
+    // otherwise return mid tom
+    return CLASS_MIDTOM;
   }
 
-  function debug(txt){ debugEl.textContent = txt; console.log(txt); }
-
-  function debugUpdate(feats, fv, pred, conf, dists){
-    const s = [
-      `pred: ${pred} (${labelName(pred)}) conf:${Math.round(conf*100)}%`,
-      `centroid:${Math.round(feats.centroid)}Hz peak:${Math.round(feats.peakFreq)}Hz`,
-      `low/mid/high: ${feats.lowR.toFixed(2)}/${feats.midR.toFixed(2)}/${feats.highR.toFixed(2)}`,
-      `attack:${Math.round(feats.attackMs)}ms pk/RMS:${feats.peakToRms.toFixed(2)} decayR:${feats.decayRatio.toFixed(2)}`,
-      `acStr:${feats.acStrength.toFixed(3)} rms:${feats.rms.toFixed(4)}`
-    ];
-    if (fv) s.push('norm vec: ' + fv.map(v=>v.toFixed(2)).join(', '));
-    if (dists) s.push('nearest:' + dists.slice(0,6).map(x=>`${x.label}:${x.dist.toFixed(2)}`).join(', '));
-    debugEl.textContent = s.join('\n');
+  /* =========================
+     Utility: find classes missing required samples
+     ========================= */
+  function classesWithInsufficientSamples() {
+    const missing = [];
+    for (const id of [CLASS_SNARE, CLASS_HIGHTOM, CLASS_MIDTOM, CLASS_LOWTOM, CLASS_KICK]) {
+      if (rawSamples[id].length < SAMPLES_PER_CLASS) missing.push(id);
+    }
+    return missing;
   }
 
-  // capture & classification helpers already defined above
-
-  // handle calibration start
-  function beginCalibration(id) {
-    if (!isRunning) { alert('Start audio first'); return; }
-    calibratingFor = id;
-    mode = 'calibrate';
-    instructionEl.textContent = `Calibrating ${labelName(id)} — hit the drum ${samplesPerClass} times. One physical hit increments by 1.`;
+  /* =========================
+     Start calibration for a class
+     ========================= */
+  function beginCalibration(classId) {
+    if (!audioContext) {
+      alert('Start audio first');
+      return;
+    }
+    calibratingClassId = classId;
+    appMode = 'calibrate';
+    statusTextEl.innerHTML = `Calibrating ${classLabel(classId)} — play the drum ${SAMPLES_PER_CLASS} times. One physical hit = 1 sample.`;
   }
 
-  // wire calibration buttons to beginCalibration
-  calSnareBtn.addEventListener('click', ()=> beginCalibration(1));
-  calKickBtn.addEventListener('click', ()=> beginCalibration(2));
-  calLowBtn.addEventListener('click', ()=> beginCalibration(3));
-  calMidBtn.addEventListener('click', ()=> beginCalibration(4));
-  calHighBtn.addEventListener('click', ()=> beginCalibration(5));
+  /* =========================
+     Debug / UI utils
+     ========================= */
 
-  // keep UI counts updated periodically
-  setInterval(refreshCounts, 300);
+  function refreshCountsOnUI() {
+    countSnareEl.textContent = rawSamples[CLASS_SNARE].length;
+    countHighEl.textContent  = rawSamples[CLASS_HIGHTOM].length;
+    countMidEl.textContent   = rawSamples[CLASS_MIDTOM].length;
+    countLowEl.textContent   = rawSamples[CLASS_LOWTOM].length;
+    countKickEl.textContent  = rawSamples[CLASS_KICK].length;
+    classifierStatusEl.textContent = featureMeans ? 'trained' : 'untrained';
+  }
 
-  debug('Ready. Click Start Audio to begin.');
+  function writeDebug(text) {
+    debugPanelEl.textContent = text;
+    console.log('[drum-debug] ' + text);
+  }
+
+  function updateDebugPanel(features, normalizedVector, classification) {
+    const lines = [];
+    lines.push('output (benchmark freq): ' + (classification && classification.pred ? (BENCHMARK_FREQUENCIES[classification.pred] + ' Hz') : 'unknown'));
+    lines.push('classifier confidence: ' + ((classification && classification.conf) ? Math.round(classification.conf * 100) + '%' : 'n/a'));
+    if (features) {
+      lines.push('centroid: ' + Math.round(features.centroid) + ' Hz, peakFreq: ' + Math.round(features.peakFreq) + ' Hz');
+      lines.push('low/mid/high ratios: ' + features.lowRatio.toFixed(2) + ' / ' + features.midRatio.toFixed(2) + ' / ' + features.highRatio.toFixed(2));
+      lines.push('rms: ' + features.rms.toFixed(4) + ', peak/rms: ' + features.peakToRms.toFixed(2));
+      lines.push('attack(ms): ' + Math.round(features.attackMs) + ', decay ratio: ' + features.decayRatio.toFixed(3));
+      lines.push('ac strength: ' + (features.acStrength ? features.acStrength.toFixed(4) : '0'));
+    }
+    if (normalizedVector) lines.push('normVec: ' + normalizedVector.map(v=>v.toFixed(2)).join(', '));
+    if (classification && classification.dists) {
+      lines.push('nearest distances (label:dist): ' + classification.dists.slice(0,6).map(d => `${d.label}:${d.dist.toFixed(2)}`).join(', '));
+    }
+    debugPanelEl.textContent = lines.join('\n');
+  }
+
+  /* =========================
+     Utility: convert features to vector (un/normalized)
+     ========================= */
+  function convertFeaturesToVector(features) {
+    return featureObjectToArray(features);
+  }
+
+  /* =========================
+     Utility: classify & output benchmark freq (external call wrapper)
+     ========================= */
+  function classifyAndGetBenchmarkFrequency(features) {
+    if (!featureMeans) {
+      const guessed = heuristicGuessClass(features);
+      return BENCHMARK_FREQUENCIES[guessed];
+    }
+    const vector = convertFeaturesToNormalizedVector(features);
+    const result = classifyKNN(vector, K_NEAREST);
+    const chosen = result.pred;
+    const freq = BENCHMARK_FREQUENCIES[chosen];
+    return { freq: freq, classification: result, vector: vector };
+  }
+
+  /* =========================
+     Small helpers: class -> human name
+     ========================= */
+  // already defined classLabel()
+
+  /* =========================
+     Initialization: refresh UI counts periodically
+     ========================= */
+  setInterval(refreshCountsOnUI, 300);
+
+  writeDebug('Ready. Press Start Audio to begin.');
+
+  // expose nothing to global scope (IIFE handles it)
 })();
 </script>
 </body>
