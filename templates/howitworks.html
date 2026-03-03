@@ -1,79 +1,101 @@
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>How It Works</title>
-
-  <!-- Favicons and manifest -->
-  <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
-  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}">
-  <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
-  <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
-  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
-
-  <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
-
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
     body {
-      background-color: black;
-      color: white;
+      margin: 0;
       font-family: 'Inter', sans-serif;
+      background: #0d1117;
+      color: #eaeaea;
       line-height: 1.7;
-      font-size: 16px;
-      padding: 40px 20px;
     }
 
-    .project-description {
-      max-width: 800px;
-      margin: auto;
+    /* Hero section */
+    header {
+      background: linear-gradient(135deg, #0077ff, #4cafef);
+      padding: 60px 20px;
+      text-align: center;
+      color: #fff;
+    }
+    header h1 {
+      font-size: 2.4rem;
+      margin: 0;
+    }
+    header p {
+      font-size: 1.1rem;
+      margin-top: 10px;
+      opacity: 0.9;
+    }
+
+    /* Content container */
+    .content {
+      max-width: 900px;
+      margin: -30px auto 40px auto;
+      background: #161b22;
+      padding: 40px;
+      border-radius: 16px;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.4);
     }
 
     h2 {
       margin-top: 2rem;
-      margin-bottom: 0.5rem;
-      font-size: 1.5rem;
+      margin-bottom: 0.8rem;
+      font-size: 1.6rem;
+      color: #4cafef;
+      border-bottom: 1px solid #2a2a3d;
+      padding-bottom: 6px;
     }
 
     p {
       margin-bottom: 1rem;
+      font-size: 1rem;
+      color: #d1d5db;
     }
 
     ul {
-      padding-left: 1.2rem;
+      padding-left: 1.4rem;
       margin-bottom: 1rem;
     }
 
     li {
-      margin-bottom: 0.5rem;
+      margin-bottom: 0.6rem;
     }
 
     pre {
-      background-color: #1a1a1a;
-      padding: 10px;
-      border-radius: 6px;
+      background-color: #1e293b;
+      padding: 14px;
+      border-radius: 10px;
       overflow-x: auto;
       margin: 1rem 0;
+      font-size: 0.95rem;
+      box-shadow: inset 0 0 8px rgba(0,0,0,0.3);
     }
 
     code {
       font-family: 'Courier New', Courier, monospace;
-      color: #87CEEB;
+      color: #4cafef;
     }
 
     a {
-      color: #87CEEB;
+      color: #4cafef;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
     }
   </style>
 </head>
 <body>
-  <div class="project-description">
+  <header>
+    <h1>How It Works</h1>
+    <p>The science behind drum resonance</p>
+  </header>
+
+  <div class="content">
     <h2>Overview</h2>
     <p>This project focuses on the physics of vibrating membranes, specifically calculating the fundamental frequency of a circular drumhead using a theoretical model based on wave mechanics and Bessel functions. It merges mathematical physics, acoustics, and practical application in instrument design and tuning.</p>
 
@@ -83,19 +105,16 @@
     <p>Where:</p>
     <ul>
       <li><strong>F</strong>: Fundamental frequency (Hz)</li>
-      <li><strong>v</strong>: A vibration mode constant (explained below)</li>
+      <li><strong>v</strong>: Vibration mode constant</li>
       <li><strong>r</strong>: Radius of the drumhead (meters)</li>
       <li><strong>T</strong>: Tension applied to the membrane (N/m)</li>
       <li><strong>μ</strong>: Surface mass density of the membrane (kg/m²)</li>
     </ul>
-    <p>This formula gives a first-order estimate of the pitch produced when the drumhead is struck, assuming uniform tension and material properties.</p>
 
     <h2>Where This Comes From</h2>
     <p>The drumhead is modeled as a 2D circular membrane fixed along its boundary. When struck, the membrane vibrates radially according to the 2D wave equation in polar coordinates. The general solution includes Bessel functions, particularly:</p>
     <pre><code>Jₙ(x)</code></pre>
-    <p>The lowest natural mode of vibration, or the fundamental mode, occurs when the Bessel function <code>J₀(x)</code> first equals zero. The first zero of <code>J₀</code> is roughly <strong>2.405</strong>. This value determines the constant <code>v</code> in the frequency formula:</p>
-    <pre><code>v ≈ 2.405</code></pre>
-    <p>Thus, the formula relies not only on the radius and tension but also includes a constant based on the shape of the vibration.</p>
+    <p>The lowest natural mode occurs when <code>J₀(x)</code> first equals zero. The first zero of <code>J₀</code> is roughly <strong>2.405</strong>, which determines the constant <code>v</code> in the frequency formula.</p>
 
     <h2>Why This Works</h2>
     <ul>
@@ -104,48 +123,36 @@
       <li>Radius <strong>r</strong> affects wavelength; larger drums vibrate slower.</li>
       <li>Constant <strong>v</strong> represents the mathematical boundary behavior of circular membranes.</li>
     </ul>
-    <p>The square root term represents wave speed, while the <code>v / 2πr</code> term adjusts it based on geometry.</p>
 
     <h2>Assumptions & Simplifications</h2>
-    <p>This model effectively provides a foundational estimate. However, real drums can behave more complexly. The following assumptions are made:</p>
+    <p>This model provides a foundational estimate. Real drums can behave more complexly, but we assume:</p>
     <ul>
-      <li>The membrane is perfectly circular and uniformly tensioned.</li>
-      <li>Edges are fully fixed, with no rim slippage.</li>
-      <li>Only the fundamental vibration mode is calculated.</li>
-      <li>No energy loss occurs through air damping or shell vibration.</li>
-      <li>The membrane material is uniform in density.</li>
+      <li>Perfectly circular, uniformly tensioned membrane</li>
+      <li>Edges fully fixed</li>
+      <li>Only fundamental mode considered</li>
+      <li>No energy loss through damping</li>
+      <li>Uniform material density</li>
     </ul>
-    <p>These assumptions simplify the creation of a clear mathematical model, avoiding complex simulations or empirical adjustments.</p>
-
-    <h2>What You Enter</h2>
-    <p>You provide:</p>
-    <ul>
-      <li>The radius of your drumhead</li>
-      <li>The applied tension (in N/m)</li>
-      <li>The surface density (mass per area) of your drumhead material</li>
-    </ul>
-    <p>Based on this information, the calculator returns the estimated frequency in Hz of your drum's fundamental pitch.</p>
 
     <h2>Real-World Application</h2>
     <p>This tool can assist:</p>
     <ul>
       <li>Drum makers in designing for specific pitch ranges</li>
-      <li>Musicians in tuning their drumheads more accurately</li>
+      <li>Musicians in tuning drumheads more accurately</li>
       <li>Physics students in relating theory to sound</li>
-      <li>Researchers in validating theoretical models through audio tests</li>
+      <li>Researchers in validating theoretical models</li>
     </ul>
 
     <h2>Research Component</h2>
     <p>I am currently working on an extended research project where I:</p>
     <ul>
-      <li>Analyze real drumheads of different sizes and materials</li>
+      <li>Analyze drumheads of different sizes and materials</li>
       <li>Measure physical parameters (radius, tension, density)</li>
       <li>Use this calculator to predict frequency</li>
-      <li>Record and analyze the actual frequency using audio software (like Audacity or Logic Pro)</li>
+      <li>Record and analyze actual frequency using audio software</li>
       <li>Compare predicted values with actual results</li>
-      <li>Investigate causes of error and refine the model if necessary</li>
+      <li>Investigate causes of error and refine the model</li>
     </ul>
-    <p>The full research paper and measurement methods will be added below once finalized.</p>
   </div>
 </body>
 </html>
