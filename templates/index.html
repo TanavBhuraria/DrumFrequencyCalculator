@@ -1,81 +1,108 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <title>Drum Frequency Explorer</title>
-
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
-  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}">
-  <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
-  <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
-  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+  <title>Drum Wave Simulator</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
-
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-
   <style>
     body {
+      margin: 0;
       font-family: 'Inter', sans-serif;
+      background: #0d0d0d;
+      color: #f5f5f5;
+    }
+
+    /* Hero section */
+    header {
+      background: linear-gradient(135deg, #000000, #2a2a2a);
       text-align: center;
-      padding: 40px;
-      background-color:  black;
-      color: white;
+      padding: 80px 20px;
+      position: relative;
     }
-    h1 {
-      font-size: 2rem;
+    header h1 {
+      font-size: 3rem;
+      margin: 0;
+      color: #ffd700; /* gold accent */
+      text-shadow: 0 0 12px rgba(255,215,0,0.6);
     }
-    .btn-group {
-      margin-top: 2rem;
+    header p {
+      font-size: 1.2rem;
+      margin-top: 15px;
+      color: #ccc;
     }
+
+    /* Drum image background accent */
+    header::after {
+      content: "";
+      background: url("{{ url_for('static', filename='drum.png') }}") no-repeat center;
+      background-size: 300px;
+      opacity: 0.15;
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 0;
+    }
+    header h1, header p {
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Button container */
+    .buttons {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      flex-wrap: wrap;
+      margin: 40px auto;
+      max-width: 800px;
+    }
+
     .btn {
-      display: inline-block;
-      background-color: #ffffff;
-      color: black;
-      padding: 1rem 2rem;
-      font-size: 1rem;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: background-color 0.3s ease;
+      flex: 1 1 200px;
+      text-align: center;
+      padding: 20px;
+      border-radius: 12px;
+      background: #1a1a1a;
+      color: #ffd700;
+      font-size: 1.2rem;
+      font-weight: 600;
       text-decoration: none;
-      margin: 0 1rem;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
     }
+
+    .btn::before {
+      content: "";
+      position: absolute;
+      top: 0; left: -100%;
+      width: 100%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,215,0,0.3), transparent);
+      transition: left 0.5s ease;
+    }
+
+    .btn:hover::before {
+      left: 100%;
+    }
+
     .btn:hover {
-      background-color: #e0e0e0;
+      transform: translateY(-4px);
+      box-shadow: 0 10px 24px rgba(255,215,0,0.3);
     }
   </style>
 </head>
 <body>
+  <header>
+    <h1>Drum Wave Simulator</h1>
+    <p>Explore the physics, resonance, and beauty of vibrating drum membranes</p>
+  </header>
 
-  <h1> Drum Frequency Explorer</h1>
-  <p>
-    An interactive tool combining physics and music.<br>
-    Discover how drum size, material, and tension affect the sound.
-  </p>
-
-  <div class="btn-group">
-    <a href="/calculator" class="btn">Calculator</a>
-    <a href="/howitworks" class="btn">How It Works</a>
-    <a href="/micinput" class="btn">Live Mic Input</a> <!-- New button -->
+  <div class="buttons">
+    <a href="{{ url_for('calculator') }}" class="btn">Calculator</a>
+    <a href="{{ url_for('howitworks') }}" class="btn">How It Works</a>
+    <a href="{{ url_for('index') }}" class="btn">Home</a>
   </div>
-
-<div style="margin-top: 2rem;">
-  <img 
-    src="{{ url_for('static', filename='Drums.png') }}" 
-    alt="Drum Image" 
-    style="
-      display: block;
-      margin: 0 auto;
-      width: 90vw;
-      max-width: 900px;
-      height: calc(100vh - 300px); /* fill bottom space */
-      object-fit: contain;
-    "
-  >
-</div>
-
-
 </body>
 </html>
