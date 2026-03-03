@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <!-- Favicons -->
+<link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}">
+<link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
+<link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
+<link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Drum Wave Simulator | Calculator</title>
@@ -120,6 +127,45 @@
       text-align: center;
       box-shadow: 0 6px 16px rgba(0,0,0,0.3);
     }
+
+    /* Modal styling */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 999;
+      left: 0; top: 0;
+      width: 100%; height: 100%;
+      background-color: rgba(0,0,0,0.7);
+      padding-top: 60px;
+    }
+
+    .modal-content {
+      background: #161b22;
+      color: #f5f5f5;
+      margin: auto;
+      padding: 30px;
+      border-radius: 12px;
+      max-width: 600px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+      animation: fadeIn 0.3s ease;
+    }
+
+    .modal-content h2 {
+      color: #ffd700;
+      margin-bottom: 1rem;
+    }
+
+    .close {
+      float: right;
+      font-size: 24px;
+      cursor: pointer;
+      color: #ffd700;
+    }
+
+    @keyframes fadeIn {
+      from {opacity: 0;}
+      to {opacity: 1;}
+    }
   </style>
 </head>
 <body>
@@ -155,5 +201,37 @@
       <div class="result">Estimated Frequency: {{ freq }} Hz</div>
     {% endif %}
   </div>
+
+  <!-- Instructions Modal -->
+  <div id="instructionsModal" class="modal">
+    <div class="modal-content">
+      <span class="close" onclick="closeModal()">&times;</span>
+      <h2>📖 Instructions</h2>
+      <ol>
+        <li>Enter the drum’s radius in cm.</li>
+        <li>Select the tension level (Low, Medium, High).</li>
+        <li>Select the thickness (Thin, Medium, Thick).</li>
+        <li>Click “Calculate Frequency” to see the result.</li>
+      </ol>
+    </div>
+  </div>
+
+  <script>
+    window.onload = function () {
+      const wasSubmitted = sessionStorage.getItem("formSubmitted");
+      if (!wasSubmitted) {
+        document.getElementById("instructionsModal").style.display = "block";
+      }
+      const form = document.querySelector("form");
+      if (form) {
+        form.addEventListener("submit", function () {
+          sessionStorage.setItem("formSubmitted", "true");
+        });
+      }
+    }
+    function closeModal() {
+      document.getElementById("instructionsModal").style.display = "none";
+    }
+  </script>
 </body>
 </html>
