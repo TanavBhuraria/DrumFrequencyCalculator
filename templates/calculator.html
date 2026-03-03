@@ -1,206 +1,199 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Drum Frequency Calculator</title>
-
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
-  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}">
-  <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
-  <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
-  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+  <title>Drum Frequency Calculator</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
-
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-
   <style>
     body {
-      background-color: #1e1e2f;
-      color: #fff;
+      background-color: #121212;
+      color: #eaeaea;
       font-family: 'Inter', sans-serif;
-      text-align: center;
-      padding: 40px;
-    }
-    input, select, button {
-      margin: 10px;
-      padding: 10px;
-      border-radius: 6px;
-    }
-    button {
-      background-color: rgb(0, 0, 0);
-      color: white;
-      border: none;
-      cursor: pointer;
-    }
-    button:hover {
-      background-color: rgb(0, 0, 0);
+      margin: 0;
+      padding: 0;
     }
 
+    header {
+      text-align: center;
+      padding: 40px 20px;
+    }
+
+    header h1 {
+      font-size: 2.2rem;
+      margin-bottom: 10px;
+      color: #ffffff;
+    }
+
+    header p {
+      font-size: 1rem;
+      color: #b0b0b0;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background: #1e1e2f;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    }
+
+    label {
+      display: block;
+      margin: 15px 0 5px;
+      font-weight: 600;
+      color: #ffffff;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid #333;
+      background: #2a2a3d;
+      color: #fff;
+      font-size: 1rem;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border-color: #4cafef;
+      box-shadow: 0 0 6px rgba(76,175,239,0.6);
+    }
+
+    button {
+      width: 100%;
+      padding: 14px;
+      margin-top: 20px;
+      border: none;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #4cafef, #0077ff);
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+
+    button:hover {
+      background: linear-gradient(135deg, #0077ff, #4cafef);
+    }
+
+    .result {
+      margin-top: 25px;
+      font-size: 1.4rem;
+      font-weight: 600;
+      color: #4cafef;
+      text-align: center;
+    }
+
+    small {
+      display: block;
+      margin-top: 5px;
+      font-size: 0.8rem;
+      color: #aaa;
+    }
+
+    /* Modal styling */
     .modal {
-     display: none; /* hide by default */
-     position: fixed;
-     z-index: 999;
-     left: 0;
-      top: 0;
-     width: 100%;
-     height: 100%;
-      overflow: auto;
-      background-color: rgba(0,0,0,0.6);
-     padding-top: 60px;
+      display: none;
+      position: fixed;
+      z-index: 999;
+      left: 0; top: 0;
+      width: 100%; height: 100%;
+      background-color: rgba(0,0,0,0.7);
+      padding-top: 60px;
+    }
+
+    .modal-content {
+      background: #fff;
+      color: #000;
+      margin: auto;
+      padding: 30px;
+      border-radius: 12px;
+      max-width: 600px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
       animation: fadeIn 0.3s ease;
     }
 
-
-  
-
-    .modal-content {
-     animation: fadeIn 0.3s ease;
-     background-color: #fff;
-     color: #000;
-     margin: 8% auto;
-      padding: 30px 40px;
-      border-radius: 10px;
-      width: 85%;
-      max-width: 650px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-      border: 1px solid #ddd;
-      font-family: 'Inter', sans-serif;
-      font-size: 1.15rem;
-      line-height: 1.6;
-      position: relative;
-      }
-
-
-
-    .modal-content ol li {
-      margin-bottom: 1rem; /* space between items */
-    }
-
     .close {
-      position: absolute;
-      top: 10px;
-      right: 15px;
+      float: right;
       font-size: 24px;
-      font-weight: 600;
       cursor: pointer;
-      color: black;
+      color: #333;
     }
 
     @keyframes fadeIn {
-      from {opacity: 0}
-      to {opacity: 1}
+      from {opacity: 0;}
+      to {opacity: 1;}
     }
-
-    ol {
-     list-style-type: none;
-     padding-left: 0;
-     margin: 0;
-     font-size: 1.2rem;}
-
   </style>
 </head>
 <body>
+  <header>
+    <h1>Drum Frequency Calculator</h1>
+    <p>Estimate the frequency of a drum based on its size, tension, and thickness.</p>
+  </header>
 
- <h1>Drum Frequency Calculator</h1>
-<p>Estimate the frequency of a drum based on its size, tension, and thickness.</p>
-<div id="instructionsModal" class="modal">
-  <div class="modal-content">
-    <span class="close" onclick="closeModal()">&times;</span>
-    <h2>📖 Instructions</h2>
-    <ol>
-      <li>Enter the drum’s radius in cm.</li>
-      <li>
-        Select the tension level (Low, Medium, High):
-        <ul>
-          <li>Low = 400 N/m</li>
-          <li>Medium = 800 N/m</li>
-          <li>High = 1200 N/m</li>
-        </ul>
-      </li>
-      <li>
-        Select the thickness (Thin, Medium, Thick):
-        <ul>
-          <li>Thin = 0.1 kg/m²</li>
-          <li>Medium = 0.2 kg/m²</li>
-          <li>Thick = 0.3 kg/m²</li>
-        </ul>
-      </li>
-      <li>Click “Calculate” to see the estimated frequency in Hz.</li>
-    </ol>
+  <div class="container">
+    <form method="post">
+      <label for="radius">Radius (cm):</label>
+      <input type="number" name="radius" step="0.01" required>
+      <small>⚠️ Best results: radius between 5 and 50 cm</small>
+
+      <label for="tension">Tension:</label>
+      <select name="tension">
+        <option>Low</option>
+        <option>Medium</option>
+        <option>High</option>
+      </select>
+
+      <label for="thickness">Thickness:</label>
+      <select name="thickness">
+        <option>Thin</option>
+        <option>Medium</option>
+        <option>Thick</option>
+      </select>
+
+      <button type="submit">Calculate</button>
+    </form>
+
+    {% if freq %}
+      <div class="result">Estimated Frequency: {{ freq }} Hz</div>
+    {% endif %}
   </div>
-</div>
 
-<form method="post">
-  <label>Radius (cm):</label><br>
-  <input 
-    type="number" 
-    name="radius" 
-    step="0.01" 
-    required 
-    style="display: block; margin: 0 auto 4px auto;"
-  >
-  <small 
-    style="color: white; font-size: 0.6rem; display: block; margin-bottom: 12px;"
-  >
-    ⚠️ For best results, use radius between 5 and 50 cm
-  </small>
+  <!-- Instructions Modal -->
+  <div id="instructionsModal" class="modal">
+    <div class="modal-content">
+      <span class="close" onclick="closeModal()">&times;</span>
+      <h2>📖 Instructions</h2>
+      <ol>
+        <li>Enter the drum’s radius in cm.</li>
+        <li>Select the tension level (Low, Medium, High).</li>
+        <li>Select the thickness (Thin, Medium, Thick).</li>
+        <li>Click “Calculate” to see the estimated frequency in Hz.</li>
+      </ol>
+    </div>
+  </div>
 
-    <label>Tension:</label><br>
-    <select name="tension">
-      <option>Low</option>
-      <option>Medium</option>
-      <option>High</option>
-    </select><br>
-
-    <label>Thickness:</label><br>
-    <select name="thickness">
-      <option>Thin</option>
-      <option>Medium</option>
-      <option>Thick</option>
-    </select><br>
-
-<button 
-  type="submit" 
-  style="
-    background-color: black; 
-    color: white; 
-    border: none; 
-    cursor: pointer;
-    padding: 10px 20px; 
-    font-size: 1rem;
-    border-radius: 8px;
-    margin-top: 10px;
-  "
->
-  Calculate
-</button>
-</form>
-
-{% if freq %}
-  <h2>Estimated Frequency: {{ freq }} Hz</h2>
-{% endif %}
-
-<script>
-  window.onload = function () {
-    const wasSubmitted = sessionStorage.getItem("formSubmitted");
-
-    if (!wasSubmitted) {
-      document.getElementById("instructionsModal").style.display = "block";
+  <script>
+    window.onload = function () {
+      const wasSubmitted = sessionStorage.getItem("formSubmitted");
+      if (!wasSubmitted) {
+        document.getElementById("instructionsModal").style.display = "block";
+      }
+      const form = document.querySelector("form");
+      if (form) {
+        form.addEventListener("submit", function () {
+          sessionStorage.setItem("formSubmitted", "true");
+        });
+      }
     }
-
-    const form = document.querySelector("form");
-    if (form) {
-      form.addEventListener("submit", function () {
-        sessionStorage.setItem("formSubmitted", "true");
-      });
+    function closeModal() {
+      document.getElementById("instructionsModal").style.display = "none";
     }
-  }
-
-  function closeModal() {
-    document.getElementById("instructionsModal").style.display = "none";
-  }
-</script>
+  </script>
 </body>
 </html>
