@@ -1,0 +1,55 @@
+<div id="waveCanvas"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+  // Scene setup
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  // Orbit controls
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+
+  // Axis line (x-axis)
+  const axisMaterial = new THREE.LineBasicMaterial({ color: 0xffffff });
+  const axisGeometry = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(-10, 0, 0),
+    new THREE.Vector3(10, 0, 0)
+  ]);
+  const axisLine = new THREE.Line(axisGeometry, axisMaterial);
+  scene.add(axisLine);
+
+  // Wave line
+  const wavePoints = [];
+  const segments = 200;
+  for (let i = -10; i <= 10; i += 20/segments) {
+    wavePoints.push(new THREE.Vector3(i, Math.sin(i), 0));
+  }
+  const waveGeometry = new THREE.BufferGeometry().setFromPoints(wavePoints);
+  const waveMaterial = new THREE.LineBasicMaterial({ color: 0xFFD700 });
+  const waveLine = new THREE.Line(waveGeometry, waveMaterial);
+  scene.add(waveLine);
+
+  camera.position.set(0, 5, 15);
+
+  // Animate wave
+  function animate() {
+    requestAnimationFrame(animate);
+    const time = Date.now() * 0.002;
+    const positions = waveGeometry.attributes.position;
+    for (let i = 0; i < positions.count; i++) {
+      const x = positions.getX(i);
+      positions.setY(i, Math.sin(x * 2 + time)); // moving sine wave
+    }
+    positions.needsUpdate = true;
+
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
+</script>

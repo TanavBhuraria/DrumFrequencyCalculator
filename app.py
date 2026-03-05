@@ -26,7 +26,7 @@ def calculator():
         except Exception as e:
             freq = "Error: Invalid input."
 
-    return render_template('calculator.html', freq=freq)
+    return render_template('calculator.html', freq=freq)    
 
 
 @app.route('/howitworks')
@@ -37,13 +37,7 @@ def howitworks():
 def index():
     return render_template("index.html")
 
-@app.route('/micinput', methods=['GET', 'POST'])
-def micinput():
-    if request.method == 'POST':
-        # Here you would handle the mic input processing
-        # For now, we will just return a placeholder response
-        return "Mic input processing is not implemented yet."
+@app.route("/visualisation")
+def visualisation():
+    return render_template("visualisation.html")
 
-    return render_template('micinput.html')
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
