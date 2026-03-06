@@ -4,30 +4,14 @@
   <meta charset="UTF-8">
   <title>3D Wave Visualiser</title>
   <style>
-    body {
-      margin: 0;
-      background-color: black;
-      color: gold;
-      font-family: sans-serif;
-      overflow: hidden;
-    }
+    body { margin:0; background:black; color:gold; font-family:sans-serif; overflow:hidden; }
     .controls {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      background: rgba(0,0,0,0.7);
-      padding: 10px;
-      border: 1px solid gold;
-      border-radius: 5px;
+      position:absolute; top:10px; left:10px;
+      background:rgba(0,0,0,0.7); padding:10px;
+      border:1px solid gold; border-radius:5px;
     }
-    label {
-      display: block;
-      margin: 5px 0;
-    }
-    input[type=range], input[type=number] {
-      accent-color: gold;
-      margin-left: 5px;
-    }
+    label { display:block; margin:5px 0; }
+    input[type=range], input[type=number] { accent-color:gold; margin-left:5px; }
   </style>
 </head>
 <body>
@@ -53,7 +37,6 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/controls/OrbitControls.js"></script>
   <script>
-    // Scene setup
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
 
@@ -66,19 +49,44 @@
 
     const controls = new THREE.OrbitControls(camera, renderer.domElement);
 
-    // Wave geometry
-    const points = [];
-    const segments = 2000; // long enough to feel infinite
-    for (let i = -segments/2; i < segments/2; i++) {
-      points.push(new THREE.Vector3(i, 0, 0));
+    // Parameters
+    let amplitude = 100, wavelength = 200, speed = 5, period = 5;
+
+    // Create wave geometry
+    const segments = 2000;
+    const positions = new Float32Array(segments * 3);
+    for (let i = 0; i < segments; i++) {
+      const x = i - segments/2;
+      positions[i*3] = x;
+      positions[i*3+1] = amplitude * Math.sin((x / wavelength) * 2 * Math.PI);
+      positions[i*3+2] = 0;
     }
-    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     const material = new THREE.LineBasicMaterial({ color: 0xFFD700, linewidth: 3 });
     const wave = new THREE.Line(geometry, material);
     scene.add(wave);
 
-    // Parameters
-    let amplitude = 100, wavelength = 200, speed = 5, period = 5;
+    // White axes
+    const axisMaterial = new THREE.LineBasicMaterial({ color: 0xFFFFFF, linewidth: 2 });
+
+    // X-axis
+    const xAxisPoints = [new THREE.Vector3(-1000, 0, 0), new THREE.Vector3(1000, 0, 0)];
+    const xAxisGeometry = new THREE.BufferGeometry().setFromPoints(xAxisPoints);
+    const xAxis = new THREE.Line(xAxisGeometry, axisMaterial);
+    scene.add(xAxis);
+
+    // Y-axis
+    const yAxisPoints = [new THREE.Vector3(0, -500, 0), new THREE.Vector3(0, 500, 0)];
+    const yAxisGeometry = new THREE.BufferGeometry().setFromPoints(yAxisPoints);
+    const yAxis = new THREE.Line(yAxisGeometry, axisMaterial);
+    scene.add(yAxis);
+
+    // Z-axis
+    const zAxisPoints = [new THREE.Vector3(0, 0, -500), new THREE.Vector3(0, 0, 500)];
+    const zAxisGeometry = new THREE.BufferGeometry().setFromPoints(zAxisPoints);
+    const zAxis = new THREE.Line(zAxisGeometry, axisMaterial);
+    scene.add(zAxis);
 
     // Sync sliders and numbers
     function syncInputs(rangeId, numId, variable) {
@@ -94,10 +102,12 @@
 
     // Animate wave
     function animate(time) {
-      const positions = wave.geometry.attributes.position.array;
-      for (let i = 0; i < positions.length; i += 3) {
-        const x = positions[i];
-        positions[i+1] = amplitude * Math.sin((x / wavelength) * 2 * Math.PI - time/1000 * speed);
+      const pos = wave.geometry.attributes.position.array;
+      for (let i = 0; i < segments; i++) {
+        const x = i - segments/2;
+        pos[i*3] = x;
+        pos[i*3+1] = amplitude * Math.sin((x / wavelength) * 2 * Math.PI - time/1000 * speed);
+        pos[i*3+2] = 0;
       }
       wave.geometry.attributes.position.needsUpdate = true;
 
