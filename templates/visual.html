@@ -2,325 +2,385 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Wave Visualiser Debug</title>
+  <title>3D Wave Visualiser — 3D Ribbon + Zoom</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     html,body { height:100%; margin:0; background:#000; color:#FFD700; font-family:Inter,system-ui,Arial,sans-serif; }
-    /* Canvas container sits behind controls */
     #canvas-container { position:fixed; inset:0; z-index:1; }
     canvas { display:block; width:100%; height:100%; }
 
-    /* Controls overlay */
     .controls {
       position: absolute;
       top: 12px;
       left: 12px;
-      z-index: 30;
-      background: rgba(0,0,0,0.75);
-      border: 1px solid #FFD700;
-      padding: 10px;
-      border-radius: 8px;
-      min-width: 260px;
-    }
-    .controls label { display:block; font-size:13px; color:#FFD700; margin:6px 0; }
-    .controls input[type=range] { width:140px; vertical-align:middle; accent-color:#FFD700; }
-    .controls input[type=number] { width:70px; margin-left:6px; background:#111; color:#FFD700; border:1px solid #333; padding:4px 6px; border-radius:4px; }
-
-    /* Status overlay for diagnostics */
-    #status {
-      position: absolute;
-      right: 12px;
-      top: 12px;
       z-index: 40;
-      background: rgba(0,0,0,0.8);
-      color:#fff;
-      padding:8px 10px;
-      border-radius:6px;
-      font-size:13px;
-      border:1px solid rgba(255,215,0,0.12);
-      max-width:320px;
+      background: rgba(0,0,0,0.78);
+      border: 1px solid #FFD700;
+      padding: 12px;
+      border-radius: 8px;
+      min-width: 320px;
+      backdrop-filter: blur(4px);
     }
-    #status .ok { color:#7CFC00; }
-    #status .err { color:#FF6B6B; }
+    .controls h3 { margin:0 0 8px 0; color:#FFD700; font-size:15px; }
+    .row { display:flex; align-items:center; gap:8px; margin:6px 0; }
+    label { font-size:13px; color:#FFD700; min-width:90px; }
+    input[type=range] { flex:1; accent-color:#FFD700; }
+    input[type=number] { width:84px; background:#111; color:#FFD700; border:1px solid #333; padding:4px 6px; border-radius:4px; }
+    select, button { background:#111; color:#FFD700; border:1px solid #333; padding:6px 8px; border-radius:6px; cursor:pointer; }
+    .small { font-size:12px; color:#ccc; margin-top:8px; }
 
-    /* Small footer hint */
-    .hint { position:absolute; left:12px; bottom:12px; z-index:30; color:#999; background:rgba(0,0,0,0.5); padding:6px 8px; border-radius:6px; border:1px solid rgba(255,215,0,0.08); font-size:12px; }
+    #zoomButtons { display:flex; gap:8px; margin-top:8px; }
+    #status { position:absolute; right:12px; top:12px; z-index:40; background:rgba(0,0,0,0.8); color:#fff; padding:8px 10px; border-radius:6px; font-size:13px; border:1px solid rgba(255,215,0,0.12); max-width:320px; }
+    .hint { position:absolute; left:12px; bottom:12px; z-index:40; color:#999; background:rgba(0,0,0,0.5); padding:8px; border-radius:6px; border:1px solid rgba(255,215,0,0.08); font-size:12px; }
   </style>
 </head>
 <body>
   <div id="canvas-container"></div>
 
   <div class="controls" id="controls">
-    <label>Amplitude
+    <h3>3D Wave Visualiser</h3>
+
+    <div class="row">
+      <label>Amplitude</label>
       <input id="amplitude" type="range" min="10" max="300" step="1" value="100">
       <input id="amplitudeNum" type="number" min="10" max="300" step="1" value="100">
-    </label>
-    <label>Wavelength
+    </div>
+
+    <div class="row">
+      <label>Wavelength</label>
       <input id="wavelength" type="range" min="20" max="800" step="1" value="200">
       <input id="wavelengthNum" type="number" min="20" max="800" step="1" value="200">
-    </label>
-    <label>Speed
+    </div>
+
+    <div class="row">
+      <label>Depth (Z)</label>
+      <input id="depth" type="range" min="0" max="200" step="1" value="40">
+      <input id="depthNum" type="number" min="0" max="200" step="1" value="40">
+    </div>
+
+    <div class="row">
+      <label>Speed</label>
       <input id="speed" type="range" min="0.1" max="20" step="0.1" value="5">
       <input id="speedNum" type="number" min="0.1" max="20" step="0.1" value="5">
-    </label>
+    </div>
+
+    <div class="row">
+      <label>Segments</label>
+      <input id="segments" type="range" min="200" max="4000" step="100" value="1600">
+      <input id="segmentsNum" type="number" min="200" max="4000" step="100" value="1600">
+    </div>
+
+    <div class="row">
+      <label>Render</label>
+      <select id="mode">
+        <option value="ribbon">3D Ribbon (Tube)</option>
+        <option value="line">Fast Line</option>
+      </select>
+    </div>
+
+    <div id="zoomButtons">
+      <button id="zoomIn">Zoom In (+)</button>
+      <button id="zoomOut">Zoom Out (-)</button>
+      <button id="fitView">Fit View (0)</button>
+    </div>
+
+    <div class="small">Orbit: left-drag • Zoom: scroll or buttons • Pan: right-drag</div>
   </div>
 
   <div id="status">
     <div><strong>Status</strong></div>
-    <div id="webglStatus">WebGL: <span id="webglFlag">checking…</span></div>
+    <div id="webglFlag">Checking WebGL…</div>
     <div id="errorMsg" style="margin-top:6px;"></div>
   </div>
 
-  <div class="hint">If nothing appears, open DevTools Console (F12) and paste the output here.</div>
+  <div class="hint">Tip: press + / - to zoom, 0 to fit view.</div>
 
-  <!-- Three.js -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/controls/OrbitControls.js"></script>
 
   <script>
-  // ===== Diagnostics helpers =====
-  function logStatus(msg, isError=false) {
-    console.log(msg);
-    const el = document.getElementById('errorMsg');
-    if (isError) {
-      el.innerHTML = '<div class="err">' + msg + '</div>';
-    } else {
-      // append non-error messages
-      el.innerHTML = '<div class="ok">' + msg + '</div>';
-    }
+  // ===== Diagnostics & helpers =====
+  function setStatus(text, isError=false) {
+    document.getElementById('webglFlag').textContent = text;
+    const em = document.getElementById('errorMsg');
+    em.innerHTML = isError ? '<span style="color:#FF6B6B">' + text + '</span>' : '';
+    console.log(text);
   }
 
-  // Append renderer canvas early so it can't be hidden by controls accidentally
-  const container = document.getElementById('canvas-container');
-
-  // ===== WebGL capability check =====
   function checkWebGL() {
     try {
-      const canvas = document.createElement('canvas');
-      const gl = canvas.getContext('webgl2') || canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-      if (!gl) return false;
-      // quick capability checks
-      const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
-      const renderer = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : 'unknown';
-      console.log('GPU renderer:', renderer);
-      return true;
-    } catch (e) {
-      console.warn('WebGL check threw', e);
-      return false;
-    }
+      const c = document.createElement('canvas');
+      const gl = c.getContext('webgl2') || c.getContext('webgl') || c.getContext('experimental-webgl');
+      return !!gl;
+    } catch (e) { return false; }
   }
 
-  const webglAvailable = checkWebGL();
-  document.getElementById('webglFlag').textContent = webglAvailable ? 'available' : 'unavailable';
-  if (!webglAvailable) {
-    logStatus('WebGL not available in this browser. Falling back to Canvas2D.', true);
-  } else {
-    logStatus('WebGL available. Proceeding with Three.js.');
+  const webgl = checkWebGL();
+  if (!webgl) { setStatus('WebGL unavailable — try a modern browser or enable hardware acceleration', true); }
+  else setStatus('WebGL available');
+
+  // ===== Scene setup =====
+  const container = document.getElementById('canvas-container');
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000000);
+
+  const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 5000);
+  camera.position.set(0, 160, 520);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.domElement.style.position = 'fixed';
+  renderer.domElement.style.top = '0';
+  renderer.domElement.style.left = '0';
+  renderer.domElement.style.width = '100%';
+  renderer.domElement.style.height = '100%';
+  renderer.domElement.style.zIndex = '1';
+  container.appendChild(renderer.domElement);
+
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.screenSpacePanning = false;
+  controls.target.set(0,0,0);
+  controls.update();
+
+  // Lighting
+  const ambient = new THREE.AmbientLight(0x404040, 1.2);
+  scene.add(ambient);
+  const dir = new THREE.DirectionalLight(0xffffff, 0.6);
+  dir.position.set(0.5, 1, 0.5);
+  scene.add(dir);
+
+  // Axes
+  const axisMat = new THREE.LineBasicMaterial({ color: 0xFFFFFF });
+  function makeAxis(p1,p2){ return new THREE.Line(new THREE.BufferGeometry().setFromPoints([p1,p2]), axisMat); }
+  scene.add(makeAxis(new THREE.Vector3(-2000,0,0), new THREE.Vector3(2000,0,0)));
+  scene.add(makeAxis(new THREE.Vector3(0,-1000,0), new THREE.Vector3(0,1000,0)));
+  scene.add(makeAxis(new THREE.Vector3(0,0,-1000), new THREE.Vector3(0,0,1000)));
+
+  // ===== Parameters & UI =====
+  const ui = {
+    amplitude: document.getElementById('amplitude'),
+    amplitudeNum: document.getElementById('amplitudeNum'),
+    wavelength: document.getElementById('wavelength'),
+    wavelengthNum: document.getElementById('wavelengthNum'),
+    depth: document.getElementById('depth'),
+    depthNum: document.getElementById('depthNum'),
+    speed: document.getElementById('speed'),
+    speedNum: document.getElementById('speedNum'),
+    segments: document.getElementById('segments'),
+    segmentsNum: document.getElementById('segmentsNum'),
+    mode: document.getElementById('mode'),
+    zoomIn: document.getElementById('zoomIn'),
+    zoomOut: document.getElementById('zoomOut'),
+    fitView: document.getElementById('fitView')
+  };
+
+  function sync(rangeEl, numEl, setter) {
+    rangeEl.addEventListener('input', () => { numEl.value = rangeEl.value; setter(+rangeEl.value); });
+    numEl.addEventListener('input', () => { rangeEl.value = numEl.value; setter(+numEl.value); });
   }
 
-  // ===== If WebGL unavailable, draw a Canvas2D fallback wave so you always see something =====
-  if (!webglAvailable) {
-    const fallbackCanvas = document.createElement('canvas');
-    fallbackCanvas.style.position = 'fixed';
-    fallbackCanvas.style.top = '0';
-    fallbackCanvas.style.left = '0';
-    fallbackCanvas.style.width = '100%';
-    fallbackCanvas.style.height = '100%';
-    fallbackCanvas.width = window.innerWidth;
-    fallbackCanvas.height = window.innerHeight;
-    fallbackCanvas.style.zIndex = '1';
-    container.appendChild(fallbackCanvas);
-    const ctx = fallbackCanvas.getContext('2d');
-    let amp = 100, wl = 200, sp = 5;
-    document.getElementById('amplitude').addEventListener('input', e => { amp = +e.target.value; document.getElementById('amplitudeNum').value = amp; });
-    document.getElementById('wavelength').addEventListener('input', e => { wl = +e.target.value; document.getElementById('wavelengthNum').value = wl; });
-    document.getElementById('speed').addEventListener('input', e => { sp = +e.target.value; document.getElementById('speedNum').value = sp; });
-    document.getElementById('amplitudeNum').addEventListener('input', e => { amp = +e.target.value; document.getElementById('amplitude').value = amp; });
-    document.getElementById('wavelengthNum').addEventListener('input', e => { wl = +e.target.value; document.getElementById('wavelength').value = wl; });
-    document.getElementById('speedNum').addEventListener('input', e => { sp = +e.target.value; document.getElementById('speed').value = sp; });
+  let state = {
+    amplitude: +ui.amplitude.value,
+    wavelength: +ui.wavelength.value,
+    depth: +ui.depth.value,
+    speed: +ui.speed.value,
+    segments: +ui.segments.value,
+    mode: ui.mode.value
+  };
 
-    function drawFallback(t) {
-      ctx.clearRect(0,0,fallbackCanvas.width,fallbackCanvas.height);
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0,0,fallbackCanvas.width,fallbackCanvas.height);
-      // axes
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(0, fallbackCanvas.height/2);
-      ctx.lineTo(fallbackCanvas.width, fallbackCanvas.height/2);
-      ctx.moveTo(fallbackCanvas.width/2, 0);
-      ctx.lineTo(fallbackCanvas.width/2, fallbackCanvas.height);
-      ctx.stroke();
-      // wave
-      ctx.strokeStyle = '#FFD700';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      const midY = fallbackCanvas.height/2;
-      const scaleX = 1; // pixel per sample
-      const samples = Math.min(2000, Math.floor(fallbackCanvas.width / scaleX));
-      for (let i=0;i<samples;i++){
-        const x = i * scaleX;
-        const worldX = (i - samples/2);
-        const y = midY + amp * Math.sin((worldX / wl) * Math.PI * 2 - t/1000 * sp);
-        if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-      }
-      ctx.stroke();
-      requestAnimationFrame(drawFallback);
+  sync(ui.amplitude, ui.amplitudeNum, v => state.amplitude = v);
+  sync(ui.wavelength, ui.wavelengthNum, v => state.wavelength = v);
+  sync(ui.depth, ui.depthNum, v => state.depth = v);
+  sync(ui.speed, ui.speedNum, v => state.speed = v);
+  sync(ui.segments, ui.segmentsNum, v => state.segments = Math.max(200, Math.round(v/10)*10));
+
+  ui.mode.addEventListener('change', () => { state.mode = ui.mode.value; rebuildWave(); });
+
+  // ===== Wave objects =====
+  let waveLine = null;
+  let waveRibbon = null;
+
+  const goldLineMat = new THREE.LineBasicMaterial({ color: 0xFFD700 });
+  const goldMeshMat = new THREE.MeshStandardMaterial({ color: 0xFFD700, metalness: 0.9, roughness: 0.25 });
+
+  function buildLine(segments) {
+    if (waveLine) { scene.remove(waveLine); waveLine.geometry.dispose(); waveLine = null; }
+    const pos = new Float32Array(segments * 3);
+    for (let i=0;i<segments;i++){
+      const x = (i - segments/2) * 1.0;
+      pos[i*3] = x;
+      pos[i*3+1] = state.amplitude * Math.sin((x / state.wavelength) * Math.PI * 2);
+      pos[i*3+2] = 0;
     }
-    requestAnimationFrame(drawFallback);
-    // done fallback
-  } else {
-    // ===== WebGL path using Three.js =====
-    try {
-      // Renderer
-      const renderer = new THREE.WebGLRenderer({ antialias: true });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.domElement.style.position = 'fixed';
-      renderer.domElement.style.top = '0';
-      renderer.domElement.style.left = '0';
-      renderer.domElement.style.width = '100%';
-      renderer.domElement.style.height = '100%';
-      renderer.domElement.style.zIndex = '1';
-      container.appendChild(renderer.domElement);
-      console.log('Renderer appended');
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geom.setDrawRange(0, segments);
+    waveLine = new THREE.Line(geom, goldLineMat);
+    scene.add(waveLine);
+  }
 
-      // Scene and camera
-      const scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x000000);
-      const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 5000);
-      camera.position.set(0, 160, 520);
+  function buildRibbon(segments) {
+    if (waveRibbon) { scene.remove(waveRibbon); waveRibbon.geometry.dispose(); waveRibbon = null; }
+    const pts = [];
+    for (let i=0;i<segments;i++){
+      const x = (i - segments/2) * 1.0;
+      const y = state.amplitude * Math.sin((x / state.wavelength) * Math.PI * 2);
+      const z = state.depth * Math.sin((x / (state.wavelength*0.5)) * Math.PI * 2);
+      pts.push(new THREE.Vector3(x,y,z));
+    }
+    const curve = new THREE.CatmullRomCurve3(pts);
+    const tubularSegments = Math.max(64, Math.floor(segments / 8));
+    const radius = Math.max(0.6, Math.min(6, state.wavelength / 200));
+    const geometry = new THREE.TubeGeometry(curve, tubularSegments, radius, 8, false);
+    waveRibbon = new THREE.Mesh(geometry, goldMeshMat);
+    scene.add(waveRibbon);
+  }
 
-      // Controls - check availability
-      let controls;
-      if (typeof THREE.OrbitControls === 'function') {
-        controls = new THREE.OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-        controls.dampingFactor = 0.08;
-        controls.target.set(0,0,0);
-        controls.update();
-        console.log('OrbitControls loaded from examples/js');
-      } else if (THREE.OrbitControls) {
-        controls = new THREE.OrbitControls(camera, renderer.domElement);
-        controls.target.set(0,0,0);
-        controls.update();
-        console.log('OrbitControls available');
-      } else {
-        console.warn('OrbitControls not found; continuing without orbit controls.');
-        logStatus('OrbitControls not found; camera fixed. Use mouse wheel to zoom if supported.', true);
-      }
+  function rebuildWave() {
+    if (waveLine) { scene.remove(waveLine); waveLine.geometry.dispose(); waveLine = null; }
+    if (waveRibbon) { scene.remove(waveRibbon); waveRibbon.geometry.dispose(); waveRibbon = null; }
+    if (state.mode === 'line') buildLine(state.segments);
+    else buildRibbon(state.segments);
+  }
 
-      // Lights
-      const ambient = new THREE.AmbientLight(0x404040, 1.2);
-      scene.add(ambient);
-      const dir = new THREE.DirectionalLight(0xffffff, 0.6);
-      dir.position.set(0.5, 1, 0.5);
-      scene.add(dir);
+  // initial build
+  rebuildWave();
 
-      // Axes (white)
-      const axisMaterial = new THREE.LineBasicMaterial({ color: 0xFFFFFF });
-      function makeAxis(p1, p2) {
-        const g = new THREE.BufferGeometry().setFromPoints([p1, p2]);
-        return new THREE.Line(g, axisMaterial);
-      }
-      scene.add(makeAxis(new THREE.Vector3(-2000,0,0), new THREE.Vector3(2000,0,0)));
-      scene.add(makeAxis(new THREE.Vector3(0,-1000,0), new THREE.Vector3(0,1000,0)));
-      scene.add(makeAxis(new THREE.Vector3(0,0,-1000), new THREE.Vector3(0,0,1000)));
-      console.log('Axes added');
+  // ===== Animation loop =====
+  let lastTime = performance.now();
+  function animate(now) {
+    const t = now || 0;
+    const timeFactor = (t / 1000) * state.speed;
 
-      // Wave geometry initialization
-      let segments = 2000;
-      let amplitude = +document.getElementById('amplitude').value;
-      let wavelength = +document.getElementById('wavelength').value;
-      let speed = +document.getElementById('speed').value;
-
-      // BufferGeometry with explicit positions
-      const positions = new Float32Array(segments * 3);
-      for (let i = 0; i < segments; i++) {
+    if (state.mode === 'line' && waveLine) {
+      const pos = waveLine.geometry.attributes.position.array;
+      const segments = state.segments;
+      for (let i=0;i<segments;i++){
         const x = (i - segments/2) * 1.0;
-        positions[i*3] = x;
-        positions[i*3+1] = amplitude * Math.sin((x / wavelength) * Math.PI * 2);
-        positions[i*3+2] = 0;
+        pos[i*3] = x;
+        pos[i*3+1] = state.amplitude * Math.sin((x / state.wavelength) * Math.PI * 2 - timeFactor);
+        pos[i*3+2] = state.depth * Math.sin((x / (state.wavelength*0.5)) * Math.PI * 2 - timeFactor*0.5);
       }
-      const waveGeom = new THREE.BufferGeometry();
-      waveGeom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      waveGeom.setDrawRange(0, segments);
-      const waveMat = new THREE.LineBasicMaterial({ color: 0xFFD700 });
-      const wave = new THREE.Line(waveGeom, waveMat);
-      scene.add(wave);
-      console.log('Wave geometry created with segments=', segments);
-
-      // UI sync helpers
-      function sync(rangeEl, numEl, setter) {
-        rangeEl.addEventListener('input', () => { numEl.value = rangeEl.value; setter(+rangeEl.value); });
-        numEl.addEventListener('input', () => { rangeEl.value = numEl.value; setter(+numEl.value); });
-      }
-      sync(document.getElementById('amplitude'), document.getElementById('amplitudeNum'), v => amplitude = v);
-      sync(document.getElementById('wavelength'), document.getElementById('wavelengthNum'), v => wavelength = v);
-      sync(document.getElementById('speed'), document.getElementById('speedNum'), v => speed = v);
-
-      // Animation loop with robust update and error capture
-      let lastTime = performance.now();
-      function animate(now) {
-        try {
-          const dt = (now - lastTime) / 1000;
-          lastTime = now;
-          const timeFactor = now / 1000 * speed;
-
-          // Update positions array directly
-          const pos = wave.geometry.attributes.position.array;
-          for (let i = 0; i < segments; i++) {
-            const x = (i - segments/2) * 1.0;
-            pos[i*3] = x;
-            pos[i*3+1] = amplitude * Math.sin((x / wavelength) * Math.PI * 2 - timeFactor);
-            pos[i*3+2] = 0;
-          }
-          wave.geometry.attributes.position.needsUpdate = true;
-
-          if (controls && controls.update) controls.update();
-          renderer.render(scene, camera);
-          requestAnimationFrame(animate);
-        } catch (err) {
-          console.error('Animation error', err);
-          logStatus('Animation error: ' + (err && err.message ? err.message : String(err)), true);
-        }
-      }
-      requestAnimationFrame(animate);
-
-      // Resize handling
-      window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-      });
-
-      // Final status
-      document.getElementById('webglFlag').textContent = 'available and running';
-      logStatus('Three.js renderer running. If you still see only the controls, check the Console for errors.');
-    } catch (e) {
-      console.error('Fatal initialization error', e);
-      document.getElementById('webglFlag').textContent = 'initialization failed';
-      logStatus('Initialization failed: ' + (e && e.message ? e.message : String(e)), true);
-      // As a last resort, show a Canvas2D fallback
-      const fallback = document.createElement('canvas');
-      fallback.style.position = 'fixed';
-      fallback.style.top = '0';
-      fallback.style.left = '0';
-      fallback.style.width = '100%';
-      fallback.style.height = '100%';
-      fallback.width = window.innerWidth;
-      fallback.height = window.innerHeight;
-      fallback.style.zIndex = '1';
-      container.appendChild(fallback);
-      const ctx = fallback.getContext('2d');
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0,0,fallback.width,fallback.height);
-      ctx.fillStyle = '#FFD700';
-      ctx.font = '20px sans-serif';
-      ctx.fillText('Fallback: WebGL init failed. Check console for details.', 20, 40);
+      waveLine.geometry.attributes.position.needsUpdate = true;
     }
-  } // end webglAvailable branch
+
+    if (state.mode === 'ribbon' && waveRibbon) {
+      // For ribbon we rebuild every N frames to keep code simple and stable.
+      // Rebuild less frequently for performance.
+      if ((Math.floor(now/60) % 2) === 0) { // rebuild every ~120ms
+        scene.remove(waveRibbon);
+        waveRibbon.geometry.dispose();
+        waveRibbon = null;
+        buildRibbon(state.segments);
+      } else {
+        // subtle animation by rotating the ribbon slightly for depth effect
+        waveRibbon.rotation.y = Math.sin(timeFactor * 0.2) * 0.06;
+      }
+    }
+
+    controls.update();
+    renderer.render(scene, camera);
+    requestAnimationFrame(animate);
+  }
+  requestAnimationFrame(animate);
+
+  // ===== Zoom controls (smooth dolly) =====
+  function dolly(delta) {
+    // Move camera toward controls.target by delta units (positive = closer)
+    const dir = new THREE.Vector3();
+    dir.subVectors(camera.position, controls.target).normalize();
+    const distance = camera.position.distanceTo(controls.target);
+    // clamp min/max distance
+    const minDist = 20;
+    const maxDist = 3000;
+    let newDist = THREE.MathUtils.clamp(distance - delta, minDist, maxDist);
+    const newPos = new THREE.Vector3();
+    newPos.copy(controls.target).add(dir.multiplyScalar(newDist));
+    // smooth tween
+    const start = camera.position.clone();
+    const duration = 220;
+    const startTime = performance.now();
+    function step() {
+      const now = performance.now();
+      const p = Math.min(1, (now - startTime) / duration);
+      const ease = p * (2 - p);
+      camera.position.lerpVectors(start, newPos, ease);
+      camera.updateProjectionMatrix();
+      if (p < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  ui.zoomIn.addEventListener('click', () => dolly(80));
+  ui.zoomOut.addEventListener('click', () => dolly(-80));
+  ui.fitView.addEventListener('click', fitView);
+
+  // Keyboard shortcuts
+  window.addEventListener('keydown', (e) => {
+    if (e.key === '+' || e.key === '=') { dolly(80); }
+    if (e.key === '-' || e.key === '_') { dolly(-80); }
+    if (e.key === '0') { fitView(); }
+  });
+
+  // Fit camera to wave bounds
+  function fitView() {
+    // compute bounding box of wave (approx)
+    const half = state.segments / 2;
+    const minX = -half, maxX = half;
+    const maxAmp = Math.abs(state.amplitude) + Math.abs(state.depth);
+    const center = new THREE.Vector3((minX + maxX)/2, 0, 0);
+    controls.target.copy(center);
+    // choose distance so the wave fits vertically and horizontally
+    const fov = camera.fov * (Math.PI/180);
+    const height = Math.max( (maxX - minX) * 0.6, maxAmp * 2.2 );
+    const distance = Math.abs(height / Math.tan(fov/2));
+    // place camera along a nice angle
+    const newPos = new THREE.Vector3(center.x, center.y + distance*0.25, center.z + distance*0.9);
+    // smooth move
+    const start = camera.position.clone();
+    const startTarget = controls.target.clone();
+    const duration = 420;
+    const startTime = performance.now();
+    function step() {
+      const now = performance.now();
+      const p = Math.min(1, (now - startTime) / duration);
+      const ease = p * (2 - p);
+      camera.position.lerpVectors(start, newPos, ease);
+      controls.target.lerpVectors(startTarget, center, ease);
+      camera.updateProjectionMatrix();
+      controls.update();
+      if (p < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  // ===== Rebuild scheduling when heavy params change =====
+  let rebuildTimeout = null;
+  function scheduleRebuild() {
+    if (rebuildTimeout) clearTimeout(rebuildTimeout);
+    rebuildTimeout = setTimeout(() => { rebuildWave(); }, 180);
+  }
+
+  ['amplitude','wavelength','depth','segments','mode'].forEach(k => {
+    const el = document.getElementById(k);
+    if (el) el.addEventListener('input', () => {
+      state[k] = (k === 'segments') ? Math.max(200, Math.round(+el.value/10)*10) : +el.value;
+      if (k === 'segments' || k === 'mode' || k === 'depth' || k === 'wavelength' || k === 'amplitude') scheduleRebuild();
+    });
+  });
+
+  // ===== Resize handling =====
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // Final status
+  setStatus('Running — 3D ribbon ready. Use controls to zoom and orbit.');
   </script>
 </body>
 </html>
