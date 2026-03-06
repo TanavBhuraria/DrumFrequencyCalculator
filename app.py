@@ -37,6 +37,11 @@ def howitworks():
 def index():
     return render_template("index.html")
 
+@app.route("/visual")
+def visual():
+    return render_template("visual.html")
+
+    
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=10000)
 
