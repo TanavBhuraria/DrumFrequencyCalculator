@@ -1,62 +1,106 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>Wave Test</title>
-  <style>body{margin:0;overflow:hidden;background:black}</style>
+  <meta charset="UTF-8">
+  <title>3D Wave Visualiser</title>
+  <style>
+    body { margin:0; background:black; color:gold; font-family:sans-serif; overflow:hidden; }
+    #controls {
+      position:absolute; top:10px; left:10px; z-index:10;
+      background:rgba(0,0,0,0.7); padding:10px;
+      border:1px solid gold; border-radius:5px;
+    }
+    label { display:block; margin:5px 0; }
+    input[type=range], input[type=number] { accent-color:gold; margin-left:5px; }
+  </style>
 </head>
 <body>
-<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/controls/OrbitControls.js"></script>
-<script>
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x000000);
+  <div id="controls">
+    <label>Amplitude:
+      <input type="range" id="amplitude" min="20" max="200" value="100">
+      <input type="number" id="amplitudeNum" min="20" max="200" value="100">
+    </label>
+    <label>Wavelength:
+      <input type="range" id="wavelength" min="50" max="500" value="200">
+      <input type="number" id="wavelengthNum" min="50" max="500" value="200">
+    </label>
+    <label>Speed:
+      <input type="range" id="speed" min="1" max="10" value="5" step="0.1">
+      <input type="number" id="speedNum" min="1" max="10" value="5" step="0.1">
+    </label>
+  </div>
 
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 5000);
-camera.position.set(0,100,400);
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/controls/OrbitControls.js"></script>
+  <script>
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000);
 
-const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 5000);
+    camera.position.set(0, 100, 400);
 
-const controls = new THREE.OrbitControls(camera, renderer.domElement);
-controls.target.set(0,0,0);
-controls.update();
+    const renderer = new THREE.WebGLRenderer({antialias:true});
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
 
-// Axes
-const axisMat = new THREE.LineBasicMaterial({color:0xFFFFFF});
-scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-1000,0,0),new THREE.Vector3(1000,0,0)]),axisMat));
-scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,-500,0),new THREE.Vector3(0,500,0)]),axisMat));
-scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,-500),new THREE.Vector3(0,0,500)]),axisMat));
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.target.set(0,0,0);
+    controls.update();
 
-// Wave
-const segments=2000;
-const pos=new Float32Array(segments*3);
-for(let i=0;i<segments;i++){
-  const x=i-segments/2;
-  pos[i*3]=x;
-  pos[i*3+1]=100*Math.sin(x/50);
-  pos[i*3+2]=0;
-}
-const geom=new THREE.BufferGeometry();
-geom.setAttribute('position',new THREE.BufferAttribute(pos,3));
-const wave=new THREE.Line(geom,new THREE.LineBasicMaterial({color:0xFFD700}));
-scene.add(wave);
+    // Axes
+    const axisMaterial = new THREE.LineBasicMaterial({ color: 0xFFFFFF });
+    scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(-1000,0,0), new THREE.Vector3(1000,0,0)
+    ]), axisMaterial));
+    scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0,-500,0), new THREE.Vector3(0,500,0)
+    ]), axisMaterial));
+    scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0,0,-500), new THREE.Vector3(0,0,500)
+    ]), axisMaterial));
 
-function animate(t){
-  const arr=wave.geometry.attributes.position.array;
-  for(let i=0;i<segments;i++){
-    const x=i-segments/2;
-    arr[i*3]=x;
-    arr[i*3+1]=100*Math.sin((x/50)-t/1000*5);
-    arr[i*3+2]=0;
-  }
-  wave.geometry.attributes.position.needsUpdate=true;
-  controls.update();
-  renderer.render(scene,camera);
-  requestAnimationFrame(animate);
-}
-animate(0);
-</script>
+    // Wave
+    const segments = 2000;
+    const positions = new Float32Array(segments * 3);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const material = new THREE.LineBasicMaterial({ color: 0xFFD700 });
+    const wave = new THREE.Line(geometry, material);
+    scene.add(wave);
+
+    let amplitude = 100, wavelength = 200, speed = 5;
+
+    function syncInputs(rangeId, numId, variable) {
+      const range = document.getElementById(rangeId);
+      const num = document.getElementById(numId);
+      range.oninput = () => { num.value = range.value; window[variable] = parseFloat(range.value); };
+      num.oninput = () => { range.value = num.value; window[variable] = parseFloat(num.value); };
+    }
+    syncInputs("amplitude","amplitudeNum","amplitude");
+    syncInputs("wavelength","wavelengthNum","wavelength");
+    syncInputs("speed","speedNum","speed");
+
+    function animate(time) {
+      const pos = wave.geometry.attributes.position.array;
+      for (let i = 0; i < segments; i++) {
+        const x = i - segments/2;
+        pos[i*3] = x;
+        pos[i*3+1] = amplitude * Math.sin((x / wavelength) * 2 * Math.PI - time/1000 * speed);
+        pos[i*3+2] = 0;
+      }
+      wave.geometry.attributes.position.needsUpdate = true;
+
+      controls.update();
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+    animate(0);
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth/window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
 </body>
 </html>
