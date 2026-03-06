@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>2D Wave Visualiser — Axes, Ticks, Stable Wave</title>
+  <title>2D Wave Visualiser — Standing Wave</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     html,body { height:100%; margin:0; background:#000; color:#FFD700; font-family:Inter,system-ui,Arial,sans-serif; }
@@ -26,7 +26,7 @@
   <canvas id="canvas"></canvas>
 
   <div class="controls" id="controls">
-    <h3>2D Wave Visualiser — Fixed</h3>
+    <h3>2D Wave Visualiser — Standing Wave</h3>
 
     <div class="row">
       <label>Amplitude</label>
@@ -41,21 +41,9 @@
     </div>
 
     <div class="row">
-      <label>Depth (parallax)</label>
-      <input id="depth" type="range" min="0" max="300" step="1" value="40">
-      <input id="depthNum" type="number" min="0" max="300" step="1" value="40">
-    </div>
-
-    <div class="row">
       <label>Speed</label>
       <input id="speed" type="range" min="0.1" max="20" step="0.1" value="5">
       <input id="speedNum" type="number" min="0.1" max="20" step="0.1" value="5">
-    </div>
-
-    <div class="row">
-      <label>Smoothing</label>
-      <input id="smoothing" type="range" min="0" max="0.99" step="0.01" value="0.85">
-      <input id="smoothingNum" type="number" min="0" max="0.99" step="0.01" value="0.85">
     </div>
 
     <div class="row">
@@ -76,7 +64,7 @@
     </div>
   </div>
 
-  <div class="hint">All four axes visible with tick labels. Smoothing reduces ribbon jitter.</div>
+  <div class="hint">All four axes visible with tick labels. Standing wave uses sin(kx)·cos(ωt).</div>
 
 <script>
 (() => {
@@ -89,12 +77,8 @@
     amplitudeNum: document.getElementById('amplitudeNum'),
     wavelength: document.getElementById('wavelength'),
     wavelengthNum: document.getElementById('wavelengthNum'),
-    depth: document.getElementById('depth'),
-    depthNum: document.getElementById('depthNum'),
     speed: document.getElementById('speed'),
     speedNum: document.getElementById('speedNum'),
-    smoothing: document.getElementById('smoothing'),
-    smoothingNum: document.getElementById('smoothingNum'),
     style: document.getElementById('style'),
     gridToggle: document.getElementById('gridToggle'),
     zoomIn: document.getElementById('zoomIn'),
@@ -113,9 +97,7 @@
   const state = {
     amplitude: +ui.amplitude.value,
     wavelength: +ui.wavelength.value,
-    depth: +ui.depth.value,
     speed: +ui.speed.value,
-    smoothing: +ui.smoothing.value,
     style: ui.style.value,
     grid: false,
     zoom: 1,
@@ -125,9 +107,7 @@
 
   sync(ui.amplitude, ui.amplitudeNum, v => state.amplitude = v);
   sync(ui.wavelength, ui.wavelengthNum, v => state.wavelength = v);
-  sync(ui.depth, ui.depthNum, v => state.depth = v);
   sync(ui.speed, ui.speedNum, v => state.speed = v);
-  sync(ui.smoothing, ui.smoothingNum, v => state.smoothing = v);
   ui.style.addEventListener('change', () => state.style = ui.style.value);
   ui.gridToggle.addEventListener('click', () => state.grid = !state.grid);
 
@@ -164,7 +144,6 @@
     const mx = (e.clientX - rect.left - rect.width/2) / state.zoom - state.offsetX;
     const my = (e.clientY - rect.top - rect.height/2) / state.zoom - state.offsetY;
     const newZoom = Math.max(0.2, Math.min(6, state.zoom * zoomFactor));
-    const inv = 1 / zoomFactor;
     state.offsetX -= mx * (1 - 1/zoomFactor);
     state.offsetY -= my * (1 - 1/zoomFactor);
     state.zoom = newZoom;
@@ -201,42 +180,36 @@
     link.click();
   });
 
-  // Stable sampling: fixed sample count independent of zoom to avoid geometry changes
-  const SAMPLES = 1200; // fixed sample count for stability
+  // Stable sampling count (keeps geometry consistent)
+  const SAMPLES = 1200;
   const worldWidth = 2000; // world units across horizontal span
 
-  // Smoothing buffers to reduce per-sample jitter
-  const smoothY = new Float32Array(SAMPLES + 1);
-  for (let i=0;i<=SAMPLES;i++) smoothY[i] = 0;
-
-  // Axis tick helper
-  function drawAxesAndTicks(W, H, cx, cy, worldToScreen) {
+  // Axis & ticks
+  function drawAxesAndTicks(W, H, cx, cy) {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.scale(state.zoom, state.zoom);
     ctx.translate(state.offsetX, state.offsetY);
 
-    // Draw grid if enabled
+    // Grid
     if (state.grid) {
       ctx.strokeStyle = 'rgba(255,255,255,0.06)';
       ctx.lineWidth = 1 / state.zoom;
       const gridSpacing = 100;
       for (let gx = -worldWidth; gx <= worldWidth; gx += gridSpacing) {
-        const sx = gx;
-        ctx.beginPath(); ctx.moveTo(sx, -H*2); ctx.lineTo(sx, H*2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(gx, -H*2); ctx.lineTo(gx, H*2); ctx.stroke();
       }
       for (let gy = -1000; gy <= 1000; gy += gridSpacing) {
-        const sy = gy;
-        ctx.beginPath(); ctx.moveTo(-worldWidth*2, sy); ctx.lineTo(worldWidth*2, sy); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-worldWidth*2, gy); ctx.lineTo(worldWidth*2, gy); ctx.stroke();
       }
     }
 
-    // Axis lines on all four sides (top, bottom, left, right)
+    // Axis lines on all four sides
     ctx.strokeStyle = '#FFFFFF';
     ctx.lineWidth = 1 / state.zoom;
-    // bottom axis (y= -cy in world coords)
+    // bottom axis (y=0)
     ctx.beginPath(); ctx.moveTo(-worldWidth/2, 0); ctx.lineTo(worldWidth/2, 0); ctx.stroke();
-    // top axis (y = -cy + viewHeight in world coords) draw at world y = viewHeight/state.zoom
+    // top axis (y = view top in world coords)
     const viewHWorld = (H/2) / state.zoom;
     ctx.beginPath(); ctx.moveTo(-worldWidth/2, -viewHWorld*2); ctx.lineTo(worldWidth/2, -viewHWorld*2); ctx.stroke();
     // left axis
@@ -250,7 +223,7 @@
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
 
-    // X ticks: choose tick spacing in world units
+    // X ticks
     const approxPixelsPerTick = 80;
     const worldPerPixel = (W / state.zoom) / worldWidth;
     const desiredWorldTick = approxPixelsPerTick * worldPerPixel;
@@ -259,23 +232,14 @@
     const maxX = worldWidth/2 - state.offsetX + (W/2)/state.zoom;
     for (let x = Math.ceil(minX / tickBase) * tickBase; x <= maxX; x += tickBase) {
       const sx = x;
-      // bottom ticks
       ctx.beginPath(); ctx.moveTo(sx, -4 / state.zoom); ctx.lineTo(sx, 4 / state.zoom); ctx.stroke();
-      // top ticks (at top axis)
       ctx.beginPath(); ctx.moveTo(sx, -viewHWorld*2 - 4 / state.zoom); ctx.lineTo(sx, -viewHWorld*2 + 4 / state.zoom); ctx.stroke();
-      // labels bottom
       const label = formatNumber(x);
-      ctx.save();
-      ctx.scale(1,1);
       ctx.fillText(label, sx, 6 / state.zoom);
-      ctx.restore();
-      // labels top
-      ctx.save();
       ctx.fillText(label, sx, -viewHWorld*2 - 16 / state.zoom);
-      ctx.restore();
     }
 
-    // Y ticks: choose tick spacing
+    // Y ticks
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
     const approxPixelsPerTickY = 60;
@@ -285,26 +249,17 @@
     const maxY = 1000 - state.offsetY + (H/2)/state.zoom;
     for (let y = Math.ceil(minY / tickBaseY) * tickBaseY; y <= maxY; y += tickBaseY) {
       const sy = y;
-      // left ticks
       ctx.beginPath(); ctx.moveTo(-worldWidth/2 - 4 / state.zoom, sy); ctx.lineTo(-worldWidth/2 + 4 / state.zoom, sy); ctx.stroke();
-      // right ticks
       ctx.beginPath(); ctx.moveTo(worldWidth/2 - 4 / state.zoom, sy); ctx.lineTo(worldWidth/2 + 4 / state.zoom, sy); ctx.stroke();
-      // labels left
-      ctx.save();
       ctx.fillText(formatNumber(y), -worldWidth/2 - 8 / state.zoom, sy);
-      ctx.restore();
-      // labels right
-      ctx.save();
       ctx.textAlign = 'left';
       ctx.fillText(formatNumber(y), worldWidth/2 + 8 / state.zoom, sy);
       ctx.textAlign = 'right';
-      ctx.restore();
     }
 
     ctx.restore();
   }
 
-  // Choose a "nice" tick spacing (1,2,5 * power of 10)
   function chooseNiceTick(desired) {
     if (desired <= 0) return 1;
     const pow = Math.pow(10, Math.floor(Math.log10(desired)));
@@ -321,11 +276,12 @@
     return v.toFixed(2);
   }
 
-  // Render loop
+  // Render loop: standing wave y = A * sin(kx) * cos(ωt)
   let last = performance.now();
   function render(now) {
     const dt = (now - last) / 1000; last = now;
     const t = now / 1000;
+
     // clear
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -335,80 +291,68 @@
     const H = canvas.height / DPR;
     const cx = W / 2, cy = H / 2;
 
-    // Draw axes and ticks (in world-space transform)
+    // Draw axes and ticks
     drawAxesAndTicks(W, H, cx, cy);
 
-    // Draw wave in world-space transform
+    // Draw wave
     ctx.save();
     ctx.translate(cx, cy);
     ctx.scale(state.zoom, state.zoom);
     ctx.translate(state.offsetX, state.offsetY);
 
-    // stable sampling across frames
     const samples = SAMPLES;
     const step = worldWidth / samples;
-    const amp = state.amplitude;
+    const A = state.amplitude;
     const wl = state.wavelength;
-    const depth = state.depth;
-    const speed = state.speed;
-    const smoothing = state.smoothing;
-
-    // compute target Y for each sample and smooth it to reduce jitter
-    for (let i = 0; i <= samples; i++) {
-      const worldX = (i - samples/2) * step;
-      const rawY = amp * Math.sin((worldX / wl) * Math.PI * 2 - t * speed);
-      // add z-parallax as vertical offset to simulate depth
-      const z = depth * Math.sin((worldX / Math.max(1, wl*0.5)) * Math.PI * 2 - t * speed * 0.5);
-      const target = rawY + z * 0.15;
-      // low-pass smoothing: new = lerp(prev, target, 1 - smoothing)
-      smoothY[i] = smoothY[i] * smoothing + target * (1 - smoothing);
-    }
-
-    // Draw line or ribbon using the smoothed values
+    const k = (2 * Math.PI) / wl; // spatial frequency
+    const omega = state.speed; // interpret speed as angular frequency factor
+    // standing wave: y(x,t) = A * sin(k x) * cos(omega * t)
     if (state.style === 'line') {
       ctx.strokeStyle = '#FFD700';
       ctx.lineWidth = 2 / state.zoom;
       ctx.beginPath();
       for (let i = 0; i <= samples; i++) {
         const worldX = (i - samples/2) * step;
-        const screenX = Math.round(worldX * DPR) / DPR; // align to pixel grid to avoid subpixel jitter
-        const screenY = Math.round(-smoothY[i] * DPR) / DPR;
+        const y = A * Math.sin(k * worldX) * Math.cos(omega * t);
+        const screenX = Math.round(worldX * DPR) / DPR;
+        const screenY = Math.round(-y * DPR) / DPR;
         if (i === 0) ctx.moveTo(screenX, screenY); else ctx.lineTo(screenX, screenY);
       }
       ctx.stroke();
     } else {
-      // ribbon: top edge = smoothed Y, bottom edge = smoothed Y + thickness
-      const thickness = Math.max(6, amp * 0.12);
-      // top path
-      ctx.beginPath();
+      // ribbon
+      const thickness = Math.max(6, A * 0.12);
+      const top = [];
+      const bottom = [];
       for (let i = 0; i <= samples; i++) {
         const worldX = (i - samples/2) * step;
+        const y = A * Math.sin(k * worldX) * Math.cos(omega * t);
         const screenX = Math.round(worldX * DPR) / DPR;
-        const screenY = Math.round(-smoothY[i] * DPR) / DPR;
-        if (i === 0) ctx.moveTo(screenX, screenY); else ctx.lineTo(screenX, screenY);
+        const screenY = Math.round(-y * DPR) / DPR;
+        top.push([screenX, screenY]);
+        bottom.push([screenX, screenY + thickness]);
       }
-      // bottom path
-      for (let i = samples; i >= 0; i--) {
-        const worldX = (i - samples/2) * step;
-        const screenX = Math.round(worldX * DPR) / DPR;
-        const screenY = Math.round((-smoothY[i] + thickness) * DPR) / DPR;
-        ctx.lineTo(screenX, screenY);
+      ctx.beginPath();
+      for (let i = 0; i < top.length; i++) {
+        const p = top[i];
+        if (i === 0) ctx.moveTo(p[0], p[1]); else ctx.lineTo(p[0], p[1]);
+      }
+      for (let i = bottom.length - 1; i >= 0; i--) {
+        const p = bottom[i];
+        ctx.lineTo(p[0], p[1]);
       }
       ctx.closePath();
-      // gradient fill
-      const grad = ctx.createLinearGradient(-worldWidth/2, -amp, worldWidth/2, amp + thickness);
+      const grad = ctx.createLinearGradient(-worldWidth/2, -A, worldWidth/2, A + thickness);
       grad.addColorStop(0, '#FFD700');
       grad.addColorStop(1, '#552800');
       ctx.fillStyle = grad;
       ctx.fill();
-      // outline
       ctx.strokeStyle = '#FFD700';
       ctx.lineWidth = 1.2 / state.zoom;
       ctx.stroke();
     }
 
     ctx.restore();
-
     requestAnimationFrame(render);
   }
   requestAnimationFrame(render);
