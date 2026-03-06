@@ -2,28 +2,23 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>2D Wave Visualiser — Reliable</title>
+  <title>2D Wave Visualiser — Axes, Ticks, Stable Wave</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     html,body { height:100%; margin:0; background:#000; color:#FFD700; font-family:Inter,system-ui,Arial,sans-serif; }
-    #canvas { position:fixed; inset:0; z-index:1; display:block; width:100%; height:100%; }
+    #canvas { position:fixed; inset:0; z-index:1; display:block; width:100%; height:100%; background:#000; }
     .controls {
-      position: absolute;
-      top: 12px;
-      left: 12px;
-      z-index: 40;
-      background: rgba(0,0,0,0.78);
-      border: 1px solid #FFD700;
-      padding: 12px;
-      border-radius: 8px;
-      min-width: 320px;
+      position: absolute; top: 12px; left: 12px; z-index: 40;
+      background: rgba(0,0,0,0.78); border: 1px solid #FFD700; padding: 12px; border-radius: 8px; min-width: 360px;
     }
     .controls h3 { margin:0 0 8px 0; color:#FFD700; font-size:15px; }
     .row { display:flex; align-items:center; gap:8px; margin:6px 0; }
-    label { font-size:13px; color:#FFD700; min-width:90px; }
+    label { font-size:13px; color:#FFD700; min-width:100px; }
     input[type=range] { flex:1; accent-color:#FFD700; }
     input[type=number] { width:84px; background:#111; color:#FFD700; border:1px solid #333; padding:4px 6px; border-radius:4px; }
     button, select { background:#111; color:#FFD700; border:1px solid #333; padding:6px 8px; border-radius:6px; cursor:pointer; }
+    .small { font-size:12px;color:#ccc;margin-top:8px; }
+    .right { margin-left:auto; }
     .hint { position:absolute; left:12px; bottom:12px; z-index:40; color:#999; background:rgba(0,0,0,0.5); padding:8px; border-radius:6px; border:1px solid rgba(255,215,0,0.08); font-size:12px; }
   </style>
 </head>
@@ -31,7 +26,7 @@
   <canvas id="canvas"></canvas>
 
   <div class="controls" id="controls">
-    <h3>2D Wave Visualiser</h3>
+    <h3>2D Wave Visualiser — Fixed</h3>
 
     <div class="row">
       <label>Amplitude</label>
@@ -57,27 +52,38 @@
       <input id="speedNum" type="number" min="0.1" max="20" step="0.1" value="5">
     </div>
 
-    <div class="row" style="margin-top:8px;">
-      <button id="zoomIn">Zoom In (+)</button>
-      <button id="zoomOut">Zoom Out (-)</button>
-      <button id="fitView">Fit View (0)</button>
+    <div class="row">
+      <label>Smoothing</label>
+      <input id="smoothing" type="range" min="0" max="0.99" step="0.01" value="0.85">
+      <input id="smoothingNum" type="number" min="0" max="0.99" step="0.01" value="0.85">
+    </div>
+
+    <div class="row">
+      <label>Style</label>
       <select id="style">
         <option value="line">Line</option>
         <option value="ribbon">Ribbon (shaded)</option>
       </select>
+      <button id="gridToggle">Toggle Grid</button>
+      <button id="exportPNG" class="right">Export PNG</button>
     </div>
 
-    <div style="font-size:12px;color:#ccc;margin-top:8px;">Orbit not needed — drag canvas to pan, scroll to zoom, or use buttons/keys.</div>
+    <div class="row">
+      <button id="zoomIn">Zoom In (+)</button>
+      <button id="zoomOut">Zoom Out (-)</button>
+      <button id="fitView">Fit View (0)</button>
+      <div class="small right">Drag to pan • Scroll to zoom</div>
+    </div>
   </div>
 
-  <div class="hint">Keyboard: + / - to zoom, 0 to fit view. If you want export, tell me and I’ll add it.</div>
+  <div class="hint">All four axes visible with tick labels. Smoothing reduces ribbon jitter.</div>
 
 <script>
 (() => {
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d', { alpha: false });
 
-  // UI elements
+  // UI
   const ui = {
     amplitude: document.getElementById('amplitude'),
     amplitudeNum: document.getElementById('amplitudeNum'),
@@ -87,10 +93,14 @@
     depthNum: document.getElementById('depthNum'),
     speed: document.getElementById('speed'),
     speedNum: document.getElementById('speedNum'),
+    smoothing: document.getElementById('smoothing'),
+    smoothingNum: document.getElementById('smoothingNum'),
+    style: document.getElementById('style'),
+    gridToggle: document.getElementById('gridToggle'),
     zoomIn: document.getElementById('zoomIn'),
     zoomOut: document.getElementById('zoomOut'),
     fitView: document.getElementById('fitView'),
-    style: document.getElementById('style')
+    exportPNG: document.getElementById('exportPNG')
   };
 
   // Sync helpers
@@ -105,19 +115,23 @@
     wavelength: +ui.wavelength.value,
     depth: +ui.depth.value,
     speed: +ui.speed.value,
+    smoothing: +ui.smoothing.value,
+    style: ui.style.value,
+    grid: false,
     zoom: 1,
     offsetX: 0,
-    offsetY: 0,
-    style: ui.style.value
+    offsetY: 0
   };
 
   sync(ui.amplitude, ui.amplitudeNum, v => state.amplitude = v);
   sync(ui.wavelength, ui.wavelengthNum, v => state.wavelength = v);
   sync(ui.depth, ui.depthNum, v => state.depth = v);
   sync(ui.speed, ui.speedNum, v => state.speed = v);
+  sync(ui.smoothing, ui.smoothingNum, v => state.smoothing = v);
   ui.style.addEventListener('change', () => state.style = ui.style.value);
+  ui.gridToggle.addEventListener('click', () => state.grid = !state.grid);
 
-  // Resize canvas
+  // Resize canvas with DPR
   function resize() {
     const DPR = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
     canvas.width = Math.floor(window.innerWidth * DPR);
@@ -131,10 +145,7 @@
 
   // Interaction: pan by dragging
   let dragging = false, lastX = 0, lastY = 0;
-  canvas.addEventListener('mousedown', (e) => {
-    dragging = true; lastX = e.clientX; lastY = e.clientY;
-    canvas.style.cursor = 'grabbing';
-  });
+  canvas.addEventListener('mousedown', (e) => { dragging = true; lastX = e.clientX; lastY = e.clientY; canvas.style.cursor = 'grabbing'; });
   window.addEventListener('mouseup', () => { dragging = false; canvas.style.cursor = 'default'; });
   window.addEventListener('mousemove', (e) => {
     if (!dragging) return;
@@ -144,7 +155,7 @@
     state.offsetY += dy / state.zoom;
   });
 
-  // Scroll to zoom (centered on mouse)
+  // Scroll to zoom centered on mouse
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
     const delta = -e.deltaY;
@@ -152,12 +163,11 @@
     const rect = canvas.getBoundingClientRect();
     const mx = (e.clientX - rect.left - rect.width/2) / state.zoom - state.offsetX;
     const my = (e.clientY - rect.top - rect.height/2) / state.zoom - state.offsetY;
-    state.zoom *= zoomFactor;
-    // keep zoom within bounds
-    state.zoom = Math.max(0.2, Math.min(6, state.zoom));
-    // adjust offset so zoom centers on mouse
+    const newZoom = Math.max(0.2, Math.min(6, state.zoom * zoomFactor));
+    const inv = 1 / zoomFactor;
     state.offsetX -= mx * (1 - 1/zoomFactor);
     state.offsetY -= my * (1 - 1/zoomFactor);
+    state.zoom = newZoom;
   }, { passive: false });
 
   // Zoom buttons and fit view
@@ -175,9 +185,7 @@
   }
   ui.zoomIn.addEventListener('click', () => smoothZoom(Math.min(6, state.zoom * 1.4)));
   ui.zoomOut.addEventListener('click', () => smoothZoom(Math.max(0.2, state.zoom / 1.4)));
-  ui.fitView.addEventListener('click', () => {
-    state.zoom = 1; state.offsetX = 0; state.offsetY = 0;
-  });
+  ui.fitView.addEventListener('click', () => { state.zoom = 1; state.offsetX = 0; state.offsetY = 0; });
 
   window.addEventListener('keydown', (e) => {
     if (e.key === '+' || e.key === '=') smoothZoom(Math.min(6, state.zoom * 1.4));
@@ -185,103 +193,217 @@
     if (e.key === '0') { state.zoom = 1; state.offsetX = 0; state.offsetY = 0; }
   });
 
-  // Drawing helpers
-  function drawAxes(cx, cy, w, h) {
-    ctx.strokeStyle = '#FFFFFF';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    // horizontal center line
-    ctx.moveTo(0, cy); ctx.lineTo(w, cy);
-    // vertical center line
-    ctx.moveTo(cx, 0); ctx.lineTo(cx, h);
-    ctx.stroke();
-  }
+  // Export PNG
+  ui.exportPNG.addEventListener('click', () => {
+    const link = document.createElement('a');
+    link.download = 'wave.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  });
 
-  // Main render loop
-  let last = performance.now();
-  function render(now) {
-    const dt = (now - last) / 1000; last = now;
-    const t = now / 1000;
+  // Stable sampling: fixed sample count independent of zoom to avoid geometry changes
+  const SAMPLES = 1200; // fixed sample count for stability
+  const worldWidth = 2000; // world units across horizontal span
 
-    // clear
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // Smoothing buffers to reduce per-sample jitter
+  const smoothY = new Float32Array(SAMPLES + 1);
+  for (let i=0;i<=SAMPLES;i++) smoothY[i] = 0;
 
-    // logical center
-    const W = canvas.width / (window.devicePixelRatio || 1);
-    const H = canvas.height / (window.devicePixelRatio || 1);
-    const cx = W / 2, cy = H / 2;
-
-    // apply zoom and pan transforms by mapping world->screen manually
-    // draw axes
+  // Axis tick helper
+  function drawAxesAndTicks(W, H, cx, cy, worldToScreen) {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.scale(state.zoom, state.zoom);
     ctx.translate(state.offsetX, state.offsetY);
 
-    drawAxes(0, 0, W, H);
+    // Draw grid if enabled
+    if (state.grid) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+      ctx.lineWidth = 1 / state.zoom;
+      const gridSpacing = 100;
+      for (let gx = -worldWidth; gx <= worldWidth; gx += gridSpacing) {
+        const sx = gx;
+        ctx.beginPath(); ctx.moveTo(sx, -H*2); ctx.lineTo(sx, H*2); ctx.stroke();
+      }
+      for (let gy = -1000; gy <= 1000; gy += gridSpacing) {
+        const sy = gy;
+        ctx.beginPath(); ctx.moveTo(-worldWidth*2, sy); ctx.lineTo(worldWidth*2, sy); ctx.stroke();
+      }
+    }
 
-    // draw wave
-    const samples = Math.min(3000, Math.max(200, Math.floor(1200 * state.zoom)));
-    const step = (W * 2) / samples; // world units per sample
+    // Axis lines on all four sides (top, bottom, left, right)
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 1 / state.zoom;
+    // bottom axis (y= -cy in world coords)
+    ctx.beginPath(); ctx.moveTo(-worldWidth/2, 0); ctx.lineTo(worldWidth/2, 0); ctx.stroke();
+    // top axis (y = -cy + viewHeight in world coords) draw at world y = viewHeight/state.zoom
+    const viewHWorld = (H/2) / state.zoom;
+    ctx.beginPath(); ctx.moveTo(-worldWidth/2, -viewHWorld*2); ctx.lineTo(worldWidth/2, -viewHWorld*2); ctx.stroke();
+    // left axis
+    ctx.beginPath(); ctx.moveTo(-worldWidth/2, -10000); ctx.lineTo(-worldWidth/2, 10000); ctx.stroke();
+    // right axis
+    ctx.beginPath(); ctx.moveTo(worldWidth/2, -10000); ctx.lineTo(worldWidth/2, 10000); ctx.stroke();
+
+    // Ticks and labels
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = `${12 / state.zoom}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+
+    // X ticks: choose tick spacing in world units
+    const approxPixelsPerTick = 80;
+    const worldPerPixel = (W / state.zoom) / worldWidth;
+    const desiredWorldTick = approxPixelsPerTick * worldPerPixel;
+    const tickBase = chooseNiceTick(desiredWorldTick);
+    const minX = -worldWidth/2 - state.offsetX - (W/2)/state.zoom;
+    const maxX = worldWidth/2 - state.offsetX + (W/2)/state.zoom;
+    for (let x = Math.ceil(minX / tickBase) * tickBase; x <= maxX; x += tickBase) {
+      const sx = x;
+      // bottom ticks
+      ctx.beginPath(); ctx.moveTo(sx, -4 / state.zoom); ctx.lineTo(sx, 4 / state.zoom); ctx.stroke();
+      // top ticks (at top axis)
+      ctx.beginPath(); ctx.moveTo(sx, -viewHWorld*2 - 4 / state.zoom); ctx.lineTo(sx, -viewHWorld*2 + 4 / state.zoom); ctx.stroke();
+      // labels bottom
+      const label = formatNumber(x);
+      ctx.save();
+      ctx.scale(1,1);
+      ctx.fillText(label, sx, 6 / state.zoom);
+      ctx.restore();
+      // labels top
+      ctx.save();
+      ctx.fillText(label, sx, -viewHWorld*2 - 16 / state.zoom);
+      ctx.restore();
+    }
+
+    // Y ticks: choose tick spacing
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    const approxPixelsPerTickY = 60;
+    const desiredWorldTickY = approxPixelsPerTickY * worldPerPixel;
+    const tickBaseY = chooseNiceTick(desiredWorldTickY);
+    const minY = -1000 - state.offsetY - (H/2)/state.zoom;
+    const maxY = 1000 - state.offsetY + (H/2)/state.zoom;
+    for (let y = Math.ceil(minY / tickBaseY) * tickBaseY; y <= maxY; y += tickBaseY) {
+      const sy = y;
+      // left ticks
+      ctx.beginPath(); ctx.moveTo(-worldWidth/2 - 4 / state.zoom, sy); ctx.lineTo(-worldWidth/2 + 4 / state.zoom, sy); ctx.stroke();
+      // right ticks
+      ctx.beginPath(); ctx.moveTo(worldWidth/2 - 4 / state.zoom, sy); ctx.lineTo(worldWidth/2 + 4 / state.zoom, sy); ctx.stroke();
+      // labels left
+      ctx.save();
+      ctx.fillText(formatNumber(y), -worldWidth/2 - 8 / state.zoom, sy);
+      ctx.restore();
+      // labels right
+      ctx.save();
+      ctx.textAlign = 'left';
+      ctx.fillText(formatNumber(y), worldWidth/2 + 8 / state.zoom, sy);
+      ctx.textAlign = 'right';
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
+
+  // Choose a "nice" tick spacing (1,2,5 * power of 10)
+  function chooseNiceTick(desired) {
+    if (desired <= 0) return 1;
+    const pow = Math.pow(10, Math.floor(Math.log10(desired)));
+    const d = desired / pow;
+    if (d <= 1.5) return 1 * pow;
+    if (d <= 3.5) return 2 * pow;
+    if (d <= 7.5) return 5 * pow;
+    return 10 * pow;
+  }
+
+  function formatNumber(v) {
+    if (Math.abs(v) >= 1000 || Math.abs(v) < 0.01) return v.toExponential(2);
+    if (Math.abs(v - Math.round(v)) < 1e-6) return String(Math.round(v));
+    return v.toFixed(2);
+  }
+
+  // Render loop
+  let last = performance.now();
+  function render(now) {
+    const dt = (now - last) / 1000; last = now;
+    const t = now / 1000;
+    // clear
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const DPR = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+    const W = canvas.width / DPR;
+    const H = canvas.height / DPR;
+    const cx = W / 2, cy = H / 2;
+
+    // Draw axes and ticks (in world-space transform)
+    drawAxesAndTicks(W, H, cx, cy);
+
+    // Draw wave in world-space transform
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(state.zoom, state.zoom);
+    ctx.translate(state.offsetX, state.offsetY);
+
+    // stable sampling across frames
+    const samples = SAMPLES;
+    const step = worldWidth / samples;
     const amp = state.amplitude;
     const wl = state.wavelength;
     const depth = state.depth;
     const speed = state.speed;
+    const smoothing = state.smoothing;
 
+    // compute target Y for each sample and smooth it to reduce jitter
+    for (let i = 0; i <= samples; i++) {
+      const worldX = (i - samples/2) * step;
+      const rawY = amp * Math.sin((worldX / wl) * Math.PI * 2 - t * speed);
+      // add z-parallax as vertical offset to simulate depth
+      const z = depth * Math.sin((worldX / Math.max(1, wl*0.5)) * Math.PI * 2 - t * speed * 0.5);
+      const target = rawY + z * 0.15;
+      // low-pass smoothing: new = lerp(prev, target, 1 - smoothing)
+      smoothY[i] = smoothY[i] * smoothing + target * (1 - smoothing);
+    }
+
+    // Draw line or ribbon using the smoothed values
     if (state.style === 'line') {
       ctx.strokeStyle = '#FFD700';
       ctx.lineWidth = 2 / state.zoom;
       ctx.beginPath();
       for (let i = 0; i <= samples; i++) {
         const worldX = (i - samples/2) * step;
-        const y = amp * Math.sin((worldX / wl) * Math.PI * 2 - t * speed);
-        const z = depth * Math.sin((worldX / (wl*0.5)) * Math.PI * 2 - t * speed * 0.5);
-        const screenX = worldX;
-        const screenY = -y + z * 0.15; // parallax: z shifts vertical slightly
+        const screenX = Math.round(worldX * DPR) / DPR; // align to pixel grid to avoid subpixel jitter
+        const screenY = Math.round(-smoothY[i] * DPR) / DPR;
         if (i === 0) ctx.moveTo(screenX, screenY); else ctx.lineTo(screenX, screenY);
       }
       ctx.stroke();
     } else {
-      // ribbon: draw shaded band under the curve for depth illusion
-      const topColor = '#FFD700';
-      const bottomColor = '#552800';
-      // build path for top edge
-      const top = [];
-      const bottom = [];
+      // ribbon: top edge = smoothed Y, bottom edge = smoothed Y + thickness
+      const thickness = Math.max(6, amp * 0.12);
+      // top path
+      ctx.beginPath();
       for (let i = 0; i <= samples; i++) {
         const worldX = (i - samples/2) * step;
-        const y = amp * Math.sin((worldX / wl) * Math.PI * 2 - t * speed);
-        const z = depth * Math.sin((worldX / (wl*0.5)) * Math.PI * 2 - t * speed * 0.5);
-        const screenX = worldX;
-        const screenY = -y + z * 0.15;
-        top.push([screenX, screenY]);
-        bottom.push([screenX, screenY + Math.max(6, amp*0.12)]);
+        const screenX = Math.round(worldX * DPR) / DPR;
+        const screenY = Math.round(-smoothY[i] * DPR) / DPR;
+        if (i === 0) ctx.moveTo(screenX, screenY); else ctx.lineTo(screenX, screenY);
       }
-      // draw gradient fill
-      const grad = ctx.createLinearGradient(-W, -H, W, H);
-      grad.addColorStop(0, topColor);
-      grad.addColorStop(1, bottomColor);
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      for (let i = 0; i < top.length; i++) {
-        const p = top[i];
-        if (i === 0) ctx.moveTo(p[0], p[1]); else ctx.lineTo(p[0], p[1]);
-      }
-      for (let i = bottom.length - 1; i >= 0; i--) {
-        const p = bottom[i];
-        ctx.lineTo(p[0], p[1]);
+      // bottom path
+      for (let i = samples; i >= 0; i--) {
+        const worldX = (i - samples/2) * step;
+        const screenX = Math.round(worldX * DPR) / DPR;
+        const screenY = Math.round((-smoothY[i] + thickness) * DPR) / DPR;
+        ctx.lineTo(screenX, screenY);
       }
       ctx.closePath();
+      // gradient fill
+      const grad = ctx.createLinearGradient(-worldWidth/2, -amp, worldWidth/2, amp + thickness);
+      grad.addColorStop(0, '#FFD700');
+      grad.addColorStop(1, '#552800');
+      ctx.fillStyle = grad;
       ctx.fill();
       // outline
       ctx.strokeStyle = '#FFD700';
       ctx.lineWidth = 1.2 / state.zoom;
-      ctx.beginPath();
-      for (let i = 0; i < top.length; i++) {
-        const p = top[i];
-        if (i === 0) ctx.moveTo(p[0], p[1]); else ctx.lineTo(p[0], p[1]);
-      }
       ctx.stroke();
     }
 
@@ -294,6 +416,7 @@
   // Initial fit view
   function fitView() { state.zoom = 1; state.offsetX = 0; state.offsetY = 0; }
   ui.fitView.addEventListener('click', fitView);
+
 })();
 </script>
 </body>
