@@ -1,68 +1,89 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>Wave Visualisation</title>
-  <style>
-    body { margin: 0; overflow: hidden; }
-    #waveCanvas { width: 100vw; height: 100vh; }
-  </style>
+    <title>Wave Visualisation</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+            display: block;
+            margin: 20px auto;
+        }
+        .controls {
+            text-align: center;
+            margin-top: 20px;
+        }
+        label {
+            margin-right: 10px;
+        }
+    </style>
 </head>
 <body>
-  <div id="waveCanvas"></div>
+    <h1 style="text-align:center;">Customisable Wave Visualiser</h1>
+    <canvas id="waveCanvas" width="800" height="400"></canvas>
 
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-  <script>
-    // Scene setup
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.getElementById("waveCanvas").appendChild(renderer.domElement);
+    <div class="controls">
+        <label>Amplitude:
+            <input type="range" id="amplitude" min="20" max="200" value="100">
+        </label>
+        <label>Wavelength:
+            <input type="range" id="wavelength" min="50" max="500" value="200">
+        </label>
+        <label>Speed:
+            <input type="range" id="speed" min="1" max="10" value="5">
+        </label>
+        <label>Time Period:
+            <input type="range" id="period" min="1" max="10" value="5">
+        </label>
+    </div>
 
-    // Orbit controls
-    const controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
+    <script>
+        const canvas = document.getElementById("waveCanvas");
+        const ctx = canvas.getContext("2d");
 
-    // Axis line
-    const axisMaterial = new THREE.LineBasicMaterial({ color: 0xffffff });
-    const axisGeometry = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(-10, 0, 0),
-      new THREE.Vector3(10, 0, 0)
-    ]);
-    const axisLine = new THREE.Line(axisGeometry, axisMaterial);
-    scene.add(axisLine);
+        let amplitude = document.getElementById("amplitude").value;
+        let wavelength = document.getElementById("wavelength").value;
+        let speed = document.getElementById("speed").value;
+        let period = document.getElementById("period").value;
 
-    // Wave line
-    const wavePoints = [];
-    const segments = 200;
-    for (let i = -10; i <= 10; i += 20/segments) {
-      wavePoints.push(new THREE.Vector3(i, Math.sin(i), 0));
-    }
-    const waveGeometry = new THREE.BufferGeometry().setFromPoints(wavePoints);
-    const waveMaterial = new THREE.LineBasicMaterial({ color: 0xFFD700 });
-    const waveLine = new THREE.Line(waveGeometry, waveMaterial);
-    scene.add(waveLine);
+        function drawWave(time) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    camera.position.set(0, 5, 15);
+            // Draw axes with thicker lines
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = "black";
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height/2);
+            ctx.lineTo(canvas.width, canvas.height/2);
+            ctx.stroke();
 
-    // Animate wave
-    function animate() {
-      requestAnimationFrame(animate);
-      const time = Date.now() * 0.002;
-      const positions = waveGeometry.attributes.position;
-      for (let i = 0; i < positions.count; i++) {
-        const x = positions.getX(i);
-        positions.setY(i, Math.sin(x * 2 + time));
-      }
-      positions.needsUpdate = true;
+            ctx.beginPath();
+            ctx.moveTo(canvas.width/2, 0);
+            ctx.lineTo(canvas.width/2, canvas.height);
+            ctx.stroke();
 
-      controls.update();
-      renderer.render(scene, camera);
-    }
-    animate();
-  </script>
+            // Draw wave with thicker line
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = "blue";
+            ctx.beginPath();
+            for (let x = 0; x < canvas.width; x++) {
+                let y = canvas.height/2 + amplitude * Math.sin((x / wavelength) * 2 * Math.PI - time * speed);
+                if (x === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+        }
+
+        function animate(time) {
+            amplitude = document.getElementById("amplitude").value;
+            wavelength = document.getElementById("wavelength").value;
+            speed = document.getElementById("speed").value;
+            period = document.getElementById("period").value;
+
+            drawWave(time / (1000 / period));
+            requestAnimationFrame(animate);
+        }
+
+        animate(0);
+    </script>
 </body>
 </html>
