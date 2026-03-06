@@ -1,392 +1,123 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>3D Wave Visualiser — Gold & Black</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="UTF-8">
+  <title>3D Wave Visualiser</title>
   <style>
-    /* Page theme */
-    html,body { height:100%; margin:0; background:#000; color:#FFD700; font-family:Inter, system-ui, sans-serif; }
-    /* Canvas fills screen */
-    #canvas-container { position:fixed; inset:0; z-index:1; }
-    canvas { display:block; width:100%; height:100%; }
-
-    /* Controls overlay */
-    .controls {
-      position: absolute;
-      top: 12px;
-      left: 12px;
-      z-index: 20;
-      background: rgba(0,0,0,0.65);
-      border: 1px solid #FFD700;
-      padding: 12px;
-      border-radius: 8px;
-      min-width: 320px;
-      backdrop-filter: blur(4px);
+    body { margin:0; background:black; color:gold; font-family:sans-serif; overflow:hidden; }
+    #controls {
+      position:absolute; top:10px; left:10px; z-index:10;
+      background:rgba(0,0,0,0.7); padding:10px;
+      border:1px solid gold; border-radius:5px;
     }
-    .controls h2 { margin:0 0 8px 0; font-size:16px; color:#FFD700; }
-    .row { display:flex; align-items:center; gap:8px; margin:6px 0; }
-    label { font-size:13px; color:#FFD700; min-width:86px; }
-    input[type=range] { flex:1; accent-color:#FFD700; }
-    input[type=number] { width:84px; background:#111; color:#FFD700; border:1px solid #333; padding:4px 6px; border-radius:4px; }
-    select { background:#111; color:#FFD700; border:1px solid #333; padding:4px 6px; border-radius:4px; }
-    .small { font-size:12px; color:#ccc; margin-top:8px; }
-
-    /* Footer hint */
-    .hint { position:absolute; right:12px; bottom:12px; z-index:20; color:#999; font-size:12px; background:rgba(0,0,0,0.5); padding:8px; border-radius:6px; border:1px solid rgba(255,215,0,0.12); }
+    label { display:block; margin:5px 0; }
+    input[type=range], input[type=number] { accent-color:gold; margin-left:5px; }
   </style>
 </head>
 <body>
-  <div id="canvas-container"></div>
-
-  <div class="controls" id="controls">
-    <h2>Wave Visualiser</h2>
-
-    <div class="row">
-      <label>Amplitude</label>
-      <input id="amplitude" type="range" min="10" max="300" step="1" value="100">
-      <input id="amplitudeNum" type="number" min="10" max="300" step="1" value="100">
-    </div>
-
-    <div class="row">
-      <label>Wavelength</label>
-      <input id="wavelength" type="range" min="20" max="800" step="1" value="200">
-      <input id="wavelengthNum" type="number" min="20" max="800" step="1" value="200">
-    </div>
-
-    <div class="row">
-      <label>Speed</label>
-      <input id="speed" type="range" min="0.1" max="20" step="0.1" value="5">
-      <input id="speedNum" type="number" min="0.1" max="20" step="0.1" value="5">
-    </div>
-
-    <div class="row">
-      <label>Time Scale</label>
-      <input id="period" type="range" min="0.1" max="10" step="0.1" value="1">
-      <input id="periodNum" type="number" min="0.1" max="10" step="0.1" value="1">
-    </div>
-
-    <div class="row">
-      <label>Segments (LOD)</label>
-      <input id="segments" type="range" min="200" max="6000" step="100" value="2000">
-      <input id="segmentsNum" type="number" min="200" max="6000" step="100" value="2000">
-    </div>
-
-    <div class="row">
-      <label>Render Mode</label>
-      <select id="mode">
-        <option value="line">Fast Line (high perf)</option>
-        <option value="ribbon">Gold Ribbon (thicker)</option>
-        <option value="surface">Surface Grid (heavy)</option>
-      </select>
-    </div>
-
-    <div class="row">
-      <label>Grid</label>
-      <select id="gridToggle">
-        <option value="none">None</option>
-        <option value="plane">Golden Grid Plane</option>
-      </select>
-    </div>
-
-    <div class="small">Tip: drag to orbit, scroll to zoom, right-drag to pan. Increase segments for more "infinite" feel.</div>
+  <div id="controls">
+    <label>Amplitude:
+      <input type="range" id="amplitude" min="20" max="200" value="100">
+      <input type="number" id="amplitudeNum" min="20" max="200" value="100">
+    </label>
+    <label>Wavelength:
+      <input type="range" id="wavelength" min="50" max="500" value="200">
+      <input type="number" id="wavelengthNum" min="50" max="500" value="200">
+    </label>
+    <label>Speed:
+      <input type="range" id="speed" min="1" max="10" value="5" step="0.1">
+      <input type="number" id="speedNum" min="1" max="10" value="5" step="0.1">
+    </label>
+    <label>Time Period:
+      <input type="range" id="period" min="1" max="10" value="5" step="0.1">
+      <input type="number" id="periodNum" min="1" max="10" value="5" step="0.1">
+    </label>
   </div>
 
-  <div class="hint">Gold wave • White axes • 3D orbit</div>
-
-  <!-- Three.js core + examples -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/controls/OrbitControls.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/geometries/ParametricGeometry.js"></script>
-
   <script>
-  // ======= Scene setup =======
-  const container = document.getElementById('canvas-container');
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x000000);
+    // Scene setup
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000);
 
-  const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 5000);
-  camera.position.set(0, 160, 520);
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 5000);
+    camera.position.set(0, 100, 400);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.domElement.style.position = 'absolute';
-  renderer.domElement.style.top = '0';
-  renderer.domElement.style.left = '0';
-  container.appendChild(renderer.domElement);
+    const renderer = new THREE.WebGLRenderer({antialias:true});
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.domElement.style.position = "absolute";
+    renderer.domElement.style.top = "0";
+    renderer.domElement.style.left = "0";
+    renderer.domElement.style.zIndex = "1";
+    document.body.appendChild(renderer.domElement);
 
-  const controls = new THREE.OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.08;
-  controls.screenSpacePanning = false;
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.target.set(0,0,0);
 
-  // Lighting for ribbon/surface
-  const ambient = new THREE.AmbientLight(0x404040, 1.2);
-  scene.add(ambient);
-  const dir = new THREE.DirectionalLight(0xffffff, 0.6);
-  dir.position.set(0.5, 1, 0.5);
-  scene.add(dir);
+    // Axes
+    const axisMaterial = new THREE.LineBasicMaterial({ color: 0xFFFFFF });
+    function makeAxis(p1, p2) {
+      const g = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+      return new THREE.Line(g, axisMaterial);
+    }
+    scene.add(
+      makeAxis(new THREE.Vector3(-1000,0,0), new THREE.Vector3(1000,0,0)), // X
+      makeAxis(new THREE.Vector3(0,-500,0), new THREE.Vector3(0,500,0)),   // Y
+      makeAxis(new THREE.Vector3(0,0,-500), new THREE.Vector3(0,0,500))    // Z
+    );
 
-  // ======= Axes (white) =======
-  const axisMaterial = new THREE.LineBasicMaterial({ color: 0xFFFFFF });
-  function makeAxis(p1, p2) {
-    const g = new THREE.BufferGeometry().setFromPoints([p1, p2]);
-    return new THREE.Line(g, axisMaterial);
-  }
-  const xAxis = makeAxis(new THREE.Vector3(-2000,0,0), new THREE.Vector3(2000,0,0));
-  const yAxis = makeAxis(new THREE.Vector3(0,-1000,0), new THREE.Vector3(0,1000,0));
-  const zAxis = makeAxis(new THREE.Vector3(0,0,-1000), new THREE.Vector3(0,0,1000));
-  scene.add(xAxis, yAxis, zAxis);
-
-  // ======= Parameters & UI =======
-  const ui = {
-    amplitude: document.getElementById('amplitude'),
-    amplitudeNum: document.getElementById('amplitudeNum'),
-    wavelength: document.getElementById('wavelength'),
-    wavelengthNum: document.getElementById('wavelengthNum'),
-    speed: document.getElementById('speed'),
-    speedNum: document.getElementById('speedNum'),
-    period: document.getElementById('period'),
-    periodNum: document.getElementById('periodNum'),
-    segments: document.getElementById('segments'),
-    segmentsNum: document.getElementById('segmentsNum'),
-    mode: document.getElementById('mode'),
-    gridToggle: document.getElementById('gridToggle')
-  };
-
-  // Sync helper
-  function sync(rangeEl, numEl, onChange) {
-    rangeEl.addEventListener('input', () => { numEl.value = rangeEl.value; onChange(+rangeEl.value); });
-    numEl.addEventListener('input', () => { rangeEl.value = numEl.value; onChange(+numEl.value); });
-  }
-
-  // Current numeric state
-  let state = {
-    amplitude: +ui.amplitude.value,
-    wavelength: +ui.wavelength.value,
-    speed: +ui.speed.value,
-    period: +ui.period.value,
-    segments: +ui.segments.value,
-    mode: ui.mode.value,
-    grid: ui.gridToggle.value
-  };
-
-  sync(ui.amplitude, ui.amplitudeNum, v => state.amplitude = v);
-  sync(ui.wavelength, ui.wavelengthNum, v => state.wavelength = v);
-  sync(ui.speed, ui.speedNum, v => state.speed = v);
-  sync(ui.period, ui.periodNum, v => state.period = v);
-  sync(ui.segments, ui.segmentsNum, v => state.segments = Math.max(200, Math.round(v/10)*10));
-
-  ui.mode.addEventListener('change', () => { state.mode = ui.mode.value; rebuildWave(); });
-  ui.gridToggle.addEventListener('change', () => { state.grid = ui.gridToggle.value; updateGrid(); });
-
-  // ======= Wave objects =======
-  let waveLine = null;      // THREE.Line for fast mode
-  let waveRibbon = null;    // THREE.Mesh (Tube) for ribbon mode
-  let waveSurface = null;   // THREE.Mesh for surface mode
-  let gridPlane = null;
-
-  // Gold materials
-  const goldColor = 0xFFD700;
-  const goldLineMat = new THREE.LineBasicMaterial({ color: goldColor });
-  const goldMeshMat = new THREE.MeshStandardMaterial({ color: goldColor, metalness: 0.9, roughness: 0.25, emissive: 0x220000 });
-
-  // Utility: build positions for a 1D wave (centered)
-  function buildWavePositions(segments, amplitude, wavelength, timeFactor) {
+    // Wave
+    const segments = 2000;
     const positions = new Float32Array(segments * 3);
-    const half = segments / 2;
     for (let i = 0; i < segments; i++) {
-      const x = (i - half) * 1.0; // spacing 1 unit
-      const y = amplitude * Math.sin((x / wavelength) * Math.PI * 2 - timeFactor);
+      const x = i - segments/2;
       positions[i*3] = x;
-      positions[i*3+1] = y;
+      positions[i*3+1] = 100 * Math.sin(x / 50); // visible sine curve
       positions[i*3+2] = 0;
     }
-    return positions;
-  }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const material = new THREE.LineBasicMaterial({ color: 0xFFD700 });
+    const wave = new THREE.Line(geometry, material);
+    scene.add(wave);
 
-  // Build fast line
-  function buildLine(segments) {
-    if (waveLine) { scene.remove(waveLine); waveLine.geometry.dispose(); waveLine = null; }
-    const pos = buildWavePositions(segments, state.amplitude, state.wavelength, 0);
-    const geom = new THREE.BufferGeometry();
-    geom.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    geom.setDrawRange(0, segments);
-    waveLine = new THREE.Line(geom, goldLineMat);
-    scene.add(waveLine);
-  }
+    // Parameters
+    let amplitude = 100, wavelength = 200, speed = 5, period = 5;
 
-  // Build ribbon (Tube along curve) - thicker, prettier
-  function buildRibbon(segments) {
-    if (waveRibbon) { scene.remove(waveRibbon); waveRibbon.geometry.dispose(); waveRibbon = null; }
-    // Create curve points
-    const pts = [];
-    const half = segments / 2;
-    for (let i = 0; i < segments; i++) {
-      const x = (i - half) * 1.0;
-      const y = state.amplitude * Math.sin((x / state.wavelength) * Math.PI * 2);
-      pts.push(new THREE.Vector3(x, y, 0));
+    function syncInputs(rangeId, numId, variable) {
+      const range = document.getElementById(rangeId);
+      const num = document.getElementById(numId);
+      range.oninput = () => { num.value = range.value; window[variable] = parseFloat(range.value); };
+      num.oninput = () => { range.value = num.value; window[variable] = parseFloat(num.value); };
     }
-    const curve = new THREE.CatmullRomCurve3(pts);
-    const tubularSegments = Math.max(64, Math.floor(segments / 4));
-    const radius = Math.max(0.6, Math.min(6, state.wavelength / 200)); // scale radius with wavelength
-    const geometry = new THREE.TubeGeometry(curve, tubularSegments, radius, 8, false);
-    waveRibbon = new THREE.Mesh(geometry, goldMeshMat);
-    scene.add(waveRibbon);
-  }
+    syncInputs("amplitude","amplitudeNum","amplitude");
+    syncInputs("wavelength","wavelengthNum","wavelength");
+    syncInputs("speed","speedNum","speed");
+    syncInputs("period","periodNum","period");
 
-  // Build surface grid (heavy)
-  function buildSurface(gridSize = 200, gridSegments = 200) {
-    if (waveSurface) { scene.remove(waveSurface); waveSurface.geometry.dispose(); waveSurface = null; }
-    const width = gridSize;
-    const depth = gridSize;
-    const segX = Math.min(200, Math.floor(state.segments / 10));
-    const segZ = Math.min(200, Math.floor(state.segments / 10));
-    const geometry = new THREE.PlaneGeometry(width, depth, segX, segZ);
-    geometry.rotateX(-Math.PI/2);
-    // initial heights
-    const pos = geometry.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i);
-      const z = pos.getZ(i);
-      const y = state.amplitude * Math.sin((x / state.wavelength) * Math.PI * 2);
-      pos.setY(i, y);
-    }
-    pos.needsUpdate = true;
-    waveSurface = new THREE.Mesh(geometry, goldMeshMat);
-    scene.add(waveSurface);
-  }
-
-  // Grid plane
-  function updateGrid() {
-    if (gridPlane) { scene.remove(gridPlane); gridPlane.geometry.dispose(); gridPlane = null; }
-    if (state.grid === 'plane') {
-      const size = 2000;
-      const divisions = 40;
-      const grid = new THREE.GridHelper(size, divisions, 0x444444, 0x333333);
-      grid.material.opacity = 0.12;
-      grid.material.transparent = true;
-      scene.add(grid);
-      gridPlane = grid;
-    }
-  }
-
-  // Rebuild wave based on mode
-  function rebuildWave() {
-    // remove all wave objects
-    if (waveLine) { scene.remove(waveLine); waveLine.geometry.dispose(); waveLine = null; }
-    if (waveRibbon) { scene.remove(waveRibbon); waveRibbon.geometry.dispose(); waveRibbon = null; }
-    if (waveSurface) { scene.remove(waveSurface); waveSurface.geometry.dispose(); waveSurface = null; }
-
-    if (state.mode === 'line') {
-      buildLine(state.segments);
-    } else if (state.mode === 'ribbon') {
-      buildRibbon(state.segments);
-    } else if (state.mode === 'surface') {
-      buildSurface(1200, Math.min(200, Math.floor(state.segments/10)));
-    }
-  }
-
-  // Initial build
-  rebuildWave();
-  updateGrid();
-
-  // ======= Animation loop =======
-  let lastTime = 0;
-  function animate(time) {
-    const t = time || 0;
-    const dt = (t - lastTime) / 1000;
-    lastTime = t;
-
-    // Update dynamic geometry depending on mode
-    const timeFactor = (t / 1000) * state.speed * state.period;
-
-    if (state.mode === 'line' && waveLine) {
-      const pos = waveLine.geometry.attributes.position.array;
-      const segments = state.segments;
-      const half = segments / 2;
+    // Animate
+    function animate(time) {
+      const pos = wave.geometry.attributes.position.array;
       for (let i = 0; i < segments; i++) {
-        const x = (i - half) * 1.0;
+        const x = i - segments/2;
         pos[i*3] = x;
-        pos[i*3+1] = state.amplitude * Math.sin((x / state.wavelength) * Math.PI * 2 - timeFactor);
+        pos[i*3+1] = amplitude * Math.sin((x / wavelength) * 2 * Math.PI - time/1000 * speed);
         pos[i*3+2] = 0;
       }
-      waveLine.geometry.attributes.position.needsUpdate = true;
+      wave.geometry.attributes.position.needsUpdate = true;
+
+      controls.update();
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
     }
+    animate(0);
 
-    if (state.mode === 'ribbon' && waveRibbon) {
-      // Rebuild a light-weight curve each frame by updating geometry's path points
-      // For performance we update vertices of the tube's geometry by recalculating a new curve and copying positions.
-      // Simpler approach: rebuild ribbon every N frames if segments large. We'll rebuild every frame but keep segments moderate.
-      scene.remove(waveRibbon);
-      waveRibbon.geometry.dispose();
-      waveRibbon = null;
-      buildRibbon(state.segments);
-    }
-
-    if (state.mode === 'surface' && waveSurface) {
-      const pos = waveSurface.geometry.attributes.position;
-      for (let i = 0; i < pos.count; i++) {
-        const x = pos.getX(i);
-        const y = state.amplitude * Math.sin((x / state.wavelength) * Math.PI * 2 - timeFactor);
-        pos.setY(i, y);
-      }
-      pos.needsUpdate = true;
-      waveSurface.geometry.computeVertexNormals();
-    }
-
-    controls.update();
-    renderer.render(scene, camera);
-    requestAnimationFrame(animate);
-  }
-  requestAnimationFrame(animate);
-
-  // ======= Resize handling =======
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth/window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  });
-
-  // ======= Keyboard shortcuts (optional) =======
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'r') { // reset camera
-      camera.position.set(0, 160, 520);
-      controls.target.set(0,0,0);
-    }
-    if (e.key === 'f') { // toggle fullscreen
-      if (!document.fullscreenElement) container.requestFullscreen?.();
-      else document.exitFullscreen?.();
-    }
-  });
-
-  // ======= Performance note & helpers =======
-  // If ribbon mode is slow, switch to 'line' or reduce segments.
-  // Rebuild wave when segments or amplitude/wavelength changes significantly.
-  let rebuildTimeout = null;
-  function scheduleRebuild() {
-    if (rebuildTimeout) clearTimeout(rebuildTimeout);
-    rebuildTimeout = setTimeout(() => { rebuildWave(); updateGrid(); }, 180);
-  }
-
-  // Watch for parameter changes to trigger rebuilds where needed
-  ['amplitude','wavelength','speed','period','segments'].forEach(k => {
-    const el = document.getElementById(k);
-    el.addEventListener('input', () => {
-      state[k] = (k === 'segments') ? Math.max(200, Math.round(+el.value/10)*10) : +el.value;
-      // For heavy changes, rebuild
-      if (k === 'segments' || k === 'wavelength' || k === 'amplitude' || k === 'mode') scheduleRebuild();
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth/window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
     });
-  });
-
-  // Initial sync of numeric fields
-  ['amplitude','wavelength','speed','period','segments'].forEach(k => {
-    const r = document.getElementById(k);
-    const n = document.getElementById(k + 'Num');
-    if (r && n) n.value = r.value;
-  });
-
   </script>
 </body>
 </html>
