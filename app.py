@@ -37,7 +37,7 @@ def howitworks():
 def index():
     return render_template("index.html")
 
-@app.route("/visualisation")
-def visualisation():
-    return render_template("visualisation.html")
+@app.route("/visual")
+def visual():
+    return render_template("visual.html")
 
