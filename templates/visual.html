@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>2D Wave Visualiser — Standing Wave</title>
+  <title>2D Wave Visualiser — Traveling Wave</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     html,body { height:100%; margin:0; background:#000; color:#FFD700; font-family:Inter,system-ui,Arial,sans-serif; }
@@ -26,7 +26,7 @@
   <canvas id="canvas"></canvas>
 
   <div class="controls" id="controls">
-    <h3>2D Wave Visualiser — Standing Wave</h3>
+    <h3>2D Wave Visualiser — Traveling Wave</h3>
 
     <div class="row">
       <label>Amplitude</label>
@@ -41,9 +41,9 @@
     </div>
 
     <div class="row">
-      <label>Speed</label>
-      <input id="speed" type="range" min="0.1" max="20" step="0.1" value="5">
-      <input id="speedNum" type="number" min="0.1" max="20" step="0.1" value="5">
+      <label>Speed (ω)</label>
+      <input id="speed" type="range" min="0.2" max="20" step="0.1" value="5">
+      <input id="speedNum" type="number" min="0.2" max="20" step="0.1" value="5">
     </div>
 
     <div class="row">
@@ -64,7 +64,7 @@
     </div>
   </div>
 
-  <div class="hint">All four axes visible with tick labels. Standing wave uses sin(kx)·cos(ωt).</div>
+  <div class="hint">Traveling wave uses y(x,t)=A·sin(kx−ωt). Increase speed to move faster.</div>
 
 <script>
 (() => {
@@ -87,13 +87,11 @@
     exportPNG: document.getElementById('exportPNG')
   };
 
-  // Sync helpers
   function sync(rangeEl, numEl, setter) {
     rangeEl.addEventListener('input', () => { numEl.value = rangeEl.value; setter(+rangeEl.value); });
     numEl.addEventListener('input', () => { rangeEl.value = numEl.value; setter(+numEl.value); });
   }
 
-  // State
   const state = {
     amplitude: +ui.amplitude.value,
     wavelength: +ui.wavelength.value,
@@ -111,7 +109,6 @@
   ui.style.addEventListener('change', () => state.style = ui.style.value);
   ui.gridToggle.addEventListener('click', () => state.grid = !state.grid);
 
-  // Resize canvas with DPR
   function resize() {
     const DPR = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
     canvas.width = Math.floor(window.innerWidth * DPR);
@@ -123,7 +120,7 @@
   window.addEventListener('resize', resize);
   resize();
 
-  // Interaction: pan by dragging
+  // Pan
   let dragging = false, lastX = 0, lastY = 0;
   canvas.addEventListener('mousedown', (e) => { dragging = true; lastX = e.clientX; lastY = e.clientY; canvas.style.cursor = 'grabbing'; });
   window.addEventListener('mouseup', () => { dragging = false; canvas.style.cursor = 'default'; });
@@ -135,7 +132,7 @@
     state.offsetY += dy / state.zoom;
   });
 
-  // Scroll to zoom centered on mouse
+  // Zoom centered on mouse
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
     const delta = -e.deltaY;
@@ -149,7 +146,6 @@
     state.zoom = newZoom;
   }, { passive: false });
 
-  // Zoom buttons and fit view
   function smoothZoom(targetZoom, duration = 220) {
     const start = state.zoom;
     const startTime = performance.now();
@@ -172,7 +168,6 @@
     if (e.key === '0') { state.zoom = 1; state.offsetX = 0; state.offsetY = 0; }
   });
 
-  // Export PNG
   ui.exportPNG.addEventListener('click', () => {
     const link = document.createElement('a');
     link.download = 'wave.png';
@@ -180,18 +175,31 @@
     link.click();
   });
 
-  // Stable sampling count (keeps geometry consistent)
+  // Fixed sampling
   const SAMPLES = 1200;
-  const worldWidth = 2000; // world units across horizontal span
+  const worldWidth = 2000;
 
-  // Axis & ticks
+  function chooseNiceTick(desired) {
+    if (desired <= 0) return 1;
+    const pow = Math.pow(10, Math.floor(Math.log10(desired)));
+    const d = desired / pow;
+    if (d <= 1.5) return 1 * pow;
+    if (d <= 3.5) return 2 * pow;
+    if (d <= 7.5) return 5 * pow;
+    return 10 * pow;
+  }
+  function formatNumber(v) {
+    if (Math.abs(v) >= 1000 || Math.abs(v) < 0.01) return v.toExponential(2);
+    if (Math.abs(v - Math.round(v)) < 1e-6) return String(Math.round(v));
+    return v.toFixed(2);
+  }
+
   function drawAxesAndTicks(W, H, cx, cy) {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.scale(state.zoom, state.zoom);
     ctx.translate(state.offsetX, state.offsetY);
 
-    // Grid
     if (state.grid) {
       ctx.strokeStyle = 'rgba(255,255,255,0.06)';
       ctx.lineWidth = 1 / state.zoom;
@@ -204,26 +212,19 @@
       }
     }
 
-    // Axis lines on all four sides
     ctx.strokeStyle = '#FFFFFF';
     ctx.lineWidth = 1 / state.zoom;
-    // bottom axis (y=0)
     ctx.beginPath(); ctx.moveTo(-worldWidth/2, 0); ctx.lineTo(worldWidth/2, 0); ctx.stroke();
-    // top axis (y = view top in world coords)
     const viewHWorld = (H/2) / state.zoom;
     ctx.beginPath(); ctx.moveTo(-worldWidth/2, -viewHWorld*2); ctx.lineTo(worldWidth/2, -viewHWorld*2); ctx.stroke();
-    // left axis
     ctx.beginPath(); ctx.moveTo(-worldWidth/2, -10000); ctx.lineTo(-worldWidth/2, 10000); ctx.stroke();
-    // right axis
     ctx.beginPath(); ctx.moveTo(worldWidth/2, -10000); ctx.lineTo(worldWidth/2, 10000); ctx.stroke();
 
-    // Ticks and labels
     ctx.fillStyle = '#FFFFFF';
     ctx.font = `${12 / state.zoom}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
 
-    // X ticks
     const approxPixelsPerTick = 80;
     const worldPerPixel = (W / state.zoom) / worldWidth;
     const desiredWorldTick = approxPixelsPerTick * worldPerPixel;
@@ -239,7 +240,6 @@
       ctx.fillText(label, sx, -viewHWorld*2 - 16 / state.zoom);
     }
 
-    // Y ticks
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
     const approxPixelsPerTickY = 60;
@@ -260,29 +260,12 @@
     ctx.restore();
   }
 
-  function chooseNiceTick(desired) {
-    if (desired <= 0) return 1;
-    const pow = Math.pow(10, Math.floor(Math.log10(desired)));
-    const d = desired / pow;
-    if (d <= 1.5) return 1 * pow;
-    if (d <= 3.5) return 2 * pow;
-    if (d <= 7.5) return 5 * pow;
-    return 10 * pow;
-  }
-
-  function formatNumber(v) {
-    if (Math.abs(v) >= 1000 || Math.abs(v) < 0.01) return v.toExponential(2);
-    if (Math.abs(v - Math.round(v)) < 1e-6) return String(Math.round(v));
-    return v.toFixed(2);
-  }
-
-  // Render loop: standing wave y = A * sin(kx) * cos(ωt)
+  // Render: traveling wave y = A * sin(kx - omega t)
   let last = performance.now();
   function render(now) {
     const dt = (now - last) / 1000; last = now;
     const t = now / 1000;
 
-    // clear
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -291,10 +274,8 @@
     const H = canvas.height / DPR;
     const cx = W / 2, cy = H / 2;
 
-    // Draw axes and ticks
     drawAxesAndTicks(W, H, cx, cy);
 
-    // Draw wave
     ctx.save();
     ctx.translate(cx, cy);
     ctx.scale(state.zoom, state.zoom);
@@ -304,29 +285,26 @@
     const step = worldWidth / samples;
     const A = state.amplitude;
     const wl = state.wavelength;
-    const k = (2 * Math.PI) / wl; // spatial frequency
-    const omega = state.speed; // interpret speed as angular frequency factor
-    // standing wave: y(x,t) = A * sin(k x) * cos(omega * t)
+    const k = (2 * Math.PI) / wl;
+    const omega = state.speed; // angular speed
     if (state.style === 'line') {
       ctx.strokeStyle = '#FFD700';
       ctx.lineWidth = 2 / state.zoom;
       ctx.beginPath();
       for (let i = 0; i <= samples; i++) {
         const worldX = (i - samples/2) * step;
-        const y = A * Math.sin(k * worldX) * Math.cos(omega * t);
+        const y = A * Math.sin(k * worldX - omega * t);
         const screenX = Math.round(worldX * DPR) / DPR;
         const screenY = Math.round(-y * DPR) / DPR;
         if (i === 0) ctx.moveTo(screenX, screenY); else ctx.lineTo(screenX, screenY);
       }
       ctx.stroke();
     } else {
-      // ribbon
       const thickness = Math.max(6, A * 0.12);
-      const top = [];
-      const bottom = [];
+      const top = [], bottom = [];
       for (let i = 0; i <= samples; i++) {
         const worldX = (i - samples/2) * step;
-        const y = A * Math.sin(k * worldX) * Math.cos(omega * t);
+        const y = A * Math.sin(k * worldX - omega * t);
         const screenX = Math.round(worldX * DPR) / DPR;
         const screenY = Math.round(-y * DPR) / DPR;
         top.push([screenX, screenY]);
@@ -357,7 +335,6 @@
   }
   requestAnimationFrame(render);
 
-  // Initial fit view
   function fitView() { state.zoom = 1; state.offsetX = 0; state.offsetY = 0; }
   ui.fitView.addEventListener('click', fitView);
 
