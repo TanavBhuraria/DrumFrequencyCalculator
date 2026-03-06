@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>3D Wave Visualiser — 3D Ribbon + Zoom</title>
+  <title>3D Wave Visualiser — Fixed Ribbon</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     html,body { height:100%; margin:0; background:#000; color:#FFD700; font-family:Inter,system-ui,Arial,sans-serif; }
@@ -54,8 +54,8 @@
 
     <div class="row">
       <label>Depth (Z)</label>
-      <input id="depth" type="range" min="0" max="200" step="1" value="40">
-      <input id="depthNum" type="number" min="0" max="200" step="1" value="40">
+      <input id="depth" type="range" min="0" max="400" step="1" value="40">
+      <input id="depthNum" type="number" min="0" max="400" step="1" value="40">
     </div>
 
     <div class="row">
@@ -99,7 +99,7 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/controls/OrbitControls.js"></script>
 
   <script>
-  // ===== Diagnostics & helpers =====
+  // ===== Helpers =====
   function setStatus(text, isError=false) {
     document.getElementById('webglFlag').textContent = text;
     const em = document.getElementById('errorMsg');
@@ -148,7 +148,7 @@
   // Lighting
   const ambient = new THREE.AmbientLight(0x404040, 1.2);
   scene.add(ambient);
-  const dir = new THREE.DirectionalLight(0xffffff, 0.6);
+  const dir = new THREE.DirectionalLight(0xffffff, 0.8);
   dir.position.set(0.5, 1, 0.5);
   scene.add(dir);
 
@@ -159,7 +159,7 @@
   scene.add(makeAxis(new THREE.Vector3(0,-1000,0), new THREE.Vector3(0,1000,0)));
   scene.add(makeAxis(new THREE.Vector3(0,0,-1000), new THREE.Vector3(0,0,1000)));
 
-  // ===== Parameters & UI =====
+  // ===== UI & state =====
   const ui = {
     amplitude: document.getElementById('amplitude'),
     amplitudeNum: document.getElementById('amplitudeNum'),
@@ -197,15 +197,16 @@
   sync(ui.speed, ui.speedNum, v => state.speed = v);
   sync(ui.segments, ui.segmentsNum, v => state.segments = Math.max(200, Math.round(v/10)*10));
 
-  ui.mode.addEventListener('change', () => { state.mode = ui.mode.value; rebuildWave(); });
+  ui.mode.addEventListener('change', () => { state.mode = ui.mode.value; scheduleRebuild(0); });
 
-  // ===== Wave objects =====
+  // ===== Wave objects & materials =====
   let waveLine = null;
   let waveRibbon = null;
-
+  let lastRibbonBuild = 0;
   const goldLineMat = new THREE.LineBasicMaterial({ color: 0xFFD700 });
-  const goldMeshMat = new THREE.MeshStandardMaterial({ color: 0xFFD700, metalness: 0.9, roughness: 0.25 });
+  const goldMeshMat = new THREE.MeshStandardMaterial({ color: 0xFFD700, metalness: 0.9, roughness: 0.25, side: THREE.DoubleSide });
 
+  // Build fast line
   function buildLine(segments) {
     if (waveLine) { scene.remove(waveLine); waveLine.geometry.dispose(); waveLine = null; }
     const pos = new Float32Array(segments * 3);
@@ -222,35 +223,46 @@
     scene.add(waveLine);
   }
 
+  // Build ribbon (Tube) — robust and uses DoubleSide material
   function buildRibbon(segments) {
-    if (waveRibbon) { scene.remove(waveRibbon); waveRibbon.geometry.dispose(); waveRibbon = null; }
+    // Dispose previous safely
+    if (waveRibbon) {
+      try { scene.remove(waveRibbon); waveRibbon.geometry.dispose(); } catch(e){ console.warn('dispose ribbon', e); }
+      waveRibbon = null;
+    }
     const pts = [];
     for (let i=0;i<segments;i++){
       const x = (i - segments/2) * 1.0;
       const y = state.amplitude * Math.sin((x / state.wavelength) * Math.PI * 2);
-      const z = state.depth * Math.sin((x / (state.wavelength*0.5)) * Math.PI * 2);
+      const z = state.depth * Math.sin((x / Math.max(1, state.wavelength*0.5)) * Math.PI * 2);
       pts.push(new THREE.Vector3(x,y,z));
     }
     const curve = new THREE.CatmullRomCurve3(pts);
     const tubularSegments = Math.max(64, Math.floor(segments / 8));
     const radius = Math.max(0.6, Math.min(6, state.wavelength / 200));
     const geometry = new THREE.TubeGeometry(curve, tubularSegments, radius, 8, false);
+    // Ensure geometry has normals for lighting
+    geometry.computeVertexNormals();
     waveRibbon = new THREE.Mesh(geometry, goldMeshMat);
+    waveRibbon.frustumCulled = false; // avoid accidental frustum culling when camera is close
     scene.add(waveRibbon);
+    lastRibbonBuild = performance.now();
   }
 
   function rebuildWave() {
-    if (waveLine) { scene.remove(waveLine); waveLine.geometry.dispose(); waveLine = null; }
-    if (waveRibbon) { scene.remove(waveRibbon); waveRibbon.geometry.dispose(); waveRibbon = null; }
-    if (state.mode === 'line') buildLine(state.segments);
-    else buildRibbon(state.segments);
+    if (state.mode === 'line') {
+      if (waveRibbon) { try { scene.remove(waveRibbon); waveRibbon.geometry.dispose(); } catch(e){} waveRibbon = null; }
+      buildLine(state.segments);
+    } else {
+      if (waveLine) { try { scene.remove(waveLine); waveLine.geometry.dispose(); } catch(e){} waveLine = null; }
+      buildRibbon(state.segments);
+    }
   }
 
   // initial build
   rebuildWave();
 
-  // ===== Animation loop =====
-  let lastTime = performance.now();
+  // ===== Animation loop (robust) =====
   function animate(now) {
     const t = now || 0;
     const timeFactor = (t / 1000) * state.speed;
@@ -262,21 +274,19 @@
         const x = (i - segments/2) * 1.0;
         pos[i*3] = x;
         pos[i*3+1] = state.amplitude * Math.sin((x / state.wavelength) * Math.PI * 2 - timeFactor);
-        pos[i*3+2] = state.depth * Math.sin((x / (state.wavelength*0.5)) * Math.PI * 2 - timeFactor*0.5);
+        pos[i*3+2] = state.depth * Math.sin((x / Math.max(1, state.wavelength*0.5)) * Math.PI * 2 - timeFactor*0.5);
       }
       waveLine.geometry.attributes.position.needsUpdate = true;
     }
 
-    if (state.mode === 'ribbon' && waveRibbon) {
-      // For ribbon we rebuild every N frames to keep code simple and stable.
-      // Rebuild less frequently for performance.
-      if ((Math.floor(now/60) % 2) === 0) { // rebuild every ~120ms
-        scene.remove(waveRibbon);
-        waveRibbon.geometry.dispose();
-        waveRibbon = null;
-        buildRibbon(state.segments);
-      } else {
-        // subtle animation by rotating the ribbon slightly for depth effect
+    if (state.mode === 'ribbon') {
+      // Rebuild ribbon at most once per 400ms to avoid flicker and heavy work
+      const nowMs = performance.now();
+      if (!waveRibbon || (nowMs - lastRibbonBuild > 400 && (state.segments !== undefined))) {
+        // Rebuild ribbon safely
+        try { buildRibbon(state.segments); } catch (e) { console.error('Ribbon build failed', e); setStatus('Ribbon build failed: ' + e.message, true); }
+      } else if (waveRibbon) {
+        // subtle rotation for life
         waveRibbon.rotation.y = Math.sin(timeFactor * 0.2) * 0.06;
       }
     }
@@ -289,17 +299,14 @@
 
   // ===== Zoom controls (smooth dolly) =====
   function dolly(delta) {
-    // Move camera toward controls.target by delta units (positive = closer)
     const dir = new THREE.Vector3();
     dir.subVectors(camera.position, controls.target).normalize();
     const distance = camera.position.distanceTo(controls.target);
-    // clamp min/max distance
     const minDist = 20;
     const maxDist = 3000;
     let newDist = THREE.MathUtils.clamp(distance - delta, minDist, maxDist);
     const newPos = new THREE.Vector3();
     newPos.copy(controls.target).add(dir.multiplyScalar(newDist));
-    // smooth tween
     const start = camera.position.clone();
     const duration = 220;
     const startTime = performance.now();
@@ -318,28 +325,22 @@
   ui.zoomOut.addEventListener('click', () => dolly(-80));
   ui.fitView.addEventListener('click', fitView);
 
-  // Keyboard shortcuts
   window.addEventListener('keydown', (e) => {
     if (e.key === '+' || e.key === '=') { dolly(80); }
     if (e.key === '-' || e.key === '_') { dolly(-80); }
     if (e.key === '0') { fitView(); }
   });
 
-  // Fit camera to wave bounds
   function fitView() {
-    // compute bounding box of wave (approx)
     const half = state.segments / 2;
     const minX = -half, maxX = half;
     const maxAmp = Math.abs(state.amplitude) + Math.abs(state.depth);
     const center = new THREE.Vector3((minX + maxX)/2, 0, 0);
     controls.target.copy(center);
-    // choose distance so the wave fits vertically and horizontally
     const fov = camera.fov * (Math.PI/180);
-    const height = Math.max( (maxX - minX) * 0.6, maxAmp * 2.2 );
-    const distance = Math.abs(height / Math.tan(fov/2));
-    // place camera along a nice angle
+    const width = Math.max((maxX - minX) * 0.6, maxAmp * 2.2);
+    const distance = Math.abs(width / Math.tan(fov/2));
     const newPos = new THREE.Vector3(center.x, center.y + distance*0.25, center.z + distance*0.9);
-    // smooth move
     const start = camera.position.clone();
     const startTarget = controls.target.clone();
     const duration = 420;
@@ -357,18 +358,24 @@
     requestAnimationFrame(step);
   }
 
-  // ===== Rebuild scheduling when heavy params change =====
+  // ===== Rebuild scheduling =====
   let rebuildTimeout = null;
   function scheduleRebuild() {
     if (rebuildTimeout) clearTimeout(rebuildTimeout);
     rebuildTimeout = setTimeout(() => { rebuildWave(); }, 180);
+  }
+  function scheduleRebuildImmediate() {
+    if (rebuildTimeout) clearTimeout(rebuildTimeout);
+    rebuildWave();
   }
 
   ['amplitude','wavelength','depth','segments','mode'].forEach(k => {
     const el = document.getElementById(k);
     if (el) el.addEventListener('input', () => {
       state[k] = (k === 'segments') ? Math.max(200, Math.round(+el.value/10)*10) : +el.value;
-      if (k === 'segments' || k === 'mode' || k === 'depth' || k === 'wavelength' || k === 'amplitude') scheduleRebuild();
+      // segments and mode are heavier — rebuild immediately; others schedule
+      if (k === 'segments' || k === 'mode') scheduleRebuildImmediate();
+      else scheduleRebuild();
     });
   });
 
@@ -380,7 +387,7 @@
   });
 
   // Final status
-  setStatus('Running — 3D ribbon ready. Use controls to zoom and orbit.');
+  setStatus('Running — ribbon rebuild fixed. If you still see nothing, open DevTools Console and paste the first red error here.');
   </script>
 </body>
 </html>
