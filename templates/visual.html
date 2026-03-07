@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>2D Wave Visualiser — Traveling Wave</title>
+  <title>Stable Traveling Wave Visualiser</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     html,body { height:100%; margin:0; background:#000; color:#FFD700; font-family:Inter,system-ui,Arial,sans-serif; }
@@ -26,31 +26,31 @@
   <canvas id="canvas"></canvas>
 
   <div class="controls" id="controls">
-    <h3>2D Wave Visualiser — Traveling Wave</h3>
+    <h3>Stable Traveling Wave Visualiser</h3>
 
     <div class="row">
       <label>Amplitude</label>
-      <input id="amplitude" type="range" min="10" max="300" step="1" value="100">
-      <input id="amplitudeNum" type="number" min="10" max="300" step="1" value="100">
+      <input id="amplitude" type="range" min="10" max="800" step="1" value="100">
+      <input id="amplitudeNum" type="number" min="10" max="800" step="1" value="100">
     </div>
 
     <div class="row">
       <label>Wavelength</label>
-      <input id="wavelength" type="range" min="20" max="800" step="1" value="200">
-      <input id="wavelengthNum" type="number" min="20" max="800" step="1" value="200">
+      <input id="wavelength" type="range" min="20" max="1200" step="1" value="200">
+      <input id="wavelengthNum" type="number" min="20" max="1200" step="1" value="200">
     </div>
 
     <div class="row">
-      <label>Speed (ω)</label>
-      <input id="speed" type="range" min="0.2" max="20" step="0.1" value="5">
-      <input id="speedNum" type="number" min="0.2" max="20" step="0.1" value="5">
+      <label>Speed pixels/sec</label>
+      <input id="speed" type="range" min="5" max="2000" step="1" value="200">
+      <input id="speedNum" type="number" min="5" max="2000" step="1" value="200">
     </div>
 
     <div class="row">
       <label>Style</label>
       <select id="style">
         <option value="line">Line</option>
-        <option value="ribbon">Ribbon (shaded)</option>
+        <option value="ribbon">Ribbon</option>
       </select>
       <button id="gridToggle">Toggle Grid</button>
       <button id="exportPNG" class="right">Export PNG</button>
@@ -64,14 +64,14 @@
     </div>
   </div>
 
-  <div class="hint">Traveling wave uses y(x,t)=A·sin(kx−ωt). Increase speed to move faster.</div>
+  <div class="hint">Physics correct and guarded. Wavelength min prevents aliasing; sampling adapts automatically.</div>
 
 <script>
 (() => {
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d', { alpha: false });
 
-  // UI
+  // UI elements
   const ui = {
     amplitude: document.getElementById('amplitude'),
     amplitudeNum: document.getElementById('amplitudeNum'),
@@ -87,15 +87,17 @@
     exportPNG: document.getElementById('exportPNG')
   };
 
+  // Sync helpers
   function sync(rangeEl, numEl, setter) {
     rangeEl.addEventListener('input', () => { numEl.value = rangeEl.value; setter(+rangeEl.value); });
     numEl.addEventListener('input', () => { rangeEl.value = numEl.value; setter(+numEl.value); });
   }
 
+  // State
   const state = {
     amplitude: +ui.amplitude.value,
     wavelength: +ui.wavelength.value,
-    speed: +ui.speed.value,
+    speed: +ui.speed.value, // pixels per second
     style: ui.style.value,
     grid: false,
     zoom: 1,
@@ -109,6 +111,7 @@
   ui.style.addEventListener('change', () => state.style = ui.style.value);
   ui.gridToggle.addEventListener('click', () => state.grid = !state.grid);
 
+  // Resize canvas with DPR
   function resize() {
     const DPR = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
     canvas.width = Math.floor(window.innerWidth * DPR);
@@ -146,6 +149,7 @@
     state.zoom = newZoom;
   }, { passive: false });
 
+  // Zoom buttons and fit view
   function smoothZoom(targetZoom, duration = 220) {
     const start = state.zoom;
     const startTime = performance.now();
@@ -168,6 +172,7 @@
     if (e.key === '0') { state.zoom = 1; state.offsetX = 0; state.offsetY = 0; }
   });
 
+  // Export PNG
   ui.exportPNG.addEventListener('click', () => {
     const link = document.createElement('a');
     link.download = 'wave.png';
@@ -175,10 +180,10 @@
     link.click();
   });
 
-  // Fixed sampling
-  const SAMPLES = 1200;
-  const worldWidth = 2000;
+  // Fixed world width (logical units)
+  const WORLD_WIDTH = 2000;
 
+  // Choose nice tick spacing
   function chooseNiceTick(desired) {
     if (desired <= 0) return 1;
     const pow = Math.pow(10, Math.floor(Math.log10(desired)));
@@ -194,6 +199,7 @@
     return v.toFixed(2);
   }
 
+  // Draw axes and ticks
   function drawAxesAndTicks(W, H, cx, cy) {
     ctx.save();
     ctx.translate(cx, cy);
@@ -204,21 +210,21 @@
       ctx.strokeStyle = 'rgba(255,255,255,0.06)';
       ctx.lineWidth = 1 / state.zoom;
       const gridSpacing = 100;
-      for (let gx = -worldWidth; gx <= worldWidth; gx += gridSpacing) {
+      for (let gx = -WORLD_WIDTH; gx <= WORLD_WIDTH; gx += gridSpacing) {
         ctx.beginPath(); ctx.moveTo(gx, -H*2); ctx.lineTo(gx, H*2); ctx.stroke();
       }
       for (let gy = -1000; gy <= 1000; gy += gridSpacing) {
-        ctx.beginPath(); ctx.moveTo(-worldWidth*2, gy); ctx.lineTo(worldWidth*2, gy); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-WORLD_WIDTH*2, gy); ctx.lineTo(WORLD_WIDTH*2, gy); ctx.stroke();
       }
     }
 
     ctx.strokeStyle = '#FFFFFF';
     ctx.lineWidth = 1 / state.zoom;
-    ctx.beginPath(); ctx.moveTo(-worldWidth/2, 0); ctx.lineTo(worldWidth/2, 0); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-WORLD_WIDTH/2, 0); ctx.lineTo(WORLD_WIDTH/2, 0); ctx.stroke();
     const viewHWorld = (H/2) / state.zoom;
-    ctx.beginPath(); ctx.moveTo(-worldWidth/2, -viewHWorld*2); ctx.lineTo(worldWidth/2, -viewHWorld*2); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(-worldWidth/2, -10000); ctx.lineTo(-worldWidth/2, 10000); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(worldWidth/2, -10000); ctx.lineTo(worldWidth/2, 10000); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-WORLD_WIDTH/2, -viewHWorld*2); ctx.lineTo(WORLD_WIDTH/2, -viewHWorld*2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-WORLD_WIDTH/2, -10000); ctx.lineTo(-WORLD_WIDTH/2, 10000); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(WORLD_WIDTH/2, -10000); ctx.lineTo(WORLD_WIDTH/2, 10000); ctx.stroke();
 
     ctx.fillStyle = '#FFFFFF';
     ctx.font = `${12 / state.zoom}px sans-serif`;
@@ -226,11 +232,11 @@
     ctx.textBaseline = 'top';
 
     const approxPixelsPerTick = 80;
-    const worldPerPixel = (W / state.zoom) / worldWidth;
+    const worldPerPixel = (W / state.zoom) / WORLD_WIDTH;
     const desiredWorldTick = approxPixelsPerTick * worldPerPixel;
     const tickBase = chooseNiceTick(desiredWorldTick);
-    const minX = -worldWidth/2 - state.offsetX - (W/2)/state.zoom;
-    const maxX = worldWidth/2 - state.offsetX + (W/2)/state.zoom;
+    const minX = -WORLD_WIDTH/2 - state.offsetX - (W/2)/state.zoom;
+    const maxX = WORLD_WIDTH/2 - state.offsetX + (W/2)/state.zoom;
     for (let x = Math.ceil(minX / tickBase) * tickBase; x <= maxX; x += tickBase) {
       const sx = x;
       ctx.beginPath(); ctx.moveTo(sx, -4 / state.zoom); ctx.lineTo(sx, 4 / state.zoom); ctx.stroke();
@@ -249,18 +255,18 @@
     const maxY = 1000 - state.offsetY + (H/2)/state.zoom;
     for (let y = Math.ceil(minY / tickBaseY) * tickBaseY; y <= maxY; y += tickBaseY) {
       const sy = y;
-      ctx.beginPath(); ctx.moveTo(-worldWidth/2 - 4 / state.zoom, sy); ctx.lineTo(-worldWidth/2 + 4 / state.zoom, sy); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(worldWidth/2 - 4 / state.zoom, sy); ctx.lineTo(worldWidth/2 + 4 / state.zoom, sy); ctx.stroke();
-      ctx.fillText(formatNumber(y), -worldWidth/2 - 8 / state.zoom, sy);
+      ctx.beginPath(); ctx.moveTo(-WORLD_WIDTH/2 - 4 / state.zoom, sy); ctx.lineTo(-WORLD_WIDTH/2 + 4 / state.zoom, sy); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(WORLD_WIDTH/2 - 4 / state.zoom, sy); ctx.lineTo(WORLD_WIDTH/2 + 4 / state.zoom, sy); ctx.stroke();
+      ctx.fillText(formatNumber(y), -WORLD_WIDTH/2 - 8 / state.zoom, sy);
       ctx.textAlign = 'left';
-      ctx.fillText(formatNumber(y), worldWidth/2 + 8 / state.zoom, sy);
+      ctx.fillText(formatNumber(y), WORLD_WIDTH/2 + 8 / state.zoom, sy);
       ctx.textAlign = 'right';
     }
 
     ctx.restore();
   }
 
-  // Render: traveling wave y = A * sin(kx - omega t)
+  // Render loop: traveling wave y = A * sin(kx - omega t)
   let last = performance.now();
   function render(now) {
     const dt = (now - last) / 1000; last = now;
@@ -274,6 +280,22 @@
     const H = canvas.height / DPR;
     const cx = W / 2, cy = H / 2;
 
+    // Clamp amplitude to safe range (half viewport height)
+    const maxAmp = Math.max(20, Math.floor((H * 0.45)));
+    const A = Math.min(state.amplitude, maxAmp);
+
+    // Enforce minimum wavelength to avoid aliasing
+    const lambda = Math.max(20, state.wavelength);
+
+    // Speed is user velocity in pixels/sec; compute angular frequency omega = 2π * v / λ
+    const v = Math.max(0.1, state.speed);
+    const k = (2 * Math.PI) / lambda;
+    const omega = (2 * Math.PI * v) / lambda;
+
+    // Dynamic sampling: more samples when wavelength is small
+    const samples = Math.min(4000, Math.max(400, Math.ceil((WORLD_WIDTH / lambda) * 8)));
+    const step = WORLD_WIDTH / samples;
+
     drawAxesAndTicks(W, H, cx, cy);
 
     ctx.save();
@@ -281,12 +303,6 @@
     ctx.scale(state.zoom, state.zoom);
     ctx.translate(state.offsetX, state.offsetY);
 
-    const samples = SAMPLES;
-    const step = worldWidth / samples;
-    const A = state.amplitude;
-    const wl = state.wavelength;
-    const k = (2 * Math.PI) / wl;
-    const omega = state.speed; // angular speed
     if (state.style === 'line') {
       ctx.strokeStyle = '#FFD700';
       ctx.lineWidth = 2 / state.zoom;
@@ -320,7 +336,7 @@
         ctx.lineTo(p[0], p[1]);
       }
       ctx.closePath();
-      const grad = ctx.createLinearGradient(-worldWidth/2, -A, worldWidth/2, A + thickness);
+      const grad = ctx.createLinearGradient(-WORLD_WIDTH/2, -A, WORLD_WIDTH/2, A + thickness);
       grad.addColorStop(0, '#FFD700');
       grad.addColorStop(1, '#552800');
       ctx.fillStyle = grad;
