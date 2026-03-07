@@ -2,17 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Hybrid Drum Wave Visualiser</title>
+  <title>Hybrid Drum Wave Visualiser — Fixed</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     html,body{height:100%;margin:0;background:#000;color:#FFD700;font-family:Inter,system-ui,Arial,sans-serif}
     #canvas{position:fixed;inset:0;z-index:1;display:block;width:100%;height:100%;background:#000}
-    .controls{position:absolute;top:12px;left:12px;z-index:40;background:rgba(0,0,0,0.78);border:1px solid #FFD700;padding:12px;border-radius:8px;min-width:380px}
+    .controls{position:absolute;top:12px;left:12px;z-index:40;background:rgba(0,0,0,0.78);border:1px solid #FFD700;padding:12px;border-radius:8px;min-width:420px}
     .controls h3{margin:0 0 8px 0;color:#FFD700;font-size:15px}
     .row{display:flex;align-items:center;gap:8px;margin:6px 0}
     label{font-size:13px;color:#FFD700;min-width:120px}
     input[type=range]{flex:1;accent-color:#FFD700}
-    input[type=number]{width:84px;background:#111;color:#FFD700;border:1px solid #333;padding:4px 6px;border-radius:4px}
+    input[type=number]{width:96px;background:#111;color:#FFD700;border:1px solid #333;padding:4px 6px;border-radius:4px}
     button,select{background:#111;color:#FFD700;border:1px solid #333;padding:6px 8px;border-radius:6px;cursor:pointer}
     .small{font-size:12px;color:#ccc;margin-top:8px}
     .right{margin-left:auto}
@@ -23,7 +23,7 @@
   <canvas id="canvas"></canvas>
 
   <div class="controls" id="controls">
-    <h3>Hybrid Drum Wave Visualiser</h3>
+    <h3>Hybrid Drum Wave Visualiser — Fixed</h3>
 
     <div class="row">
       <label>Amplitude</label>
@@ -38,13 +38,13 @@
     </div>
 
     <div class="row">
-      <label>Frequency Hz</label>
-      <input id="frequency" type="range" min="0.1" max="10" step="0.1" value="2">
-      <input id="frequencyNum" type="number" min="0.1" max="10" step="0.1" value="2">
+      <label>Frequency (Hz)</label>
+      <input id="frequency" type="range" min="0.001" max="1" step="0.001" value="0.200">
+      <input id="frequencyNum" type="number" min="0.001" max="1" step="0.001" value="0.200">
     </div>
 
     <div class="row">
-      <label>Drift</label>
+      <label>Drift (UI)</label>
       <input id="drift" type="range" min="0" max="100" step="1" value="20">
       <input id="driftNum" type="number" min="0" max="100" step="1" value="20">
     </div>
@@ -67,7 +67,7 @@
     </div>
   </div>
 
-  <div class="hint">Hybrid: oscillation × slow drift. Drift mapping is gentle so 20% is subtle.</div>
+  <div class="hint">Low-value guardrails and frequency range 0.001–1 Hz applied. Try A=1, λ=8, f=0.001 safely.</div>
 
 <script>
 (() => {
@@ -93,14 +93,23 @@
 
   function sync(rangeEl, numEl, setter) {
     rangeEl.addEventListener('input', () => { numEl.value = rangeEl.value; setter(+rangeEl.value); });
-    numEl.addEventListener('input', () => { rangeEl.value = numEl.value; setter(+numEl.value); });
+    numEl.addEventListener('input', () => {
+      // clamp numeric input to allowed range
+      const min = parseFloat(rangeEl.min), max = parseFloat(rangeEl.max);
+      let v = Number(numEl.value);
+      if (isNaN(v)) v = min;
+      v = Math.max(min, Math.min(max, v));
+      rangeEl.value = v;
+      numEl.value = v;
+      setter(v);
+    });
   }
 
   const state = {
     amplitude: +ui.amplitude.value,
     wavelength: +ui.wavelength.value,
     frequency: +ui.frequency.value,
-    driftUI: +ui.drift.value, // UI 0..100
+    driftUI: +ui.drift.value,
     style: ui.style.value,
     grid: false,
     zoom: 1,
@@ -176,7 +185,7 @@
 
   ui.exportPNG.addEventListener('click', () => {
     const link = document.createElement('a');
-    link.download = 'hybrid-drum-wave.png';
+    link.download = 'hybrid-drum-wave-fixed.png';
     link.href = canvas.toDataURL('image/png');
     link.click();
   });
@@ -280,29 +289,27 @@
     const H = canvas.height / DPR;
     const cx = W / 2, cy = H / 2;
 
-    // Clamp amplitude to safe range (half viewport height)
+    // Clamp amplitude to safe range (half viewport height) and minimum 1
     const maxAmp = Math.max(4, Math.floor((H * 0.45)));
     const A = Math.min(Math.max(1, state.amplitude), maxAmp);
 
-    // Wavelength safe minimum
+    // Wavelength safe minimum (>=8)
     const lambda = Math.max(8, state.wavelength);
 
-    // Frequency (Hz) -> angular frequency
-    const freq = Math.max(0.01, state.frequency);
+    // Frequency range enforced: 0.001 .. 1 Hz
+    const freq = Math.max(0.001, Math.min(1, state.frequency));
     const omega = 2 * Math.PI * freq;
 
-    // Drift mapping: UI 0..100 -> gentle velocity in pixels/sec
-    // Nonlinear mapping so low UI values are very subtle
+    // Drift mapping: UI 0..100 -> gentle velocity in pixels/sec (nonlinear)
     const driftUI = Math.max(0, Math.min(100, state.driftUI));
-    // mapping: v = base + (driftUI/100)^2 * maxV
-    const baseV = 0.0;
-    const maxV = Math.max(10, Math.min(600, lambda * 0.6)); // cap relative to wavelength
-    const v = baseV + Math.pow(driftUI / 100, 2) * maxV;
+    const maxV = Math.max(6, Math.min(400, lambda * 0.4)); // cap relative to wavelength
+    const v = Math.pow(driftUI / 100, 2) * maxV;
 
+    // Spatial frequency
     const k = (2 * Math.PI) / lambda;
 
-    // Dynamic sampling: more samples when wavelength is small
-    const samples = Math.min(4000, Math.max(600, Math.ceil((WORLD_WIDTH / lambda) * 12)));
+    // Dynamic sampling: aggressively increase samples for small lambda to avoid aliasing
+    const samples = Math.min(12000, Math.max(1200, Math.ceil((WORLD_WIDTH / lambda) * 30)));
     const step = WORLD_WIDTH / samples;
 
     drawAxesAndTicks(W, H, cx, cy);
@@ -318,7 +325,7 @@
       ctx.beginPath();
       for (let i = 0; i <= samples; i++) {
         const worldX = (i - samples/2) * step;
-        const phaseX = worldX - v * t; // drift applied to x
+        const phaseX = worldX - v * t;
         const y = A * Math.sin(k * phaseX) * Math.cos(omega * t);
         const screenX = Math.round(worldX * DPR) / DPR;
         const screenY = Math.round(-y * DPR) / DPR;
