@@ -2,31 +2,28 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Standing Wave Visualiser — Stable</title>
+  <title>Hybrid Drum Wave Visualiser</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    html,body { height:100%; margin:0; background:#000; color:#FFD700; font-family:Inter,system-ui,Arial,sans-serif; }
-    #canvas { position:fixed; inset:0; z-index:1; display:block; width:100%; height:100%; background:#000; }
-    .controls {
-      position: absolute; top:12px; left:12px; z-index:40;
-      background: rgba(0,0,0,0.78); border:1px solid #FFD700; padding:12px; border-radius:8px; min-width:360px;
-    }
-    .controls h3 { margin:0 0 8px 0; color:#FFD700; font-size:15px; }
-    .row { display:flex; align-items:center; gap:8px; margin:6px 0; }
-    label { font-size:13px; color:#FFD700; min-width:100px; }
-    input[type=range] { flex:1; accent-color:#FFD700; }
-    input[type=number] { width:84px; background:#111; color:#FFD700; border:1px solid #333; padding:4px 6px; border-radius:4px; }
-    button, select { background:#111; color:#FFD700; border:1px solid #333; padding:6px 8px; border-radius:6px; cursor:pointer; }
-    .small { font-size:12px;color:#ccc;margin-top:8px; }
-    .right { margin-left:auto; }
-    .hint { position:absolute; left:12px; bottom:12px; z-index:40; color:#999; background:rgba(0,0,0,0.5); padding:8px; border-radius:6px; border:1px solid rgba(255,215,0,0.08); font-size:12px; }
+    html,body{height:100%;margin:0;background:#000;color:#FFD700;font-family:Inter,system-ui,Arial,sans-serif}
+    #canvas{position:fixed;inset:0;z-index:1;display:block;width:100%;height:100%;background:#000}
+    .controls{position:absolute;top:12px;left:12px;z-index:40;background:rgba(0,0,0,0.78);border:1px solid #FFD700;padding:12px;border-radius:8px;min-width:380px}
+    .controls h3{margin:0 0 8px 0;color:#FFD700;font-size:15px}
+    .row{display:flex;align-items:center;gap:8px;margin:6px 0}
+    label{font-size:13px;color:#FFD700;min-width:120px}
+    input[type=range]{flex:1;accent-color:#FFD700}
+    input[type=number]{width:84px;background:#111;color:#FFD700;border:1px solid #333;padding:4px 6px;border-radius:4px}
+    button,select{background:#111;color:#FFD700;border:1px solid #333;padding:6px 8px;border-radius:6px;cursor:pointer}
+    .small{font-size:12px;color:#ccc;margin-top:8px}
+    .right{margin-left:auto}
+    .hint{position:absolute;left:12px;bottom:12px;z-index:40;color:#999;background:rgba(0,0,0,0.5);padding:8px;border-radius:6px;border:1px solid rgba(255,215,0,0.08);font-size:12px}
   </style>
 </head>
 <body>
   <canvas id="canvas"></canvas>
 
   <div class="controls" id="controls">
-    <h3>Standing Wave Visualiser</h3>
+    <h3>Hybrid Drum Wave Visualiser</h3>
 
     <div class="row">
       <label>Amplitude</label>
@@ -36,14 +33,20 @@
 
     <div class="row">
       <label>Wavelength</label>
-      <input id="wavelength" type="range" min="10" max="1200" step="1" value="200">
-      <input id="wavelengthNum" type="number" min="10" max="1200" step="1" value="200">
+      <input id="wavelength" type="range" min="8" max="1200" step="1" value="200">
+      <input id="wavelengthNum" type="number" min="8" max="1200" step="1" value="200">
     </div>
 
     <div class="row">
-      <label>Speed</label>
-      <input id="speed" type="range" min="0.1" max="40" step="0.1" value="5">
-      <input id="speedNum" type="number" min="0.1" max="40" step="0.1" value="5">
+      <label>Frequency Hz</label>
+      <input id="frequency" type="range" min="0.1" max="10" step="0.1" value="2">
+      <input id="frequencyNum" type="number" min="0.1" max="10" step="0.1" value="2">
+    </div>
+
+    <div class="row">
+      <label>Drift</label>
+      <input id="drift" type="range" min="0" max="100" step="1" value="20">
+      <input id="driftNum" type="number" min="0" max="100" step="1" value="20">
     </div>
 
     <div class="row">
@@ -64,7 +67,7 @@
     </div>
   </div>
 
-  <div class="hint">Standing wave y(x,t)=A·sin(2πx/λ)·cos(ωt). Zero labels show as 0.</div>
+  <div class="hint">Hybrid: oscillation × slow drift. Drift mapping is gentle so 20% is subtle.</div>
 
 <script>
 (() => {
@@ -76,8 +79,10 @@
     amplitudeNum: document.getElementById('amplitudeNum'),
     wavelength: document.getElementById('wavelength'),
     wavelengthNum: document.getElementById('wavelengthNum'),
-    speed: document.getElementById('speed'),
-    speedNum: document.getElementById('speedNum'),
+    frequency: document.getElementById('frequency'),
+    frequencyNum: document.getElementById('frequencyNum'),
+    drift: document.getElementById('drift'),
+    driftNum: document.getElementById('driftNum'),
     style: document.getElementById('style'),
     gridToggle: document.getElementById('gridToggle'),
     zoomIn: document.getElementById('zoomIn'),
@@ -94,7 +99,8 @@
   const state = {
     amplitude: +ui.amplitude.value,
     wavelength: +ui.wavelength.value,
-    speed: +ui.speed.value, // interpreted as frequency factor (Hz-like)
+    frequency: +ui.frequency.value,
+    driftUI: +ui.drift.value, // UI 0..100
     style: ui.style.value,
     grid: false,
     zoom: 1,
@@ -104,7 +110,8 @@
 
   sync(ui.amplitude, ui.amplitudeNum, v => state.amplitude = v);
   sync(ui.wavelength, ui.wavelengthNum, v => state.wavelength = v);
-  sync(ui.speed, ui.speedNum, v => state.speed = v);
+  sync(ui.frequency, ui.frequencyNum, v => state.frequency = v);
+  sync(ui.drift, ui.driftNum, v => state.driftUI = v);
   ui.style.addEventListener('change', () => state.style = ui.style.value);
   ui.gridToggle.addEventListener('click', () => state.grid = !state.grid);
 
@@ -169,7 +176,7 @@
 
   ui.exportPNG.addEventListener('click', () => {
     const link = document.createElement('a');
-    link.download = 'standing-wave.png';
+    link.download = 'hybrid-drum-wave.png';
     link.href = canvas.toDataURL('image/png');
     link.click();
   });
@@ -187,13 +194,9 @@
   }
 
   function formatNumber(v) {
-    // Avoid scientific notation for zero and small integers; show "0" exactly
     if (Math.abs(v) < 1e-9) return '0';
-    // If near integer, show integer
     if (Math.abs(v - Math.round(v)) < 1e-6) return String(Math.round(v));
-    // For moderate values, show up to 2 decimals
     if (Math.abs(v) < 1000 && Math.abs(v) >= 0.01) return v.toFixed(2).replace(/\.00$/, '');
-    // Otherwise use fixed with 2 decimals
     return v.toFixed(2);
   }
 
@@ -263,7 +266,7 @@
     ctx.restore();
   }
 
-  // Render loop: standing wave y(x,t) = A * sin(kx) * cos(omega t)
+  // Render loop: hybrid y(x,t) = A * sin(k*(x - v t)) * cos(omega t)
   let last = performance.now();
   function render(now) {
     const dt = (now - last) / 1000; last = now;
@@ -281,14 +284,21 @@
     const maxAmp = Math.max(4, Math.floor((H * 0.45)));
     const A = Math.min(Math.max(1, state.amplitude), maxAmp);
 
-    // Enforce minimum wavelength to avoid aliasing
-    const lambda = Math.max(8, state.wavelength); // allow small but safe min
+    // Wavelength safe minimum
+    const lambda = Math.max(8, state.wavelength);
 
-    // Interpret speed as frequency-like parameter (cycles per second)
-    const freq = Math.max(0.01, state.speed);
+    // Frequency (Hz) -> angular frequency
+    const freq = Math.max(0.01, state.frequency);
     const omega = 2 * Math.PI * freq;
 
-    // Spatial frequency
+    // Drift mapping: UI 0..100 -> gentle velocity in pixels/sec
+    // Nonlinear mapping so low UI values are very subtle
+    const driftUI = Math.max(0, Math.min(100, state.driftUI));
+    // mapping: v = base + (driftUI/100)^2 * maxV
+    const baseV = 0.0;
+    const maxV = Math.max(10, Math.min(600, lambda * 0.6)); // cap relative to wavelength
+    const v = baseV + Math.pow(driftUI / 100, 2) * maxV;
+
     const k = (2 * Math.PI) / lambda;
 
     // Dynamic sampling: more samples when wavelength is small
@@ -308,7 +318,8 @@
       ctx.beginPath();
       for (let i = 0; i <= samples; i++) {
         const worldX = (i - samples/2) * step;
-        const y = A * Math.sin(k * worldX) * Math.cos(omega * t);
+        const phaseX = worldX - v * t; // drift applied to x
+        const y = A * Math.sin(k * phaseX) * Math.cos(omega * t);
         const screenX = Math.round(worldX * DPR) / DPR;
         const screenY = Math.round(-y * DPR) / DPR;
         if (i === 0) ctx.moveTo(screenX, screenY); else ctx.lineTo(screenX, screenY);
@@ -319,7 +330,8 @@
       const top = [], bottom = [];
       for (let i = 0; i <= samples; i++) {
         const worldX = (i - samples/2) * step;
-        const y = A * Math.sin(k * worldX) * Math.cos(omega * t);
+        const phaseX = worldX - v * t;
+        const y = A * Math.sin(k * phaseX) * Math.cos(omega * t);
         const screenX = Math.round(worldX * DPR) / DPR;
         const screenY = Math.round(-y * DPR) / DPR;
         top.push([screenX, screenY]);
