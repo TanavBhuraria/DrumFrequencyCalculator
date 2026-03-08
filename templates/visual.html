@@ -3,30 +3,40 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Hybrid Drum Wave Visualiser — Complete</title>
+<title>Hybrid Drum Wave Visualiser — Options Sidebar</title>
 <style>
   :root{
-    --bg:#000; --fg:#FFD700; --muted:#999; --panel:rgba(0,0,0,0.78);
+    --bg:#000; --fg:#FFD700; --muted:#999; --panel:rgba(0,0,0,0.88);
   }
   html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:Inter,system-ui,Arial,sans-serif}
   #canvas{position:fixed;inset:0;z-index:1;display:block;width:100%;height:100%;background:var(--bg)}
-  .panel{position:absolute;top:12px;left:12px;z-index:40;background:var(--panel);border:1px solid var(--fg);padding:12px;border-radius:8px;min-width:420px;max-width:calc(100% - 48px)}
-  .row{display:flex;align-items:center;gap:8px;margin:6px 0;flex-wrap:wrap}
+  /* Options button */
+  #optionsBtn{
+    position:fixed; right:12px; top:12px; z-index:60;
+    background:#111; color:var(--fg); border:1px solid #333; padding:10px 12px; border-radius:8px; cursor:pointer;
+    box-shadow:0 6px 18px rgba(0,0,0,0.6);
+  }
+  /* Sidebar panel */
+  .sidebar{
+    position:fixed; right:12px; top:56px; bottom:12px; width:420px; z-index:59;
+    background:var(--panel); border:1px solid var(--fg); padding:12px; border-radius:10px; overflow:auto;
+    transform: translateX(8px); transition: transform 260ms ease, opacity 260ms ease;
+    opacity:0; pointer-events:none;
+  }
+  .sidebar.open{ transform: translateX(0); opacity:1; pointer-events:auto; }
+  .row{display:flex;align-items:center;gap:8px;margin:8px 0;flex-wrap:wrap}
   label{font-size:13px;color:var(--fg);min-width:120px}
   input[type=range]{flex:1;accent-color:var(--fg)}
   input[type=number]{width:96px;background:#111;color:var(--fg);border:1px solid #333;padding:4px 6px;border-radius:4px}
   button,select{background:#111;color:var(--fg);border:1px solid #333;padding:6px 8px;border-radius:6px;cursor:pointer}
   .small{font-size:12px;color:var(--muted);margin-top:8px}
   .right{margin-left:auto}
-  .hint{position:absolute;left:12px;bottom:12px;z-index:40;color:var(--muted);background:rgba(0,0,0,0.5);padding:8px;border-radius:6px;border:1px solid rgba(255,215,0,0.08);font-size:12px}
   .controls-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .section-title{font-weight:600;margin-top:8px;color:var(--fg)}
-  .how{max-height:260px;overflow:auto;padding:8px;border-radius:6px;background:rgba(255,255,255,0.02);font-size:13px;color:#ddd}
-  .toggle{display:inline-flex;gap:6px;align-items:center}
-  .chip{background:#111;border:1px solid #333;padding:6px 8px;border-radius:6px;cursor:pointer}
   .harmonics-list{display:flex;flex-direction:column;gap:6px;max-height:160px;overflow:auto;padding-right:6px}
-  @media (max-width:720px){
-    .panel{min-width:unset;width:calc(100% - 24px);left:12px;top:12px}
+  .chip{background:#111;border:1px solid #333;padding:6px 8px;border-radius:6px;cursor:pointer}
+  @media (max-width:820px){
+    .sidebar{ right:8px; left:8px; width:auto; top:72px; bottom:12px; border-radius:8px; }
     .controls-grid{grid-template-columns:1fr}
     label{min-width:90px}
     input[type=number]{width:72px}
@@ -36,140 +46,141 @@
 <body>
 <canvas id="canvas"></canvas>
 
-<div class="panel" id="ui">
-  <h3>Hybrid Drum Wave Visualiser — Complete</h3>
+<button id="optionsBtn" aria-expanded="false">Options</button>
 
-  <div class="row">
-    <label>Mode</label>
-    <select id="mode">
-      <option value="hybrid">Hybrid (oscillate + drift)</option>
-      <option value="standing">Standing</option>
-      <option value="traveling">Traveling</option>
-    </select>
-
-    <button id="reset" class="right">Reset</button>
+<div id="sidebar" class="sidebar" role="dialog" aria-hidden="true">
+  <div style="display:flex;align-items:center;gap:8px;">
+    <h3 style="margin:0;color:var(--fg);flex:1">Options</h3>
+    <button id="backBtn" class="chip">Back</button>
   </div>
 
-  <div class="controls-grid">
-    <div>
-      <div class="row">
-        <label>Amplitude</label>
-        <input id="amplitude" type="range" min="1" max="800" step="1" value="100">
-        <input id="amplitudeNum" type="number" min="1" max="800" step="1" value="100">
-      </div>
+  <div style="margin-top:8px;">
+    <div class="row">
+      <label>Mode</label>
+      <select id="mode">
+        <option value="hybrid">Hybrid (oscillate + drift)</option>
+        <option value="standing">Standing</option>
+        <option value="traveling">Traveling</option>
+      </select>
+      <button id="reset" class="right">Reset</button>
+    </div>
 
-      <div class="row">
-        <label>Wavelength</label>
-        <input id="wavelength" type="range" min="8" max="1200" step="1" value="200">
-        <input id="wavelengthNum" type="number" min="8" max="1200" step="1" value="200">
-      </div>
+    <div class="controls-grid">
+      <div>
+        <div class="row">
+          <label>Amplitude</label>
+          <input id="amplitude" type="range" min="1" max="800" step="1" value="100">
+          <input id="amplitudeNum" type="number" min="1" max="800" step="1" value="100">
+        </div>
 
-      <div class="row">
-        <label>Frequency (Hz)</label>
-        <input id="frequency" type="range" min="0.001" max="1" step="0.001" value="0.200">
-        <input id="frequencyNum" type="number" min="0.001" max="1" step="0.001" value="0.200">
-      </div>
+        <div class="row">
+          <label>Wavelength</label>
+          <input id="wavelength" type="range" min="8" max="1200" step="1" value="200">
+          <input id="wavelengthNum" type="number" min="8" max="1200" step="1" value="200">
+        </div>
 
-      <div class="row">
-        <label>Drift (UI)</label>
-        <input id="drift" type="range" min="0" max="100" step="1" value="20">
-        <input id="driftNum" type="number" min="0" max="100" step="1" value="20">
-      </div>
+        <div class="row">
+          <label>Frequency (Hz)</label>
+          <input id="frequency" type="range" min="0.001" max="1" step="0.001" value="0.200">
+          <input id="frequencyNum" type="number" min="0.001" max="1" step="0.001" value="0.200">
+        </div>
 
-      <div class="row">
-        <label>Style</label>
-        <select id="style">
-          <option value="line">Line</option>
-          <option value="ribbon">Ribbon</option>
-        </select>
+        <div class="row">
+          <label>Drift (UI)</label>
+          <input id="drift" type="range" min="0" max="100" step="1" value="20">
+          <input id="driftNum" type="number" min="0" max="100" step="1" value="20">
+        </div>
 
-        <div class="toggle right">
-          <label style="min-width:auto">Grid</label>
-          <button id="gridToggle" class="chip">Toggle</button>
+        <div class="row">
+          <label>Style</label>
+          <select id="style">
+            <option value="line">Line</option>
+            <option value="ribbon">Ribbon</option>
+          </select>
+
+          <div class="toggle right">
+            <label style="min-width:auto">Grid</label>
+            <button id="gridToggle" class="chip">Toggle</button>
+          </div>
+        </div>
+
+        <div class="row">
+          <button id="exportPNG">Export PNG</button>
+          <div class="small right">Drag to pan • Scroll to zoom</div>
         </div>
       </div>
 
-      <div class="row">
-        <button id="exportPNG">Export PNG</button>
-        <div class="small right">Drag to pan • Scroll to zoom</div>
-      </div>
-    </div>
+      <div>
+        <div class="section-title">Superposition</div>
+        <div class="row">
+          <label>Enable second wave</label>
+          <input id="enable2" type="checkbox">
+        </div>
 
-    <div>
-      <div class="section-title">Superposition</div>
-      <div class="row">
-        <label>Enable second wave</label>
-        <input id="enable2" type="checkbox">
-      </div>
+        <div class="row">
+          <label>Wave 2 Amplitude</label>
+          <input id="a2" type="range" min="0" max="800" step="1" value="40">
+          <input id="a2Num" type="number" min="0" max="800" step="1" value="40">
+        </div>
 
-      <div class="row">
-        <label>Wave 2 Amplitude</label>
-        <input id="a2" type="range" min="0" max="800" step="1" value="40">
-        <input id="a2Num" type="number" min="0" max="800" step="1" value="40">
-      </div>
+        <div class="row">
+          <label>Wave 2 Wavelength</label>
+          <input id="lambda2" type="range" min="8" max="1200" step="1" value="300">
+          <input id="lambda2Num" type="number" min="8" max="1200" step="1" value="300">
+        </div>
 
-      <div class="row">
-        <label>Wave 2 Wavelength</label>
-        <input id="lambda2" type="range" min="8" max="1200" step="1" value="300">
-        <input id="lambda2Num" type="number" min="8" max="1200" step="1" value="300">
-      </div>
+        <div class="row">
+          <label>Wave 2 Freq (Hz)</label>
+          <input id="f2" type="range" min="0.001" max="1" step="0.001" value="0.150">
+          <input id="f2Num" type="number" min="0.001" max="1" step="0.001" value="0.150">
+        </div>
 
-      <div class="row">
-        <label>Wave 2 Freq (Hz)</label>
-        <input id="f2" type="range" min="0.001" max="1" step="0.001" value="0.150">
-        <input id="f2Num" type="number" min="0.001" max="1" step="0.001" value="0.150">
-      </div>
+        <div class="row">
+          <label>Wave 2 Drift</label>
+          <input id="v2" type="range" min="0" max="100" step="1" value="10">
+          <input id="v2Num" type="number" min="0" max="100" step="1" value="10">
+        </div>
 
-      <div class="row">
-        <label>Wave 2 Drift</label>
-        <input id="v2" type="range" min="0" max="100" step="1" value="10">
-        <input id="v2Num" type="number" min="0" max="100" step="1" value="10">
-      </div>
+        <div class="section-title">Harmonics</div>
+        <div class="row">
+          <label>Harmonics count</label>
+          <select id="harmCount">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+          </select>
+          <label style="min-width:auto">Gain</label>
+          <input id="harmGain" type="range" min="0" max="2" step="0.01" value="1">
+        </div>
 
-      <div class="section-title">Harmonics</div>
-      <div class="row">
-        <label>Harmonics count</label>
-        <select id="harmCount">
-          <option value="1">1</option>
-          <option value="2">2</option>
-          <option value="3">3</option>
-          <option value="4">4</option>
-          <option value="5">5</option>
-        </select>
-        <label style="min-width:auto">Gain</label>
-        <input id="harmGain" type="range" min="0" max="2" step="0.01" value="1">
-      </div>
+        <div class="harmonics-list" id="harmonicsList"></div>
 
-      <div class="harmonics-list" id="harmonicsList"></div>
-
-      <div class="section-title">Energy</div>
-      <div class="row">
-        <label>Show energy</label>
-        <input id="showEnergy" type="checkbox">
-        <label style="min-width:auto">Intensity</label>
-        <input id="energyGain" type="range" min="0" max="4" step="0.05" value="1">
-      </div>
-
-      <div class="section-title">How it works</div>
-      <div class="how">
-        <strong>Modes</strong>: <em>Standing</em> oscillates in place (nodes fixed). <em>Traveling</em> shifts sideways. <em>Hybrid</em> multiplies a spatial phase shift (drift) with a time oscillation so the pattern both oscillates and slowly drifts.<br><br>
-        <strong>Harmonics</strong>: adding integer multiples of the base spatial frequency creates higher modes (like drum overtones). Use the harmonics controls to set relative amplitudes.<br><br>
-        <strong>Energy</strong>: local energy shown by color is computed from approximate kinetic term \((\partial_t y)^2\) and potential term \((\partial_x y)^2\). Brighter = more local motion/strain.<br><br>
-        This panel is educational only; the visualiser uses clamping and adaptive sampling to avoid aliasing and breakage at extreme values.
+        <div class="section-title">Energy</div>
+        <div class="row">
+          <label>Show energy</label>
+          <input id="showEnergy" type="checkbox">
+          <label style="min-width:auto">Intensity</label>
+          <input id="energyGain" type="range" min="0" max="4" step="0.05" value="1">
+        </div>
       </div>
     </div>
   </div>
 </div>
 
-<div class="hint">Defaults are safe. Try extremes; the visualiser will clamp and adapt sampling automatically.</div>
+<div style="position:fixed;left:12px;bottom:12px;z-index:50;color:var(--muted);font-size:12px">Click Options to open controls • Back closes them</div>
 
 <script>
 (() => {
-  // Canvas and context
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d', { alpha: false });
 
-  // UI refs
+  // UI elements
+  const optionsBtn = document.getElementById('optionsBtn');
+  const sidebar = document.getElementById('sidebar');
+  const backBtn = document.getElementById('backBtn');
+
   const $ = id => document.getElementById(id);
   const ui = {
     mode: $('mode'),
@@ -186,45 +197,28 @@
     showEnergy: $('showEnergy'), energyGain: $('energyGain')
   };
 
-  // Default state
+  // Defaults and state
   const defaults = {
     amplitude: 100, wavelength: 200, frequency: 0.2, driftUI: 20,
     a2: 40, lambda2: 300, f2: 0.15, v2: 10,
     mode: 'hybrid', style: 'line', grid: false,
     harmCount: 1, harmGain: 1, showEnergy: false, energyGain: 1
   };
+  const state = Object.assign({}, defaults);
 
-  // State
-  const state = {
-    amplitude: defaults.amplitude,
-    wavelength: defaults.wavelength,
-    frequency: defaults.frequency,
-    driftUI: defaults.driftUI,
-    a2: defaults.a2, lambda2: defaults.lambda2, f2: defaults.f2, v2: defaults.v2,
-    mode: defaults.mode, style: defaults.style, grid: defaults.grid,
-    harmCount: defaults.harmCount, harmGain: defaults.harmGain,
-    showEnergy: defaults.showEnergy, energyGain: defaults.energyGain
-  };
+  // Toggle sidebar
+  function openSidebar(){ sidebar.classList.add('open'); sidebar.setAttribute('aria-hidden','false'); optionsBtn.setAttribute('aria-expanded','true'); }
+  function closeSidebar(){ sidebar.classList.remove('open'); sidebar.setAttribute('aria-hidden','true'); optionsBtn.setAttribute('aria-expanded','false'); }
+  optionsBtn.addEventListener('click', ()=>{ if(sidebar.classList.contains('open')) closeSidebar(); else openSidebar(); });
+  backBtn.addEventListener('click', closeSidebar);
 
-  // Sync helpers with clamping
-  function sync(rangeEl, numEl, min, max, setter) {
-    rangeEl.addEventListener('input', () => {
-      const v = clamp(parseFloat(rangeEl.value), min, max);
-      numEl.value = v;
-      setter(v);
-    });
-    numEl.addEventListener('input', () => {
-      let v = Number(numEl.value);
-      if (isNaN(v)) v = min;
-      v = clamp(v, min, max);
-      rangeEl.value = v;
-      numEl.value = v;
-      setter(v);
-    });
+  // Sync helpers
+  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+  function sync(rangeEl, numEl, min, max, setter){
+    rangeEl.addEventListener('input', ()=>{ const v = clamp(parseFloat(rangeEl.value), min, max); numEl.value = v; setter(v); });
+    numEl.addEventListener('input', ()=>{ let v = Number(numEl.value); if(isNaN(v)) v = min; v = clamp(v,min,max); rangeEl.value = v; numEl.value = v; setter(v); });
   }
-  function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
 
-  // Wire UI
   sync(ui.amplitude, ui.amplitudeNum, 1, 800, v => state.amplitude = v);
   sync(ui.wavelength, ui.wavelengthNum, 8, 1200, v => state.wavelength = v);
   sync(ui.frequency, ui.frequencyNum, 0.001, 1, v => state.frequency = v);
@@ -235,35 +229,24 @@
   sync(ui.f2, ui.f2Num, 0.001, 1, v => state.f2 = v);
   sync(ui.v2, ui.v2Num, 0, 100, v => state.v2 = v);
 
-  ui.mode.addEventListener('change', () => state.mode = ui.mode.value);
-  ui.style.addEventListener('change', () => state.style = ui.style.value);
-  ui.gridToggle.addEventListener('click', () => state.grid = !state.grid);
-  ui.exportPNG.addEventListener('click', () => {
+  ui.mode.addEventListener('change', ()=> state.mode = ui.mode.value);
+  ui.style.addEventListener('change', ()=> state.style = ui.style.value);
+  ui.gridToggle.addEventListener('click', ()=> state.grid = !state.grid);
+  ui.exportPNG.addEventListener('click', ()=> {
     const link = document.createElement('a');
-    link.download = 'hybrid-drum-wave-complete.png';
+    link.download = 'hybrid-drum-wave.png';
     link.href = canvas.toDataURL('image/png');
     link.click();
   });
 
-  ui.enable2.addEventListener('change', () => {}); // read on render
-  ui.harmCount.addEventListener('change', () => {
-    state.harmCount = parseInt(ui.harmCount.value,10);
-    buildHarmonicsControls();
-  });
-  ui.harmGain.addEventListener('input', () => state.harmGain = parseFloat(ui.harmGain.value));
-  ui.showEnergy.addEventListener('change', () => state.showEnergy = ui.showEnergy.checked);
-  ui.energyGain.addEventListener('input', () => state.energyGain = parseFloat(ui.energyGain.value));
+  ui.enable2.addEventListener('change', ()=>{}); // read on render
+  ui.harmCount.addEventListener('change', ()=> { state.harmCount = parseInt(ui.harmCount.value,10); buildHarmonicsControls(); });
+  ui.harmGain.addEventListener('input', ()=> state.harmGain = parseFloat(ui.harmGain.value));
+  ui.showEnergy.addEventListener('change', ()=> state.showEnergy = ui.showEnergy.checked);
+  ui.energyGain.addEventListener('input', ()=> state.energyGain = parseFloat(ui.energyGain.value));
 
-  ui.reset.addEventListener('click', () => {
-    // reset UI and state
-    Object.assign(state, {
-      amplitude: defaults.amplitude, wavelength: defaults.wavelength, frequency: defaults.frequency, driftUI: defaults.driftUI,
-      a2: defaults.a2, lambda2: defaults.lambda2, f2: defaults.f2, v2: defaults.v2,
-      mode: defaults.mode, style: defaults.style, grid: defaults.grid,
-      harmCount: defaults.harmCount, harmGain: defaults.harmGain,
-      showEnergy: defaults.showEnergy, energyGain: defaults.energyGain
-    });
-    // update inputs
+  ui.reset.addEventListener('click', ()=> {
+    Object.assign(state, defaults);
     ui.amplitude.value = ui.amplitudeNum.value = state.amplitude;
     ui.wavelength.value = ui.wavelengthNum.value = state.wavelength;
     ui.frequency.value = ui.frequencyNum.value = state.frequency;
@@ -281,22 +264,19 @@
     ui.showEnergy.checked = state.showEnergy;
     ui.energyGain.value = state.energyGain;
     buildHarmonicsControls();
+    closeSidebar();
   });
 
-  // Harmonics controls (per-harmonic amplitude multipliers)
+  // Harmonics controls
   let harmControls = [];
   function buildHarmonicsControls(){
     ui.harmonicsList.innerHTML = '';
     harmControls = [];
     const n = state.harmCount;
     for(let i=1;i<=n;i++){
-      const row = document.createElement('div');
-      row.className = 'row';
-      const lbl = document.createElement('label');
-      lbl.style.minWidth = '80px';
-      lbl.textContent = `Harm ${i}`;
-      const r = document.createElement('input');
-      r.type = 'range'; r.min = 0; r.max = 2; r.step = 0.01; r.value = (i===1?1:0.0);
+      const row = document.createElement('div'); row.className='row';
+      const lbl = document.createElement('label'); lbl.style.minWidth='80px'; lbl.textContent = `Harm ${i}`;
+      const r = document.createElement('input'); r.type='range'; r.min=0; r.max=2; r.step=0.01; r.value=(i===1?1:0.0);
       const num = document.createElement('input'); num.type='number'; num.min=0; num.max=2; num.step=0.01; num.value=r.value; num.style.width='72px';
       r.addEventListener('input', ()=>{ num.value = r.value; });
       num.addEventListener('input', ()=>{ let v=Number(num.value); if(isNaN(v)) v=0; v=Math.max(0,Math.min(2,v)); r.value=v; });
@@ -307,7 +287,7 @@
   }
   buildHarmonicsControls();
 
-  // Resize canvas with DPR
+  // Canvas resize
   function resize(){
     const DPR = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
     canvas.width = Math.floor(window.innerWidth * DPR);
@@ -321,93 +301,28 @@
 
   // Pan & zoom
   let dragging=false, lastX=0, lastY=0;
-  let view = { zoom:1, offsetX:0, offsetY:0 };
+  const view = { zoom:1, offsetX:0, offsetY:0 };
   canvas.addEventListener('mousedown', e=>{ dragging=true; lastX=e.clientX; lastY=e.clientY; canvas.style.cursor='grabbing'; });
   window.addEventListener('mouseup', ()=>{ dragging=false; canvas.style.cursor='default'; });
   window.addEventListener('mousemove', e=>{ if(!dragging) return; const dx=e.clientX-lastX, dy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY; view.offsetX += dx / view.zoom; view.offsetY += dy / view.zoom; });
 
   canvas.addEventListener('wheel', e=>{ e.preventDefault(); const delta=-e.deltaY; const zoomFactor=Math.exp(delta*0.0012); const rect=canvas.getBoundingClientRect(); const mx=(e.clientX-rect.left-rect.width/2)/view.zoom - view.offsetX; const my=(e.clientY-rect.top-rect.height/2)/view.zoom - view.offsetY; const newZoom=Math.max(0.2, Math.min(6, view.zoom * zoomFactor)); view.offsetX -= mx * (1 - 1/zoomFactor); view.offsetY -= my * (1 - 1/zoomFactor); view.zoom = newZoom; }, { passive:false });
 
-  // Utility formatting
-  function formatNumber(v){
-    if (Math.abs(v) < 1e-9) return '0';
-    if (Math.abs(v - Math.round(v)) < 1e-6) return String(Math.round(v));
-    if (Math.abs(v) < 1000 && Math.abs(v) >= 0.01) return v.toFixed(2).replace(/\.00$/,'');
-    return v.toFixed(2);
-  }
-
-  // Axis drawing
+  // Helpers
+  function formatNumber(v){ if(Math.abs(v)<1e-9) return '0'; if(Math.abs(v-Math.round(v))<1e-6) return String(Math.round(v)); if(Math.abs(v)<1000 && Math.abs(v)>=0.01) return v.toFixed(2).replace(/\.00$/,''); return v.toFixed(2); }
   const WORLD_WIDTH = 2000;
-  function chooseNiceTick(desired){
-    if(desired<=0) return 1;
-    const pow = Math.pow(10, Math.floor(Math.log10(desired)));
-    const d = desired / pow;
-    if(d<=1.5) return 1*pow;
-    if(d<=3.5) return 2*pow;
-    if(d<=7.5) return 5*pow;
-    return 10*pow;
-  }
+  function chooseNiceTick(desired){ if(desired<=0) return 1; const pow=Math.pow(10,Math.floor(Math.log10(desired))); const d=desired/pow; if(d<=1.5) return 1*pow; if(d<=3.5) return 2*pow; if(d<=7.5) return 5*pow; return 10*pow; }
   function drawAxes(W,H,cx,cy){
-    ctx.save();
-    ctx.translate(cx,cy);
-    ctx.scale(view.zoom, view.zoom);
-    ctx.translate(view.offsetX, view.offsetY);
-
-    if(state.grid){
-      ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.lineWidth = 1 / view.zoom;
-      const gridSpacing = 100;
-      for(let gx=-WORLD_WIDTH; gx<=WORLD_WIDTH; gx+=gridSpacing){ ctx.beginPath(); ctx.moveTo(gx,-H*2); ctx.lineTo(gx,H*2); ctx.stroke(); }
-      for(let gy=-1000; gy<=1000; gy+=gridSpacing){ ctx.beginPath(); ctx.moveTo(-WORLD_WIDTH*2,gy); ctx.lineTo(WORLD_WIDTH*2,gy); ctx.stroke(); }
-    }
-
-    ctx.strokeStyle='#FFFFFF'; ctx.lineWidth = 1 / view.zoom;
-    ctx.beginPath(); ctx.moveTo(-WORLD_WIDTH/2,0); ctx.lineTo(WORLD_WIDTH/2,0); ctx.stroke();
-    const viewHWorld = (H/2) / view.zoom;
-    ctx.beginPath(); ctx.moveTo(-WORLD_WIDTH/2, -viewHWorld*2); ctx.lineTo(WORLD_WIDTH/2, -viewHWorld*2); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(-WORLD_WIDTH/2, -10000); ctx.lineTo(-WORLD_WIDTH/2, 10000); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(WORLD_WIDTH/2, -10000); ctx.lineTo(WORLD_WIDTH/2, 10000); ctx.stroke();
-
-    ctx.fillStyle='#FFFFFF'; ctx.font = `${12 / view.zoom}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='top';
-    const approxPixelsPerTick = 80;
-    const worldPerPixel = (W / view.zoom) / WORLD_WIDTH;
-    const desiredWorldTick = approxPixelsPerTick * worldPerPixel;
-    const tickBase = chooseNiceTick(desiredWorldTick);
-    const minX = -WORLD_WIDTH/2 - view.offsetX - (W/2)/view.zoom;
-    const maxX = WORLD_WIDTH/2 - view.offsetX + (W/2)/view.zoom;
-    for(let x=Math.ceil(minX/tickBase)*tickBase; x<=maxX; x+=tickBase){
-      const sx = x;
-      ctx.beginPath(); ctx.moveTo(sx, -4 / view.zoom); ctx.lineTo(sx, 4 / view.zoom); ctx.stroke();
-      ctx.fillText(formatNumber(x), sx, 6 / view.zoom);
-    }
-
+    ctx.save(); ctx.translate(cx,cy); ctx.scale(view.zoom, view.zoom); ctx.translate(view.offsetX, view.offsetY);
+    if(state.grid){ ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.lineWidth = 1 / view.zoom; const gridSpacing=100; for(let gx=-WORLD_WIDTH;gx<=WORLD_WIDTH;gx+=gridSpacing){ ctx.beginPath(); ctx.moveTo(gx,-H*2); ctx.lineTo(gx,H*2); ctx.stroke(); } for(let gy=-1000;gy<=1000;gy+=gridSpacing){ ctx.beginPath(); ctx.moveTo(-WORLD_WIDTH*2,gy); ctx.lineTo(WORLD_WIDTH*2,gy); ctx.stroke(); } }
+    ctx.strokeStyle='#FFFFFF'; ctx.lineWidth = 1 / view.zoom; ctx.beginPath(); ctx.moveTo(-WORLD_WIDTH/2,0); ctx.lineTo(WORLD_WIDTH/2,0); ctx.stroke();
     ctx.restore();
   }
 
-  // Adaptive sampling and safety
-  function computeSamples(lambda){
-    // aggressive sampling for small lambda; cap to reasonable max
-    const base = Math.ceil((WORLD_WIDTH / lambda) * 30);
-    return Math.min(14000, Math.max(1200, base));
-  }
+  // Sampling
+  function computeSamples(lambda){ const base = Math.ceil((WORLD_WIDTH / lambda) * 30); return Math.min(14000, Math.max(1200, base)); }
 
-  // Energy computation helpers (finite differences)
-  function computeEnergy(yArr, xStep, tStep){
-    // yArr is array of y values at equally spaced x
-    const n = yArr.length;
-    const pot = new Float32Array(n);
-    const kin = new Float32Array(n);
-    // spatial derivative (central)
-    for(let i=1;i<n-1;i++){
-      const dy_dx = (yArr[i+1] - yArr[i-1]) / (2 * xStep);
-      pot[i] = 0.5 * dy_dx * dy_dx;
-    }
-    pot[0] = pot[1]; pot[n-1] = pot[n-2];
-    // time derivative approximated by difference with previous frame (we store prevY)
-    // handled externally by passing prevY
-    return {pot, kin};
-  }
-
-  // Render loop variables
+  // Render loop
   let last = performance.now();
   let prevY = null;
   let prevT = null;
@@ -415,36 +330,25 @@
   let tabActive = true;
   document.addEventListener('visibilitychange', ()=>{ tabActive = !document.hidden; });
 
-  // Main render
   function render(now){
-    if(!tabActive){
-      // throttle when tab inactive
-      setTimeout(()=>{ rafId = requestAnimationFrame(render); }, 250);
-      return;
-    }
+    if(!tabActive){ setTimeout(()=>{ rafId = requestAnimationFrame(render); }, 250); return; }
     const dt = (now - last) / 1000; last = now;
     const t = now / 1000;
 
-    // Clear
     ctx.fillStyle = '#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
-
     const DPR = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
-    const W = canvas.width / DPR;
-    const H = canvas.height / DPR;
-    const cx = W/2, cy = H/2;
+    const W = canvas.width / DPR; const H = canvas.height / DPR; const cx = W/2, cy = H/2;
 
     // Safe clamps
     const A = clamp(state.amplitude, 1, Math.max(4, Math.floor(H*0.45)));
     const lambda = clamp(state.wavelength, 8, 1200);
     const freq = clamp(state.frequency, 0.001, 1);
     const omega = 2 * Math.PI * freq;
-
-    // drift mapping (gentle)
     const driftUI = clamp(state.driftUI, 0, 100);
     const maxV = Math.max(6, Math.min(400, lambda * 0.4));
     const v = Math.pow(driftUI / 100, 2) * maxV;
 
-    // wave2 params
+    // wave2
     const enabled2 = ui.enable2.checked;
     const A2 = clamp(state.a2, 0, Math.max(0, Math.floor(H*0.45)));
     const lambda2 = clamp(state.lambda2, 8, 1200);
@@ -463,73 +367,63 @@
     const samples = computeSamples(Math.min(lambda, lambda2));
     const step = WORLD_WIDTH / samples;
 
-    // draw axes
     drawAxes(W,H,cx,cy);
 
-    // compute y values for each sample
-    const yArr = new Float32Array(samples+1);
-    const yArr2 = new Float32Array(samples+1);
+    // compute y arrays
+    const y1 = new Float32Array(samples+1);
+    const y2 = new Float32Array(samples+1);
+    const yCombined = new Float32Array(samples+1);
+
     for(let i=0;i<=samples;i++){
       const worldX = (i - samples/2) * step;
-      // base spatial frequency
       const k = (2*Math.PI) / lambda;
       const k2 = (2*Math.PI) / lambda2;
 
-      // mode selection
-      let y = 0;
+      // wave 1 (with harmonics)
+      let val1 = 0;
       if(state.mode === 'standing'){
-        // standing: sin(kx) * cos(omega t)
         for(let h=1; h<=harmCount; h++){
           const w = harmWeights[h-1] || (h===1?1:0);
-          y += (A * harmGain * w) * Math.sin(k * h * worldX) * Math.cos(omega * t);
+          val1 += (A * harmGain * w) * Math.sin(k * h * worldX) * Math.cos(omega * t);
         }
       } else if(state.mode === 'traveling'){
-        // traveling: sin(k(x - v t))
         for(let h=1; h<=harmCount; h++){
           const w = harmWeights[h-1] || (h===1?1:0);
-          y += (A * harmGain * w) * Math.sin(k * h * (worldX - v * t));
+          val1 += (A * harmGain * w) * Math.sin(k * h * (worldX - v * t));
         }
       } else {
-        // hybrid: sin(k(x - v t)) * cos(omega t)
         for(let h=1; h<=harmCount; h++){
           const w = harmWeights[h-1] || (h===1?1:0);
-          y += (A * harmGain * w) * Math.sin(k * h * (worldX - v * t)) * Math.cos(omega * t);
+          val1 += (A * harmGain * w) * Math.sin(k * h * (worldX - v * t)) * Math.cos(omega * t);
         }
       }
-      yArr[i] = y;
+      y1[i] = val1;
 
-      // second wave (component)
-      let yb = 0;
+      // wave 2 (single fundamental, colored green)
+      let val2 = 0;
       if(enabled2){
         if(state.mode === 'standing'){
-          yb = A2 * Math.sin(k2 * worldX) * Math.cos(omega2 * t);
+          val2 = A2 * Math.sin(k2 * worldX) * Math.cos(omega2 * t);
         } else if(state.mode === 'traveling'){
-          yb = A2 * Math.sin(k2 * (worldX - v2 * t));
+          val2 = A2 * Math.sin(k2 * (worldX - v2 * t));
         } else {
-          yb = A2 * Math.sin(k2 * (worldX - v2 * t)) * Math.cos(omega2 * t);
+          val2 = A2 * Math.sin(k2 * (worldX - v2 * t)) * Math.cos(omega2 * t);
         }
       }
-      yArr2[i] = yb;
+      y2[i] = val2;
+
+      yCombined[i] = val1 + val2;
     }
 
-    // combined
-    const yCombined = new Float32Array(samples+1);
-    for(let i=0;i<=samples;i++){
-      yCombined[i] = yArr[i] + (enabled2 ? yArr2[i] : 0);
-    }
-
-    // energy: approximate derivatives
-    const xStep = step;
+    // energy approx (spatial derivative + time derivative)
     const pot = new Float32Array(samples+1);
     const kin = new Float32Array(samples+1);
-    // spatial derivative for potential (central)
     for(let i=1;i<samples;i++){
-      const dy_dx = (yCombined[i+1] - yCombined[i-1]) / (2 * xStep);
+      const dy_dx = (yCombined[i+1] - yCombined[i-1]) / (2 * step);
       pot[i] = 0.5 * dy_dx * dy_dx;
     }
     pot[0] = pot[1]; pot[samples] = pot[samples-1];
 
-    // time derivative approx using previous frame
     if(prevY && prevY.length === yCombined.length && prevT !== null){
       const dtApprox = Math.max(1e-6, (t - prevT));
       for(let i=0;i<=samples;i++){
@@ -540,61 +434,52 @@
       for(let i=0;i<=samples;i++) kin[i] = 0;
     }
 
-    // energy combined
     const energy = new Float32Array(samples+1);
     let maxEnergy = 0;
-    for(let i=0;i<=samples;i++){
-      energy[i] = pot[i] + kin[i];
-      if(energy[i] > maxEnergy) maxEnergy = energy[i];
-    }
-    // avoid division by zero
+    for(let i=0;i<=samples;i++){ energy[i] = pot[i] + kin[i]; if(energy[i] > maxEnergy) maxEnergy = energy[i]; }
     maxEnergy = Math.max(maxEnergy, 1e-9);
 
-    // draw wave(s)
+    // draw waves: component 1 faint (gold), component 2 faint (green), combined bold (gold)
     ctx.save();
     ctx.translate(cx, cy);
     ctx.scale(view.zoom, view.zoom);
     ctx.translate(view.offsetX, view.offsetY);
 
-    // helper to map energy to color
-    function energyColor(e){
-      const g = clamp((e / maxEnergy) * state.energyGain, 0, 1);
-      // map 0..1 to color from gold to red
-      const r = Math.round(255 * (0.6 + 0.4 * g));
-      const gcol = Math.round(215 * (1 - 0.8 * g));
-      const b = Math.round(0);
-      return `rgb(${r},${gcol},${b})`;
+    // component 1 faint
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(255,215,0,0.12)';
+    ctx.lineWidth = 1 / view.zoom;
+    for(let i=0;i<=samples;i++){
+      const worldX = (i - samples/2) * step;
+      const sx = Math.round(worldX * DPR) / DPR;
+      const sy = Math.round(-y1[i] * DPR) / DPR;
+      if(i===0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
     }
+    ctx.stroke();
 
-    // draw component 1 (optional faint)
+    // component 2 faint (green)
     if(enabled2){
       ctx.beginPath();
-      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+      ctx.strokeStyle = 'rgba(80,220,120,0.18)'; // faint green
       ctx.lineWidth = 1 / view.zoom;
       for(let i=0;i<=samples;i++){
         const worldX = (i - samples/2) * step;
-        const screenX = Math.round(worldX * DPR) / DPR;
-        const screenY = Math.round(-yArr[i] * DPR) / DPR;
-        if(i===0) ctx.moveTo(screenX, screenY); else ctx.lineTo(screenX, screenY);
-      }
-      ctx.stroke();
-      // draw component 2 faint
-      ctx.beginPath();
-      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-      ctx.lineWidth = 1 / view.zoom;
-      for(let i=0;i<=samples;i++){
-        const worldX = (i - samples/2) * step;
-        const screenX = Math.round(worldX * DPR) / DPR;
-        const screenY = Math.round(-yArr2[i] * DPR) / DPR;
-        if(i===0) ctx.moveTo(screenX, screenY); else ctx.lineTo(screenX, screenY);
+        const sx = Math.round(worldX * DPR) / DPR;
+        const sy = Math.round(-y2[i] * DPR) / DPR;
+        if(i===0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
       }
       ctx.stroke();
     }
 
-    // draw combined with energy coloring or single color
+    // combined (with energy coloring if enabled)
     if(ui.style.value === 'line'){
       if(state.showEnergy){
-        // draw segments with color per sample
+        function energyColor(e){
+          const g = clamp((e / maxEnergy) * state.energyGain, 0, 1);
+          const r = Math.round(255 * (0.6 + 0.4 * g));
+          const gcol = Math.round(215 * (1 - 0.8 * g));
+          return `rgb(${r},${gcol},0)`;
+        }
         ctx.lineWidth = 2 / view.zoom;
         for(let i=0;i<samples;i++){
           const worldX1 = (i - samples/2) * step;
@@ -613,24 +498,22 @@
         ctx.beginPath();
         for(let i=0;i<=samples;i++){
           const worldX = (i - samples/2) * step;
-          const screenX = Math.round(worldX * DPR) / DPR;
-          const screenY = Math.round(-yCombined[i] * DPR) / DPR;
-          if(i===0) ctx.moveTo(screenX, screenY); else ctx.lineTo(screenX, screenY);
+          const sx = Math.round(worldX * DPR) / DPR;
+          const sy = Math.round(-yCombined[i] * DPR) / DPR;
+          if(i===0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
         }
         ctx.stroke();
       }
     } else {
-      // ribbon
+      // ribbon fill
       const thickness = Math.max(4, A * 0.12);
       const top = [], bottom = [];
       for(let i=0;i<=samples;i++){
         const worldX = (i - samples/2) * step;
-        const screenX = Math.round(worldX * DPR) / DPR;
-        const screenY = Math.round(-yCombined[i] * DPR) / DPR;
-        top.push([screenX, screenY]);
-        bottom.push([screenX, screenY + thickness]);
+        const sx = Math.round(worldX * DPR) / DPR;
+        const sy = Math.round(-yCombined[i] * DPR) / DPR;
+        top.push([sx, sy]); bottom.push([sx, sy + thickness]);
       }
-      // fill with gradient or energy color average
       const grad = ctx.createLinearGradient(-WORLD_WIDTH/2, -A, WORLD_WIDTH/2, A + thickness);
       grad.addColorStop(0, '#FFD700'); grad.addColorStop(1, '#552800');
       ctx.fillStyle = grad;
@@ -641,20 +524,33 @@
       ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 1.2 / view.zoom; ctx.stroke();
     }
 
-    ctx.restore();
+    // draw a small legend for component colors when second wave enabled
+    if(enabled2){
+      ctx.restore();
+      ctx.save();
+      ctx.translate(14, 14);
+      ctx.scale(1,1);
+      // comp1
+      ctx.fillStyle = 'rgba(255,215,0,0.12)'; ctx.fillRect(0,0,12,6);
+      ctx.fillStyle = '#FFD700'; ctx.font = '12px sans-serif'; ctx.fillText('Wave 1', 18, -1);
+      // comp2
+      ctx.fillStyle = 'rgba(80,220,120,0.18)'; ctx.fillRect(0,18,12,6);
+      ctx.fillStyle = '#50DC78'; ctx.fillText('Wave 2 (green)', 18, 17);
+      ctx.restore();
+    } else {
+      ctx.restore();
+    }
 
     // store prev
     prevY = yCombined.slice(0);
     prevT = t;
 
-    // next frame
     rafId = requestAnimationFrame(render);
   }
 
-  // Start
   rafId = requestAnimationFrame(render);
 
-  // helpers to keep UI state in sync with internal state
+  // init UI values
   function initUI(){
     ui.amplitude.value = ui.amplitudeNum.value = state.amplitude;
     ui.wavelength.value = ui.wavelengthNum.value = state.wavelength;
@@ -666,7 +562,6 @@
     ui.v2.value = ui.v2Num.value = state.v2;
     ui.mode.value = state.mode;
     ui.style.value = state.style;
-    ui.gridToggle.textContent = state.grid ? 'Grid On' : 'Toggle';
     ui.harmCount.value = state.harmCount;
     ui.harmGain.value = state.harmGain;
     ui.showEnergy.checked = state.showEnergy;
@@ -675,9 +570,10 @@
   }
   initUI();
 
-  // expose a small debug API on window for quick testing (optional)
+  // expose debug
   window._waveState = state;
-  window._reset = () => ui.reset.click();
+  window._openOptions = openSidebar;
+  window._closeOptions = closeSidebar;
 
 })();
 </script>
