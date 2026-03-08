@@ -273,7 +273,7 @@
 
   // Helpers
   function formatNumber(v){ if(Math.abs(v)<1e-9) return '0'; if(Math.abs(v-Math.round(v))<1e-6) return String(Math.round(v)); if(Math.abs(v)<1000 && Math.abs(v)>=0.01) return v.toFixed(2).replace(/\.00$/,''); return v.toFixed(2); }
-  const WORLD_WIDTH = 1000000000; // long map
+  const WORLD_WIDTH = 10000; // long map
   function chooseNiceTick(desired){ if(desired<=0) return 1; const pow=Math.pow(10,Math.floor(Math.log10(desired))); const d=desired/pow; if(d<=1.5) return 1*pow; if(d<=3.5) return 2*pow; if(d<=7.5) return 5*pow; return 10*pow; }
   function drawAxes(W,H,cx,cy){
     ctx.save(); ctx.translate(cx,cy); ctx.scale(view.zoom, view.zoom); ctx.translate(view.offsetX, view.offsetY);
